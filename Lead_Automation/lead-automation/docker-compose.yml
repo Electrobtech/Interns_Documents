@@ -47,10 +47,94 @@ services:
       postgres: { condition: service_healthy }
     ports: ["4003:4003"]
 
+  campaign-service:
+    build: { context: ., dockerfile: services/campaign-service/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4004:4004"]
+
+  ai-service:
+    build: { context: ., dockerfile: services/ai-service/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4005:4005"]
+
+  ecommerce-service:
+    build: { context: ., dockerfile: services/ecommerce-service/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4006:4006"]
+
+  review-service:
+    build: { context: ., dockerfile: services/review-service/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4007:4007"]
+
+  analytics-service:
+    build: { context: ., dockerfile: services/analytics-service/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4008:4008"]
+
+  integration-service:
+    build: { context: ., dockerfile: services/integration-service/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4009:4009"]
+
+  team-service:
+    build: { context: ., dockerfile: services/team-service/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4010:4010"]
+
   api-gateway:
     build: { context: ., dockerfile: api-gateway/Dockerfile }
     env_file: .env
-    depends_on: [auth-service, inbox-service, contact-service]
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:4001
+      INBOX_SERVICE_URL: http://inbox-service:4002
+      CONTACT_SERVICE_URL: http://contact-service:4003
+      CAMPAIGN_SERVICE_URL: http://campaign-service:4004
+      AI_SERVICE_URL: http://ai-service:4005
+      ECOMMERCE_SERVICE_URL: http://ecommerce-service:4006
+      REVIEW_SERVICE_URL: http://review-service:4007
+      ANALYTICS_SERVICE_URL: http://analytics-service:4008
+      INTEGRATION_SERVICE_URL: http://integration-service:4009
+      TEAM_SERVICE_URL: http://team-service:4010
+    depends_on:
+      - auth-service
+      - inbox-service
+      - contact-service
+      - campaign-service
+      - ai-service
+      - ecommerce-service
+      - review-service
+      - analytics-service
+      - integration-service
+      - team-service
     ports: ["8080:8080"]
 
 volumes:

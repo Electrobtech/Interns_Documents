@@ -15,7 +15,9 @@ app.get('/conversations', async (req, res) => {
   const { status, channel } = req.query;
   const params = [org];
   let sql = `SELECT c.id, c.channel_type, c.status, c.last_message_at,
-                    ct.name AS contact_name
+                    ct.name AS contact_name,
+                    (SELECT body FROM messages m WHERE m.conversation_id = c.id
+                      ORDER BY created_at DESC LIMIT 1) AS last_body
                FROM conversations c
                LEFT JOIN contacts ct ON ct.id = c.contact_id
               WHERE c.organization_id = $1`;
