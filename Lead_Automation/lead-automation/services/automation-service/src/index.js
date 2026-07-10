@@ -10,6 +10,7 @@ const webhookController = require('./controllers/webhookController');
 const campaignSendController = require('./controllers/campaignSendController');
 const inboxReplyController = require('./controllers/inboxReplyController');
 const mediaController = require('./controllers/mediaController');
+const playbookController = require('./controllers/playbookController');
 const conversationSessionRepository = require('./repositories/conversationSessionRepository');
 
 const app = express();
@@ -112,6 +113,12 @@ app.use('/', inboxReplyController);
 // is what's later fetched *unauthenticated* by Meta at send time.
 app.use('/automation/media', authenticate);
 app.use('/', mediaController);
+
+// GET/PUT /automation/playbooks/:id — Playbook Studio load + autosave
+// (see PlaybookStudioApp.jsx / playbookController.js). This is the real
+// persistence layer the builder writes to now instead of only localStorage.
+app.use('/automation/playbooks', authenticate);
+app.use('/', playbookController);
 
 // Real inbound webhook entry point (public — see comment in webhookController.js)
 app.use('/', webhookController);
