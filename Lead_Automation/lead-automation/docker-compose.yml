@@ -110,6 +110,20 @@ services:
       postgres: { condition: service_healthy }
     ports: ["4010:4010"]
 
+  automation-service:
+    build: { context: ., dockerfile: services/automation-service/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4011:4011"]
+    # Persists uploaded documents (see mediaController.js) across
+    # container restarts/rebuilds. Local-disk-only — doesn't help if you
+    # ever scale this service to >1 replica; swap for S3 at that point.
+    volumes:
+      - automation_uploads:/app/services/automation-service/public/uploads
+
   api-gateway:
     build: { context: ., dockerfile: api-gateway/Dockerfile }
     env_file: .env
@@ -124,6 +138,7 @@ services:
       ANALYTICS_SERVICE_URL: http://analytics-service:4008
       INTEGRATION_SERVICE_URL: http://integration-service:4009
       TEAM_SERVICE_URL: http://team-service:4010
+      AUTOMATION_SERVICE_URL: http://automation-service:4011
     depends_on:
       - auth-service
       - inbox-service
@@ -135,7 +150,9 @@ services:
       - analytics-service
       - integration-service
       - team-service
+      - automation-service
     ports: ["8080:8080"]
 
 volumes:
   pgdata:
+  automation_uploads:

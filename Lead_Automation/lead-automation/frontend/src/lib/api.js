@@ -12,3 +12,19 @@ export async function api(path, { method = 'GET', body, token } = {}) {
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
   return res.json();
 }
+
+// Multipart/form-data variant of `api()`, for file uploads (e.g. the
+// Message Node "document" badge in FlowBuilder.jsx). Deliberately does NOT
+// set Content-Type itself — the browser needs to add the multipart
+// boundary, which it only does when it builds the header itself.
+export async function apiUpload(path, formData, { token } = {}) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  return res.json();
+}

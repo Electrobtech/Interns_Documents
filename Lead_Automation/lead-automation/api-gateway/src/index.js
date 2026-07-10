@@ -15,6 +15,7 @@ const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:400
 const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
 const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
 const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
+const AUTOMATION   = process.env.AUTOMATION_SERVICE_URL  || 'http://localhost:4011';
 
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
 
@@ -38,6 +39,11 @@ const routes = [
   { path: '/channels',        target: INTEGRATION },
   { path: '/users',           target: TEAM },
   { path: '/teams',           target: TEAM },
+  // Lead Automation module (WhatsApp > Automation): flow engine, its
+  // simulate/reset helpers, and its own inbound webhook receiver — all
+  // namespaced under /automation so they never collide with the CRM's own
+  // /webhooks (subscription management, routed to INTEGRATION above).
+  { path: '/automation',      target: AUTOMATION },
 ];
 
 for (const r of routes) {
