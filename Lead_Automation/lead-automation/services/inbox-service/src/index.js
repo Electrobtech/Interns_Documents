@@ -14,7 +14,7 @@ app.get('/conversations', async (req, res) => {
   const org = req.user.organizationId;
   const { status, channel } = req.query;
   const params = [org];
-  let sql = `SELECT c.id, c.channel_type, c.status, c.last_message_at,
+  let sql = `SELECT c.id, c.channel_type, c.status, c.handled_by, c.last_message_at,
                     ct.name AS contact_name,
                     (SELECT body FROM messages m WHERE m.conversation_id = c.id
                       ORDER BY created_at DESC LIMIT 1) AS last_body
@@ -35,8 +35,14 @@ app.get('/conversations/:id', async (req, res) => {
     [req.params.id, org]
   );
   if (!conv.rows.length) return res.status(404).json({ error: 'Not found' });
+  // message_type/metadata added alongside the original columns so the
+  // Unified Inbox UI can render a bot message's buttons/list options and
+  // let a CRM user click one to simulate the customer's reply (see
+  // frontend/src/app/(app)/inbox/[id]/page.jsx) — metadata is exactly the
+  // buildSendTemplate()-shaped payload automation-service's messageRepository
+  // already stores for every outbound send, untouched here.
   const msgs = await pool.query(
-    `SELECT id, direction, body, sender, created_at FROM messages
+    `SELECT id, direction, body, sender, message_type, metadata, created_at FROM messages
       WHERE conversation_id=$1 ORDER BY created_at ASC`,
     [req.params.id]
   );
@@ -65,6 +71,29 @@ app.put('/conversations/:id/status', async (req, res) => {
   res.json(rows[0] || {});
 });
 
+// Switches who owns replying on this conversation: 'bot' hands it back to
+// the automation flow (the next inbound webhook will resolve/start a
+// playbook normally — see automation-service's webhookController, which
+// checks this same flag before invoking the engine), 'human' silences the
+// bot immediately, including mid-flow, not just after a Handoff node.
+app.put('/conversations/:id/handled-by', async (req, res) => {
+  const org = req.user.organizationId;
+  const { handled_by } = req.body;
+  if (!['bot', 'human'].includes(handled_by)) {
+    return res.status(400).json({ error: `handled_by must be "bot" or "human"` });
+  }
+  const { rows } = await pool.query(
+    `UPDATE conversations
+        SET handled_by = $1,
+            status = CASE WHEN $1 = 'human' AND status = 'open' THEN 'pending' ELSE status END
+      WHERE id = $2 AND organization_id = $3
+      RETURNING *`,
+    [handled_by, req.params.id, org]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Not found' });
+  res.json(rows[0]);
+});
+
 app.put('/conversations/:id/assign', async (req, res) => {
   const org = req.user.organizationId;
   const { rows } = await pool.query(
@@ -72,6 +101,52 @@ app.put('/conversations/:id/assign', async (req, res) => {
     [req.body.userId, req.params.id, org]
   );
   res.json(rows[0] || {});
+});
+
+// Resets a conversation to a clean slate — wipes the message transcript,
+// reopens it, hands it back to the bot, and drops any in-progress
+// automation-service flow state for this contact/channel (see
+// conversation_sessions in automation-service's conversationSessionRepository)
+// so the next inbound message starts the playbook over from its entry node
+// instead of resuming mid-flow. Meant for re-running a demo from scratch.
+// Both services share this Postgres instance (see docker-compose.yml), so
+// this is a plain cross-table delete rather than a call into automation-service.
+app.post('/conversations/:id/reset', async (req, res) => {
+  const org = req.user.organizationId;
+  const conv = await pool.query(
+    `SELECT c.*, ct.source AS contact_source, ct.external_id AS contact_external_id
+       FROM conversations c
+       JOIN contacts ct ON ct.id = c.contact_id
+      WHERE c.id = $1 AND c.organization_id = $2`,
+    [req.params.id, org]
+  );
+  if (!conv.rows[0]) return res.status(404).json({ error: 'Not found' });
+  const { contact_source: channel, contact_external_id: externalId } = conv.rows[0];
+
+  await pool.query(`DELETE FROM messages WHERE conversation_id = $1`, [req.params.id]);
+
+  const { rows } = await pool.query(
+    `UPDATE conversations
+        SET status = 'open', handled_by = 'bot', last_message_at = now()
+      WHERE id = $1 AND organization_id = $2
+      RETURNING *`,
+    [req.params.id, org]
+  );
+
+  // Best-effort: a demo reset should still succeed even if this contact
+  // never had a bot session, or the table's momentarily unreachable.
+  if (channel && externalId) {
+    try {
+      await pool.query(
+        `DELETE FROM conversation_sessions WHERE organization_id = $1 AND channel = $2 AND contact_external_id = $3`,
+        [org, channel, externalId]
+      );
+    } catch (err) {
+      console.error('[inbox-service] failed to clear automation session on reset (non-fatal):', err.message);
+    }
+  }
+
+  res.json(rows[0]);
 });
 
 const PORT = process.env.INBOX_PORT || 4002;

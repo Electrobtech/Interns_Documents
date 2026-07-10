@@ -2,11 +2,15 @@
   "name": "auth-service",
   "version": "1.0.0",
   "main": "src/index.js",
-  "scripts": { "start": "node src/index.js", "dev": "node src/index.js" },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js"
+  },
   "dependencies": {
     "@lead/shared": "file:../../shared",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "pg": "^8.22.0"
   }
 }

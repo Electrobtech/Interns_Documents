@@ -2,17 +2,57 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Send } from 'lucide-react';
+import { ArrowLeft, Send, Bot, Headset, RotateCcw } from 'lucide-react';
 import { useApi } from '@/lib/useApi';
+
+// Bot messages carry their raw send-template in `metadata` — see
+// buildSendTemplate() in automation-service's webhookController.js — which
+// differs by channel (WhatsApp's native interactive-button/list shapes vs.
+// the generic Instagram/Messenger fallback shape). This normalizes any of
+// them into a flat { id, label } option list, plus the `interaction.type`
+// the engine actually branches on for that kind of message (workflowEngine
+// only matches 'button_click' against a 'buttons' node and 'list_select'
+// against a 'list' node — see evaluateWorkflowStep) — so clicking an option
+// reaches the exact same branch a real customer tapping it would.
+// Returns null if this message has no clickable options.
+function getMessageOptions(message) {
+  const meta = message?.metadata;
+  if (!meta || typeof meta !== 'object') return null;
+
+  if (meta.type === 'interactive' && meta.interactive?.type === 'button') {
+    const options = (meta.interactive.action?.buttons || [])
+      .map((b) => ({ id: b.reply?.id, label: b.reply?.title }))
+      .filter((o) => o.id);
+    return options.length ? { interactionType: 'button_click', options } : null;
+  }
+  if (meta.type === 'interactive' && meta.interactive?.type === 'list') {
+    const options = (meta.interactive.action?.sections || [])
+      .flatMap((s) => (s.rows || []).map((r) => ({ id: r.id, label: r.title })))
+      .filter((o) => o.id);
+    return options.length ? { interactionType: 'list_select', options } : null;
+  }
+  if (meta.type === 'buttons' && Array.isArray(meta.buttons)) {
+    const options = meta.buttons.map((b) => ({ id: b.id, label: b.label })).filter((o) => o.id);
+    return options.length ? { interactionType: 'button_click', options } : null;
+  }
+  if (meta.type === 'list' && meta.list?.sections) {
+    const options = meta.list.sections
+      .flatMap((s) => (s.rows || []).map((r) => ({ id: r.id, label: r.title })))
+      .filter((o) => o.id);
+    return options.length ? { interactionType: 'list_select', options } : null;
+  }
+  return null;
+}
 
 export default function ConversationView() {
   const { id } = useParams();
   const { call } = useApi();
   const [conv, setConv] = useState(null);
   const [reply, setReply] = useState('');
-  const [suggestion, setSuggestion] = useState(null);
-  const [suggesting, setSuggesting] = useState(false);
   const [sending, setSending] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [selecting, setSelecting] = useState(false);
   const [err, setErr] = useState('');
 
   const load = useCallback(() => {
@@ -21,14 +61,45 @@ export default function ConversationView() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Ask the AI for a suggested reply based on the latest inbound message.
-  const getSuggestion = useCallback(() => {
-    setSuggesting(true);
-    call('/ai-agents/suggest', { method: 'POST', body: { conversation_id: id } })
-      .then(setSuggestion).catch(() => {}).finally(() => setSuggesting(false));
-  }, [call, id]);
+  // Clears the transcript, reopens the conversation, hands it back to the
+  // bot, and drops any in-progress automation flow state for this contact
+  // — so the next inbound message replays the playbook from the start.
+  // Meant for resetting a test/demo conversation between runs.
+  const resetConversation = useCallback(async () => {
+    if (!conv || resetting) return;
+    if (!window.confirm('Reset this conversation? This clears the message history so you can run the demo again.')) return;
+    setResetting(true);
+    setErr('');
+    try {
+      await call(`/conversations/${id}/reset`, { method: 'POST' });
+      load();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setResetting(false);
+    }
+  }, [conv, resetting, call, id, load]);
 
-  useEffect(() => { if (conv) getSuggestion(); }, [conv, getSuggestion]);
+  // Bot vs human ownership of this conversation. Flipping to 'human' takes
+  // effect on the very next inbound webhook (automation-service checks this
+  // same flag before invoking the flow engine — see webhookController), so
+  // it silences the bot mid-flow, not just after it reaches a Handoff node.
+  // Flipping back to 'bot' just lets the next inbound message resolve a
+  // playbook normally; there's no separate "resume" step needed.
+  const setHandledBy = useCallback(async (next) => {
+    if (!conv || conv.handled_by === next || switching) return;
+    setSwitching(true);
+    setConv((c) => ({ ...c, handled_by: next })); // optimistic
+    try {
+      const updated = await call(`/conversations/${id}/handled-by`, { method: 'PUT', body: { handled_by: next } });
+      setConv((c) => ({ ...c, ...updated }));
+    } catch (e) {
+      setErr(e.message);
+      load(); // roll back the optimistic flip
+    } finally {
+      setSwitching(false);
+    }
+  }, [conv, switching, call, id, load]);
 
   async function send(text) {
     const body = (text ?? reply).trim();
@@ -38,10 +109,30 @@ export default function ConversationView() {
     try {
       await call(`/conversations/${id}/reply`, { method: 'POST', body: { body } });
       setReply('');
-      setSuggestion(null);
       load();
     } catch (e) { setErr(e.message); }
     finally { setSending(false); }
+  }
+
+  // Clicking a bot message's option acts as the customer, not as a human
+  // agent — it does NOT go through /conversations/:id/reply (that always
+  // logs an agent-authored outbound message). Instead it calls
+  // automation-service directly, which runs the exact same engine turn a
+  // live inbound webhook would: logs the inbound selection, advances the
+  // playbook, and sends + logs whatever the bot replies with next — so the
+  // transcript reloaded below reflects a full real round-trip, not a mock.
+  async function selectOption(option, interactionType) {
+    if (!conv || selecting) return;
+    setSelecting(true);
+    setErr('');
+    try {
+      await call('/automation/internal/inbox-reply', {
+        method: 'POST',
+        body: { conversationId: id, interaction: { type: interactionType, selectedId: option.id } },
+      });
+      load();
+    } catch (e) { setErr(e.message); }
+    finally { setSelecting(false); }
   }
 
   const name = conv?.contact_name || conv?.contact_id || 'Conversation';
@@ -59,50 +150,87 @@ export default function ConversationView() {
           <div className="w-9 h-9 rounded-full bg-slate-200 grid place-items-center text-xs font-semibold text-slate-600">
             {String(name).split(' ').map((w) => w[0]).join('').slice(0, 2)}
           </div>
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-medium">{name}</p>
             <p className="text-[11px] text-slate-400 capitalize">{conv?.channel_type} · {conv?.status}</p>
           </div>
+          {conv && (
+            <>
+              <button
+                onClick={resetConversation}
+                disabled={resetting}
+                title="Clear this conversation's history and start it fresh"
+                className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-60"
+              >
+                <RotateCcw size={13} /> {resetting ? 'Resetting…' : 'Reset'}
+              </button>
+              <div className="flex items-center rounded-lg border border-slate-200 p-0.5 bg-slate-50">
+                <button
+                  onClick={() => setHandledBy('bot')}
+                  disabled={switching}
+                  className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors disabled:opacity-60"
+                  style={{
+                    background: conv.handled_by === 'bot' ? '#fff' : 'transparent',
+                    color: conv.handled_by === 'bot' ? '#26241F' : '#8A8578',
+                    boxShadow: conv.handled_by === 'bot' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                  }}
+                >
+                  <Bot size={13} /> Bot
+                </button>
+                <button
+                  onClick={() => setHandledBy('human')}
+                  disabled={switching}
+                  className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors disabled:opacity-60"
+                  style={{
+                    background: conv.handled_by === 'human' ? '#fff' : 'transparent',
+                    color: conv.handled_by === 'human' ? '#26241F' : '#8A8578',
+                    boxShadow: conv.handled_by === 'human' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                  }}
+                >
+                  <Headset size={13} /> Human
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Thread */}
         <div className="p-5 space-y-3 min-h-[240px] max-h-[420px] overflow-y-auto bg-slate-50/50">
           {messages.length === 0 && <p className="text-sm text-slate-400 text-center py-8">No messages yet.</p>}
-          {messages.map((m) => (
-            <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
-                m.direction === 'outbound' ? 'bg-brand text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
-                {m.body}
-                <div className={`text-[10px] mt-1 ${m.direction === 'outbound' ? 'text-white/70' : 'text-slate-400'}`}>
-                  {m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+          {messages.map((m, i) => {
+            // Only the most recent bot message's options are still "live" —
+            // once the conversation has moved past it, older option sets are
+            // no longer what the flow is currently waiting on, so they're
+            // rendered as plain history instead of re-clickable buttons.
+            const isLatest = i === messages.length - 1;
+            const opts = isLatest && m.direction === 'outbound' ? getMessageOptions(m) : null;
+            return (
+              <div key={m.id} className={`flex flex-col ${m.direction === 'outbound' ? 'items-end' : 'items-start'}`}>
+                <div className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
+                  m.direction === 'outbound' ? 'bg-brand text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
+                  {m.body}
+                  <div className={`text-[10px] mt-1 ${m.direction === 'outbound' ? 'text-white/70' : 'text-slate-400'}`}>
+                    {m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                  </div>
                 </div>
+                {opts && (
+                  <div className="max-w-[75%] flex flex-wrap gap-2 mt-2">
+                    {opts.options.map((o) => (
+                      <button
+                        key={o.id}
+                        disabled={selecting}
+                        onClick={() => selectOption(o, opts.interactionType)}
+                        title="Simulate the customer tapping this option"
+                        className="text-xs font-medium px-3 py-1.5 rounded-full border border-brand text-brand hover:bg-brand hover:text-white transition-colors disabled:opacity-50"
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
-        </div>
-
-        {/* AI Suggested Reply */}
-        <div className="px-5 py-3 border-t border-slate-100 bg-indigo-50/40">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 mb-2">
-            <Sparkles size={14} /> AI Suggested Reply
-            {suggestion?.confidence != null && (
-              <span className="text-[10px] font-normal text-slate-400">· {Math.round(suggestion.confidence * 100)}% confident</span>
-            )}
-          </div>
-          {suggesting && <p className="text-xs text-slate-400">Thinking…</p>}
-          {!suggesting && suggestion && (
-            <>
-              <p className="text-sm text-slate-700 bg-white border border-indigo-100 rounded-lg px-3 py-2">{suggestion.suggestion}</p>
-              <div className="flex gap-2 mt-2">
-                <button onClick={() => send(suggestion.suggestion)} disabled={sending}
-                  className="bg-brand text-white text-xs rounded-lg px-3 py-1.5 font-medium disabled:opacity-60">Send</button>
-                <button onClick={() => setReply(suggestion.suggestion)}
-                  className="border border-slate-300 text-slate-600 text-xs rounded-lg px-3 py-1.5 font-medium">Edit</button>
-                <button onClick={getSuggestion}
-                  className="text-slate-400 text-xs px-2 py-1.5 hover:text-brand">Regenerate</button>
-              </div>
-            </>
-          )}
+            );
+          })}
         </div>
 
         {/* Reply box */}

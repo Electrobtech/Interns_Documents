@@ -78,10 +78,21 @@ CREATE TABLE IF NOT EXISTS contacts (
   email           TEXT,
   phone           TEXT,
   source          TEXT,                    -- lead source / origin channel
+  external_id     TEXT,                    -- raw channel identity (WhatsApp phone / IG-scoped user id / etc),
+                                            -- set when a contact is first resolved from an inbound automation
+                                            -- webhook rather than created manually in the CRM. NULL for
+                                            -- contacts that only ever originated in-app.
   tags            TEXT[] DEFAULT '{}',
   notes           TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- One contact per (org, channel, external id) — lets webhookController
+-- find-or-create idempotently across retries/repeated messages instead of
+-- spawning a duplicate contact per inbound event.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_contacts_org_source_external
+  ON contacts (organization_id, source, external_id)
+  WHERE external_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS leads (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -101,6 +112,12 @@ CREATE TABLE IF NOT EXISTS conversations (
   channel_type    TEXT NOT NULL,
   assigned_to     UUID REFERENCES users(id),
   status          TEXT DEFAULT 'open',     -- open | pending | missed | campaign | closed
+  handled_by      TEXT NOT NULL DEFAULT 'bot'
+                    CHECK (handled_by IN ('bot','human')),  -- who currently owns replying: the automation
+                                                             -- flow, or a human agent. Flipped to 'human'
+                                                             -- automatically when a Handoff node is reached
+                                                             -- (see workflowEngine/webhookController), and
+                                                             -- flippable either way from the inbox UI.
   last_message_at TIMESTAMPTZ DEFAULT now(),
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -112,6 +129,8 @@ CREATE TABLE IF NOT EXISTS messages (
   direction       TEXT NOT NULL,           -- inbound | outbound
   body            TEXT,
   sender          TEXT,
+  message_type    TEXT NOT NULL DEFAULT 'text', -- text | button_click | list_select | buttons | list | document | system
+  metadata        JSONB NOT NULL DEFAULT '{}'::jsonb, -- raw interaction/template payload for richer rendering later
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -278,4 +297,105 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- Helpful indexes for multi-tenant queries
 CREATE INDEX IF NOT EXISTS idx_conv_org ON conversations(organization_id, status);
 CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(conversation_id, message_type);
 CREATE INDEX IF NOT EXISTS idx_contacts_org ON contacts(organization_id);
+
+-- =====================================================================
+-- Lead Automation module (WhatsApp/Instagram/Messenger playbook engine)
+-- Migrated from a standalone MongoDB store — see
+-- infra/db/migrations/001_automation_service_postgres.sql for the
+-- standalone/incremental version of this same DDL, for databases created
+-- before this migration.
+--
+-- Design note: a playbook's node graph (nodes[], branches, buttons, etc.)
+-- is kept as a single JSONB document per playbook rather than normalized
+-- into separate node/edge tables. The engine (workflowEngine.js) always
+-- loads the *entire* graph into memory and walks it as a Map — no code
+-- path ever queries a single node or edge in isolation — so normalizing
+-- would add joins and migration overhead with no real query benefit.
+-- This mirrors the schema-less "nodes" array the flow builder already
+-- produces (see src/schemas/flow-schema.md) and keeps a flow document
+-- atomic and easy to version as a whole. Everything that IS a real
+-- relational key elsewhere (organization_id, session ids) is a normal
+-- typed/PK'd/FK'd column.
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS playbooks (
+  -- Explicit, app/seed-assigned id (e.g. "pb_project_details") rather than
+  -- an auto-generated UUID: the flow builder UI and its bundled demo/seed
+  -- flows already reference playbooks by a stable human-chosen string id,
+  -- and preserving that lets existing seed files and the frontend's
+  -- offline-mock fallback ids keep resolving unchanged.
+  id                TEXT PRIMARY KEY,
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name              TEXT NOT NULL,
+  channels          TEXT[] NOT NULL DEFAULT '{}',
+  playbook_type     TEXT NOT NULL DEFAULT 'standard'
+                      CHECK (playbook_type IN ('standard','default','fallback','gen_ai_default','transfer','unsubscribe')),
+  trigger_keywords  TEXT[] NOT NULL DEFAULT '{}',
+  status            TEXT NOT NULL DEFAULT 'draft'
+                      CHECK (status IN ('draft','active','paused','archived')),
+  version           INT NOT NULL DEFAULT 1,
+  entry_node_id     TEXT NOT NULL,
+  global_limits     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  nodes             JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Fast lookup: every incoming webhook resolves (organization_id, status=active),
+-- optionally narrowed by playbook_type. GIN lets "channel = ANY(channels)" use an index.
+CREATE INDEX IF NOT EXISTS idx_playbooks_org_status ON playbooks(organization_id, status);
+CREATE INDEX IF NOT EXISTS idx_playbooks_org_type_status ON playbooks(organization_id, playbook_type, status);
+CREATE INDEX IF NOT EXISTS idx_playbooks_channels_gin ON playbooks USING GIN (channels);
+
+CREATE TABLE IF NOT EXISTS conversation_sessions (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  playbook_id           TEXT NOT NULL REFERENCES playbooks(id) ON DELETE CASCADE,
+  organization_id       UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  channel               TEXT NOT NULL
+                          CHECK (channel IN ('whatsapp','instagram','messenger','google_reviews','linkedin_comments')),
+  contact_external_id   TEXT NOT NULL,
+  current_node_id       TEXT NOT NULL,
+  status                TEXT NOT NULL DEFAULT 'active'
+                          CHECK (status IN ('active','completed','handed_off','expired')),
+  variables             JSONB NOT NULL DEFAULT '{}'::jsonb,
+  path_history          JSONB NOT NULL DEFAULT '[]'::jsonb,
+  message_count         INT NOT NULL DEFAULT 0,
+  started_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_interaction_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One active session per contact per playbook — prevents duplicate/racing
+-- sessions on rapid double-webhook delivery (a common WhatsApp/Meta retry
+-- scenario). Direct equivalent of the old Mongo partialFilterExpression
+-- unique index, natively supported by Postgres partial indexes.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_conversation_sessions_active
+  ON conversation_sessions (playbook_id, contact_external_id)
+  WHERE status = 'active';
+
+-- Resolves "does this contact already have an active session on this channel"
+-- during inbound-webhook playbook resolution.
+CREATE INDEX IF NOT EXISTS idx_conversation_sessions_lookup
+  ON conversation_sessions (organization_id, channel, contact_external_id, status);
+CREATE INDEX IF NOT EXISTS idx_conversation_sessions_last_interaction
+  ON conversation_sessions (last_interaction_at);
+
+CREATE TABLE IF NOT EXISTS throttle_counters (
+  -- A separate, tiny, hot-write table dedicated to counting — kept apart
+  -- from conversation_sessions so high-frequency limit-check increments
+  -- never contend with the larger session row (path_history/variables
+  -- updates), same reasoning as the original Mongo design.
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  scope_key         TEXT NOT NULL,   -- flow: playbook_id | node: "playbook_id:node_id" | client: "client:organization_id"
+  bucket            TEXT NOT NULL,   -- time-window bucket, see bucketUtils.js (e.g. "2026-07-08", "all")
+  limit_type        TEXT NOT NULL
+                      CHECK (limit_type IN ('conversation_count','message_count','unique_contact_count')),
+  count             INT NOT NULL DEFAULT 0,
+  seen_contact_ids  TEXT[] NOT NULL DEFAULT '{}', -- only populated for limit_type = unique_contact_count
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (scope_key, bucket, limit_type)
+);

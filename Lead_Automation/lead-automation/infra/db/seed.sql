@@ -154,3 +154,10 @@ INSERT INTO social_comments (organization_id, source, author, body, reply) VALUE
   ('11111111-1111-1111-1111-111111111111','facebook','Ananya Singh','Do you have this in blue?',NULL),
   ('11111111-1111-1111-1111-111111111111','linkedin','Neha Patel','Amazing collection!',NULL)
 ON CONFLICT DO NOTHING;
+
+-- ---------- Lead Automation (WhatsApp/Instagram playbook engine) ----------
+-- Demo playbooks live as JSON fixtures in
+-- services/automation-service/src/seeds/ and are loaded separately with
+-- `npm run seed` (from services/automation-service) rather than inserted
+-- here directly, since they're maintained/versioned alongside the flow
+-- builder rather than as bootstrap CRM data.

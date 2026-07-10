@@ -57,17 +57,68 @@ app.delete('/campaigns/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-// Mark a campaign as sent and log a delivery event.
+// automation-service owns the channel Send API credentials + the Unified
+// Inbox transcript writes (messageRepository), so actually delivering a
+// campaign message is a service-to-service call there rather than campaign-
+// service reaching across process/Docker-image boundaries for it (each
+// service's Dockerfile only COPYs its own src + shared — see automation-
+// service/Dockerfile). The two services share one JWT secret (@lead/shared),
+// so forwarding the caller's own bearer token is enough to authenticate.
+const AUTOMATION_SERVICE_URL = process.env.AUTOMATION_SERVICE_URL || 'http://localhost:4011';
+
+// Sends a campaign to every contact in its audience, marks it sent, and logs
+// a real per-contact campaign_logs event for each attempt. One contact's
+// failure (bad/missing number, expired token, a transcript write hiccup on
+// the automation-service side, etc) never aborts the rest of the run —
+// every outcome is caught and recorded rather than thrown.
 app.post('/campaigns/:id/send', async (req, res) => {
   const { rows } = await pool.query(
     `UPDATE campaigns SET status='sent' WHERE id=$1 AND organization_id=$2 RETURNING *`,
     [req.params.id, req.user.organizationId]
   );
-  if (rows.length) {
-    await pool.query(`INSERT INTO campaign_logs (campaign_id, event) VALUES ($1,'delivered')`,
-      [req.params.id]);
-  }
-  res.json(rows[0] || {});
+  const campaign = rows[0];
+  if (!campaign) return res.json({});
+
+  const { rows: audience } = await pool.query(
+    `SELECT c.* FROM campaign_audiences ca
+       JOIN contacts c ON c.id = ca.contact_id
+      WHERE ca.campaign_id = $1`,
+    [campaign.id]
+  );
+
+  const authHeader = req.headers.authorization;
+  const logEvent = (contactId, event) =>
+    pool.query(`INSERT INTO campaign_logs (campaign_id, contact_id, event) VALUES ($1,$2,$3)`,
+      [campaign.id, contactId, event]
+    ).catch((err) => console.error('[campaign-service] failed to write campaign_log (non-fatal):', err.message));
+
+  await Promise.all(audience.map(async (contact) => {
+    // WhatsApp sends to the E.164 phone number; Instagram (and anything
+    // else) sends to the channel-scoped external_id (PSID etc) — falls back
+    // to external_id either way in case a contact has no phone on file.
+    const externalId = campaign.channel_type === 'whatsapp'
+      ? (contact.phone || contact.external_id)
+      : contact.external_id;
+
+    if (!externalId) return logEvent(contact.id, 'failed');
+
+    try {
+      const resp = await fetch(`${AUTOMATION_SERVICE_URL}/automation/internal/campaign-send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
+        body: JSON.stringify({ channel: campaign.channel_type, externalId, body: campaign.message_body }),
+      });
+      await logEvent(contact.id, resp.ok ? 'delivered' : 'failed');
+    } catch (err) {
+      console.error(`[campaign-service] send failed for contact ${contact.id}:`, err.message);
+      await logEvent(contact.id, 'failed');
+    }
+  }));
+
+  res.json(campaign);
 });
 
 const PORT = process.env.CAMPAIGN_PORT || 4004;
