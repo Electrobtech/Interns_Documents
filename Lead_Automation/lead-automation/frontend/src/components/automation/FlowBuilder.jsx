@@ -3,7 +3,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import {
   ChevronLeft, Check, Plus, Trash2, ZoomIn, ZoomOut, Maximize2,
   Undo2, Redo2, Search, MessageSquare, GitBranch, Headset, FileText, X, Copy,
-  Loader2, AlertCircle, Download,
+  Loader2, AlertCircle, Download, CloudOff,
 } from "lucide-react";
 import { apiUpload } from "@/lib/api";
 import { getToken } from "@/lib/auth";
@@ -303,6 +303,27 @@ function DocumentUploadField({ document, onChange }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Save-status pill — reflects PlaybookStudioApp's real autosave state
+   against Postgres (see playbookController.js) instead of a hardcoded
+   "Saved" label that was always true even when nothing was persisted.    */
+/* ------------------------------------------------------------------ */
+function SyncStatusPill({ status }) {
+  const config = {
+    loading: { icon: <Loader2 size={11} className="animate-spin" />, label: "Loading…", bg: "#F2F0EA", fg: tokens.muted },
+    saving: { icon: <Loader2 size={11} className="animate-spin" />, label: "Saving…", bg: "#F2F0EA", fg: tokens.muted },
+    saved: { icon: <Check size={11} />, label: "Saved", bg: "#EAF7EE", fg: "#1E8A4C" },
+    offline: { icon: <CloudOff size={11} />, label: "Saved locally — will retry", bg: "#FDF1E9", fg: "#C2760B" },
+    error: { icon: <AlertCircle size={11} />, label: "Save failed", bg: "#FBEAE7", fg: tokens.danger },
+  }[status] || { icon: <Check size={11} />, label: "Saved", bg: "#EAF7EE", fg: "#1E8A4C" };
+
+  return (
+    <div className="flex items-center gap-1 text-xs px-2 py-1 rounded-full shrink-0" style={{ background: config.bg, color: config.fg }}>
+      {config.icon} {config.label}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Node card renderer — dispatches by type                             */
 /* ------------------------------------------------------------------ */
 function NodeCard({ node, selected, onMouseDownDrag, onUpdate, onDelete, onStartConnect, onAddBranch, onRemoveBranch }) {
@@ -508,10 +529,63 @@ export function exportFlowJson(graph, title) {
   return { name: title, entryNodeId: graph.entryNodeId, nodes };
 }
 
+/**
+ * Inverse of exportFlowJson(): takes a playbook row as returned by
+ * GET /automation/playbooks/:id (flow-schema.md shape — nextNodeId inline
+ * on each node/branch) and rebuilds the builder's internal graph shape
+ * (separate nodes[] + edges[] arrays, "list" back to "interactive", etc.).
+ * This is what lets a flow saved from one machine reopen identically on
+ * another — see PlaybookStudioApp.jsx's hydrate-on-mount.
+ */
+export function importFlowJson(playbook) {
+  const nodes = [];
+  const edges = [];
+
+  for (const n of playbook.nodes || []) {
+    // Older seed/demo rows may predate positioned layout — fall back to a
+    // stacked default rather than crashing NodeCard's `left: node.position.x`.
+    const position = n.position && typeof n.position.x === "number" ? n.position : { x: 620, y: 40 + nodes.length * 150 };
+
+    if (n.type === "message") {
+      nodes.push({
+        id: n.id,
+        type: "message",
+        position,
+        data: {
+          messageType: n.data.messageType === "list" ? "interactive" : n.data.messageType,
+          body: n.data.body,
+          document: n.data.document,
+          waitForReply: !!n.data.waitForReply,
+        },
+      });
+      if (n.data.nextNodeId) {
+        edges.push({ id: `e_${n.id}`, sourceNodeId: n.id, sourceBranchId: null, targetNodeId: n.data.nextNodeId });
+      }
+    } else if (n.type === "answer_branch") {
+      nodes.push({
+        id: n.id,
+        type: "answer_branch",
+        position,
+        data: { branches: (n.data.branches || []).map((b) => ({ id: b.id, label: b.label })) },
+      });
+      for (const b of n.data.branches || []) {
+        if (b.nextNodeId) {
+          edges.push({ id: `e_${n.id}_${b.id}`, sourceNodeId: n.id, sourceBranchId: b.id, targetNodeId: b.nextNodeId });
+        }
+      }
+    } else {
+      // handoff
+      nodes.push({ id: n.id, type: "handoff", position, data: { team: n.data.team } });
+    }
+  }
+
+  return { nodes, edges, entryNodeId: playbook.entryNodeId };
+}
+
 /* ------------------------------------------------------------------ */
 /* Root component                                                      */
 /* ------------------------------------------------------------------ */
-export default function FlowBuilder({ initialGraph, initialTitle, onGraphChange, onTitleChange, onTestBot }) {
+export default function FlowBuilder({ initialGraph, initialTitle, syncStatus = "saved", onGraphChange, onTitleChange, onTestBot }) {
   const [graph, setGraph] = useState(initialGraph || seedGraph);
   const [title, setTitleState] = useState(initialTitle || "WEB — Ecommerce Customer Support");
   const [viewport, setViewport] = useState({ x: -200, y: -10, zoom: 0.85 });
@@ -794,9 +868,7 @@ export default function FlowBuilder({ initialGraph, initialTitle, onGraphChange,
         <button className="flex items-center gap-1 text-sm" style={{ color: tokens.muted }}>
           <ChevronLeft size={15} /> Back
         </button>
-        <div className="flex items-center gap-1 text-xs px-2 py-1 rounded-full" style={{ background: "#EAF7EE", color: "#1E8A4C" }}>
-          <Check size={11} /> Saved
-        </div>
+        <SyncStatusPill status={syncStatus} />
         <div className="flex-1 flex justify-center">
           <EditableText value={title} onChange={setTitle} className="text-sm font-semibold text-center" placeholder="Untitled playbook" />
         </div>

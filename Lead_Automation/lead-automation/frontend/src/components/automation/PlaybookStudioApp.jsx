@@ -1,9 +1,14 @@
 'use client';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Rows3, LayoutList } from 'lucide-react';
-import FlowBuilder, { seedGraph, exportFlowJson } from './FlowBuilder.jsx';
+import FlowBuilder, { seedGraph, exportFlowJson, importFlowJson } from './FlowBuilder.jsx';
 import DiagnosticBench from './DiagnosticBench.jsx';
 import { useApi } from '@/lib/useApi';
+
+// How long to wait after the last edit before autosaving to Postgres.
+// Keeps every keystroke/drag from firing its own network request while
+// still saving well within "close the laptop lid" timeframes.
+const AUTOSAVE_DEBOUNCE_MS = 800;
 
 /**
  * Playbook Studio — ported from the standalone Lead Automation project into
@@ -12,26 +17,24 @@ import { useApi } from '@/lib/useApi';
  * CRM's Sidebar/Topbar shell instead of owning the whole viewport).
  *
  * Single source of truth: `graph` (the canvas's node/edge state) lives here,
- * not inside either child component. Switching tabs doesn't serialize to
- * localStorage or round-trip through a backend — it's the same in-memory
- * object, converted once via exportFlowJson() right before the simulator
- * reads it. That's what makes "branch created in the builder is visible in
- * the simulator" actually true rather than just two components that look similar.
+ * not inside either child component. Switching tabs doesn't round-trip
+ * through anything — it's the same in-memory object, converted once via
+ * exportFlowJson() right before the simulator reads it. That's what makes
+ * "branch created in the builder is visible in the simulator" actually true
+ * rather than just two components that look similar.
  *
- * `channel` drives the Simulate tab's chat chrome (WhatsApp vs Instagram —
- * see DiagnosticBench) and, together with `playbookId`, scopes the
- * localStorage autosave key below so two different flows/channels never
- * clobber each other's drafts.
+ * Persistence: the graph is autosaved to PostgreSQL via
+ * GET/PUT /automation/playbooks/:playbookId (see playbookController.js) —
+ * that's what makes a flow built on one machine reopen identically on
+ * another. localStorage is kept only as an instant local echo / offline
+ * fallback (e.g. mid-edit network hiccup), never the source of truth once a
+ * backend copy exists.
  */
 export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = 'draft' }) {
   const storageKey = `playbookStudio:${channel}:${playbookId}`;
   const { call } = useApi();
 
   // ---- Conversation view preference (Compact / Detailed) --------------
-  // Purely a display-density toggle for the Studio's own chrome — separate
-  // from the graph/title autosave above, so it's kept under its own
-  // localStorage key (shared across channels/playbooks; it's a user
-  // preference, not a per-flow one) and its own tiny bit of state.
   const [viewPreference, setViewPreference] = useState('detailed');
 
   useEffect(() => {
@@ -51,90 +54,121 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
         body: { preference: next },
       });
     } catch (err) {
-      // Non-critical: the UI already reflects the choice and it's saved
-      // locally, so a failed round-trip to the (currently stubbed) backend
-      // isn't worth surfacing as an error toast — just log it.
       console.warn('Failed to sync conversation view preference:', err.message);
     }
   }, [call]);
 
-  // ---- Hydrate on mount ----------------------------------------------
-  // There's no real "load this playbook from the database" endpoint yet —
-  // the whole studio is client-side/in-memory today (see FlowBuilder's
-  // always-on "Saved" pill and the Deploy button's JSON-export-only
-  // behavior). Until that endpoint exists, a locally-saved draft IS the
-  // most current copy, so it takes priority; seedGraph is the fallback.
-  // When a real fetch lands, it slots into the `else` branch below.
-  const [graph, setGraphState] = useState(() => {
-    if (typeof window === 'undefined') return seedGraph();
-    try {
-      const raw = window.localStorage.getItem(storageKey);
-      const parsed = raw ? JSON.parse(raw) : null;
-      // Guard against a corrupt/old-shape entry (e.g. saved by an earlier,
-      // buggy build) rather than trusting it blindly and crashing later
-      // inside exportFlowJson/FlowBuilder when `.nodes` turns out missing.
-      if (Array.isArray(parsed?.graph?.nodes)) return parsed.graph;
-    } catch {
-      // JSON.parse failure — ignore and fall through to seedGraph()
-    }
-    return seedGraph();
-  });
-
-  const [title, setTitleState] = useState(() => {
-    if (typeof window === 'undefined') return 'WEB — Ecommerce Customer Support';
-    try {
-      const raw = window.localStorage.getItem(storageKey);
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (typeof parsed?.title === 'string') return parsed.title;
-    } catch {
-      /* ignore */
-    }
-    return 'WEB — Ecommerce Customer Support';
-  });
-
+  // ---- Graph + title state, hydrated from Postgres on mount -----------
+  const [graph, setGraphState] = useState(seedGraph);
+  const [title, setTitleState] = useState('WEB — Ecommerce Customer Support');
   const [tab, setTab] = useState('builder'); // 'builder' | 'simulate'
+  const [syncStatus, setSyncStatus] = useState('loading'); // loading | saved | saving | offline | error
 
-  // Re-hydrate if the channel or playbook identity changes under us (e.g.
-  // navigating from /channels/whatsapp/automation straight to
-  // /channels/instagram/automation without a full page reload).
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+  // Guards the autosave effect from firing while we're still hydrating (or
+  // re-hydrating after a channel/playbookId change) — otherwise the very
+  // first render after a fetch would immediately PUT back what we just GET.
+  const hydratingRef = useRef(true);
+  const saveTimerRef = useRef(null);
+
+  const readLocalCache = useCallback(() => {
+    if (typeof window === 'undefined') return null;
     try {
       const raw = window.localStorage.getItem(storageKey);
-      const saved = raw ? JSON.parse(raw) : null;
-      setGraphState(Array.isArray(saved?.graph?.nodes) ? saved.graph : seedGraph());
-      setTitleState(typeof saved?.title === 'string' ? saved.title : 'WEB — Ecommerce Customer Support');
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(parsed?.graph?.nodes)) return parsed;
     } catch {
-      setGraphState(seedGraph());
-      setTitleState('WEB — Ecommerce Customer Support');
+      /* corrupt/old-shape cache entry — ignore */
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return null;
   }, [storageKey]);
 
-  const persist = useCallback((nextGraph, nextTitle) => {
+  const writeLocalCache = useCallback((nextGraph, nextTitle) => {
     if (typeof window === 'undefined') return;
     try {
       window.localStorage.setItem(storageKey, JSON.stringify({ graph: nextGraph, title: nextTitle, savedAt: Date.now() }));
     } catch {
-      // localStorage full/unavailable (private browsing, quota) — edits still
-      // work for the rest of this session, they just won't survive a refresh.
+      // localStorage full/unavailable (private browsing, quota) — non-fatal,
+      // the Postgres save is what actually matters.
     }
   }, [storageKey]);
 
-  // Every node/edge edit funnels through FlowBuilder's `commit()`, which
-  // calls onGraphChange — so this one handler is all that's needed to
-  // autosave on every change, no separate "Save" click required.
+  // Hydrate from Postgres whenever channel/playbookId changes (e.g.
+  // navigating from /channels/whatsapp/automation to
+  // /channels/instagram/automation without a full page reload). Falls back
+  // to a local cache, then the bundled seed, only if the backend fetch
+  // itself fails (offline, DB down) — a clean 404 (no playbook saved yet)
+  // still prefers the local cache once, so an in-progress edit isn't lost
+  // the first time this endpoint goes live under an existing draft.
+  useEffect(() => {
+    let cancelled = false;
+    hydratingRef.current = true;
+    setSyncStatus('loading');
+
+    (async () => {
+      try {
+        const playbook = await call(`/automation/playbooks/${playbookId}`);
+        if (cancelled) return;
+        setGraphState(importFlowJson(playbook));
+        setTitleState(playbook.name || 'WEB — Ecommerce Customer Support');
+        setSyncStatus('saved');
+      } catch (err) {
+        if (cancelled) return;
+        const cached = readLocalCache();
+        if (cached) {
+          setGraphState(cached.graph);
+          setTitleState(cached.title);
+        } else {
+          setGraphState(seedGraph());
+          setTitleState('WEB — Ecommerce Customer Support');
+        }
+        // A 404 just means "nothing saved yet for this id" — that's normal
+        // for a brand-new playbook, not an error worth flagging.
+        setSyncStatus(/not found|404/i.test(err.message || '') ? 'saved' : 'offline');
+      } finally {
+        if (!cancelled) {
+          // Let the hydration's own state updates flush before re-enabling
+          // the autosave effect below, so it doesn't immediately re-save.
+          setTimeout(() => { hydratingRef.current = false; }, 0);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbookId, channel]);
+
   const handleGraphChange = useCallback((next) => {
     setGraphState(next);
-    persist(next, title);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [persist, title]);
+  }, []);
 
   const handleTitleChange = useCallback((next) => {
     setTitleState(next);
-    persist(graph, next);
+  }, []);
+
+  // ---- Debounced autosave to Postgres ----------------------------------
+  useEffect(() => {
+    if (hydratingRef.current) return; // don't save what we just loaded
+    writeLocalCache(graph, title); // instant local echo regardless of network
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      setSyncStatus('saving');
+      try {
+        const exported = exportFlowJson(graph, title);
+        await call(`/automation/playbooks/${playbookId}`, {
+          method: 'PUT',
+          body: { ...exported, channels: [channel] },
+        });
+        setSyncStatus('saved');
+      } catch (err) {
+        console.warn('Autosave to Postgres failed, kept locally only:', err.message);
+        setSyncStatus('offline');
+      }
+    }, AUTOSAVE_DEBOUNCE_MS);
+
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [persist, graph]);
+  }, [graph, title]);
 
   const exportedFlow = useMemo(() => exportFlowJson(graph, title), [graph, title]);
 
@@ -153,13 +187,21 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
 
       <div className="flex-1 min-h-0">
         {tab === 'builder' ? (
-          <FlowBuilder
-            initialGraph={graph}
-            initialTitle={title}
-            onGraphChange={handleGraphChange}
-            onTitleChange={handleTitleChange}
-            onTestBot={() => setTab('simulate')}
-          />
+          syncStatus === 'loading' ? (
+            <div className="w-full h-full flex items-center justify-center text-sm" style={{ color: '#8A8578' }}>
+              Loading your saved flow…
+            </div>
+          ) : (
+            <FlowBuilder
+              key={playbookId}
+              initialGraph={graph}
+              initialTitle={title}
+              syncStatus={syncStatus}
+              onGraphChange={handleGraphChange}
+              onTitleChange={handleTitleChange}
+              onTestBot={() => setTab('simulate')}
+            />
+          )
         ) : (
           <DiagnosticBench flow={exportedFlow} channel={channel} density={viewPreference} onBack={() => setTab('builder')} />
         )}
