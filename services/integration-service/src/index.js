@@ -40,6 +40,17 @@ app.get('/health', (_req, res) => {
     });
 });
 
+// Public root — lets a browser / tunnel smoke-test hit "/" and get 200 OK
+// instead of the confusing 401 from the auth guard below. Must stay ABOVE
+// app.use(authenticate).
+app.get('/', (_req, res) => {
+    res.json({
+        service: 'integration',
+        ok: true,
+        webhook: '/webhook/meta'
+    });
+});
+
 // Everything below requires a valid JWT — including /instagram and
 // /facebook, so req.user.organizationId is available for proper
 // multi-tenant scoping of publish/status routes.
