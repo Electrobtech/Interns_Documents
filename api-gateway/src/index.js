@@ -35,6 +35,7 @@ const routes = [
   { path: '/integrations',    target: INTEGRATION },
   { path: '/api-keys',        target: INTEGRATION },
   { path: '/webhooks',        target: INTEGRATION },
+  { path: '/webhook',         target: INTEGRATION },   // Meta webhook callback (/webhook/meta)
   { path: '/channels',        target: INTEGRATION },
   { path: '/users',           target: TEAM },
   { path: '/teams',           target: TEAM },
