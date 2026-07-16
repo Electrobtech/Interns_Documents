@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Inbox, Users, Bot, Megaphone, ShoppingCart,
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
-  MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown,
+  MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown, Bell,
 } from 'lucide-react';
  
 const platform = [
@@ -18,6 +18,7 @@ const platform = [
   ['Analytics & Insights', BarChart3, '/analytics'],
   ['Integrations & APIs', Plug, '/integrations'],
   ['Settings & Team', Settings, '/settings'],
+  ['Click Notification Demo', Bell, '/notification-demo'],
 ];
  
 // Channels that have a Playbook Studio ("Automation" tab) get an `automation:

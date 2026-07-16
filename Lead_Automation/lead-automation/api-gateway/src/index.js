@@ -16,12 +16,17 @@ const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:400
 const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
 const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
 const AUTOMATION   = process.env.AUTOMATION_SERVICE_URL  || 'http://localhost:4011';
+const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4012';
 
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
 
 // Route table — the single public entry point for the frontend.
 const routes = [
   { path: '/auth',            target: AUTH },
+  // Company Registration (Tenant Onboarding): GET/PUT /company/:id and
+  // POST /company/upload live in auth-service, which already owns the
+  // organizations (tenant) table. See services/auth-service/src/controllers/companyController.js.
+  { path: '/company',         target: AUTH },
   { path: '/conversations',   target: INBOX },
   { path: '/contacts',        target: CONTACT },
   { path: '/leads',           target: CONTACT },
@@ -32,6 +37,7 @@ const routes = [
   { path: '/recovery-flows',  target: ECOMMERCE },
   { path: '/reviews',         target: REVIEW },
   { path: '/social',          target: REVIEW },
+  { path: '/google',          target: REVIEW }, // Google Business Profile Reviews integration (review-service)
   { path: '/analytics',       target: ANALYTICS },
   { path: '/integrations',    target: INTEGRATION },
   { path: '/api-keys',        target: INTEGRATION },
@@ -44,6 +50,7 @@ const routes = [
   // namespaced under /automation so they never collide with the CRM's own
   // /webhooks (subscription management, routed to INTEGRATION above).
   { path: '/automation',      target: AUTOMATION },
+  { path: '/notifications',   target: NOTIFICATION },
 ];
 
 for (const r of routes) {

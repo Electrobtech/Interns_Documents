@@ -1,13 +1,27 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const { pool, sign, authenticate } = require('@lead/shared');
+const companyController = require('./controllers/companyController');
+const verificationController = require('./controllers/verificationController');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Serves uploaded logos/certificates (see companyController.js) at
+// /uploads/company/<file>. Public/unauthenticated, same as
+// automation-service's /uploads/documents.
+app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
+
 app.get('/health', (_req, res) => res.json({ service: 'auth', ok: true }));
+
+// Company Registration (Tenant Onboarding) wizard — see controllers/ for
+// details. Mounted before the existing routes below; none of those are
+// modified.
+app.use(companyController);
+app.use(verificationController);
 
 // ---- Register (also creates an org on first signup) ----
 app.post('/auth/register', async (req, res) => {

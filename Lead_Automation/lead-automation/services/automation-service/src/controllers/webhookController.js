@@ -150,16 +150,31 @@ router.get('/automation/webhooks/:clientId/:channel', (req, res) => {
  * `notFound: true` signals the one case that isn't a 200 — no active
  * playbook for this client/channel/interaction.
  */
-async function processInboundEvent({ clientId, channel, contactExternalId, interaction }) {
+async function processInboundEvent({ clientId, channel, contactExternalId, interaction, pinnedConversationId, awaitDelivery = false }) {
   // Resolve (or create) the CRM-facing contact/conversation this event
   // belongs to, and defer to a human agent if one already owns this
   // conversation — e.g. because a prior turn hit a Handoff node, or an
   // agent manually took it over from the inbox. The bot stays completely
   // silent in that case; it does not touch the flow engine at all, so it
   // can't talk over a human who's mid-reply.
-  const conversation = await conversationLinkRepository.resolveConversation({
-    organizationId: clientId, channel, externalId: contactExternalId
-  });
+  //
+  // `pinnedConversationId` is set when this call originated from the
+  // Unified Inbox's "Customer (simulate)" send (see inboxReplyController.js)
+  // — the CRM already knows exactly which conversation the user is looking
+  // at, so this skips resolveConversation()'s "most recently active open
+  // conversation for this contact/channel" lookup, which can otherwise land
+  // on a DIFFERENT conversation than the one on screen if this contact has
+  // more than one open conversation on the same channel (e.g. duplicate
+  // seed rows, or a contact who has messaged in more than once). A real
+  // inbound webhook has no such pin — it always falls back to the
+  // most-recent-open lookup, same as before.
+  const conversation = pinnedConversationId
+    ? await conversationLinkRepository.resolveConversationById({ conversationId: pinnedConversationId, organizationId: clientId })
+    : await conversationLinkRepository.resolveConversation({ organizationId: clientId, channel, externalId: contactExternalId });
+
+  if (!conversation) {
+    return { notFound: true, error: 'Conversation not found' };
+  }
 
   // Log the inbound message to the CRM transcript regardless of who
   // currently owns replying — a human agent taking over manually still
@@ -221,12 +236,26 @@ async function processInboundEvent({ clientId, channel, contactExternalId, inter
       // Logged alongside the send, not after it resolves — mirrors the
       // "assume delivery succeeded, log failures via the .catch above"
       // pattern the sender loop already uses, and keeps this off the
-      // ack's critical path. Non-blocking; messageRepository fails soft.
-      messageRepository.logOutbound({
+      // ack's critical path for a REAL inbound webhook (Meta only cares
+      // about a fast ack, not this write completing).
+      //
+      // BUT: when this turn was triggered from the Unified Inbox's
+      // "Customer (simulate)" send (awaitDelivery=true — see
+      // inboxReplyController.js), there's no webhook ack deadline to
+      // protect, and the CRM's own UI calls load() the instant this HTTP
+      // response comes back. Firing this without awaiting meant that
+      // reload could easily race the write and come back empty — the bot's
+      // reply was really being saved, just a few hundred ms after the
+      // person had already stopped looking for it, so it only ever showed
+      // up on some later, unrelated reload. Awaiting it here for that one
+      // caller closes that race, at the cost of a slightly slower response
+      // to a purely-internal, non-webhook call — a trade worth making.
+      const logPromise = messageRepository.logOutbound({
         organizationId: clientId,
         conversationId: conversation.id,
         template,
       });
+      if (awaitDelivery) await logPromise;
     }
   }
 
@@ -308,6 +337,7 @@ function buildSendTemplate(node, channel) {
  
   if (channel === 'whatsapp') {
     if (messageType === 'buttons') {
+      const safeButtons = buttons || [];
       return {
         type: 'interactive',
         interactive: {
@@ -315,17 +345,24 @@ function buildSendTemplate(node, channel) {
           header: header ? { type: header.type, text: header.text } : undefined,
           body: { text: body },
           footer: footer ? { text: footer } : undefined,
-          action: { buttons: buttons.map(b => ({ type: 'reply', reply: { id: b.id, title: b.label } })) }
+          action: { buttons: safeButtons.map(b => ({ type: 'reply', reply: { id: b.id, title: b.label } })) }
         }
       };
     }
     if (messageType === 'list') {
+      // Defensive: `list` should always be populated by exportFlowJson now
+      // (see FlowBuilder.jsx), but this guards against any playbook saved
+      // before that fix, or hand-edited JSON, from crashing the entire
+      // engine turn (and silently dropping the reply — see the big comment
+      // on the sender loop below) the way a bare `list.buttonLabel` access
+      // on `undefined` used to.
+      const safeList = list || { buttonLabel: 'Options', sections: [] };
       return {
         type: 'interactive',
         interactive: {
           type: 'list',
           body: { text: body },
-          action: { button: list.buttonLabel, sections: list.sections }
+          action: { button: safeList.buttonLabel || 'Options', sections: safeList.sections || [] }
         }
       };
     }

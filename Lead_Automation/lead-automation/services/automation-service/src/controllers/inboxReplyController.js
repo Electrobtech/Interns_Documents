@@ -55,6 +55,8 @@ router.post('/automation/internal/inbox-reply', async (req, res) => {
       channel: row.channel_type,
       contactExternalId: row.contact_external_id,
       interaction,
+      pinnedConversationId: conversationId,
+      awaitDelivery: true,
     });
 
     if (result.notFound) return res.status(404).json({ error: result.error });

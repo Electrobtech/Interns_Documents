@@ -63,6 +63,35 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
   const [title, setTitleState] = useState('WEB — Ecommerce Customer Support');
   const [tab, setTab] = useState('builder'); // 'builder' | 'simulate'
   const [syncStatus, setSyncStatus] = useState('loading'); // loading | saved | saving | offline | error
+  // Deploy is DELIBERATELY separate from the debounced autosave above: the
+  // autosave keeps status/playbookType whatever they already were (draft on
+  // a brand-new playbook — see playbookController.js's `status || 'draft'`
+  // fallback), so a flow can be edited indefinitely without going live by
+  // accident. Only clicking Deploy sets status: 'active', which is the ONE
+  // thing resolvePlaybook() (automation-service's webhookController.js)
+  // actually checks before it'll route a real inbound message — and
+  // playbookType: 'default' so it's picked up as this channel's first-touch
+  // welcome bot (matches any inbound text/keyword, not just a specific
+  // trigger), which is what "type hi in the inbox and see it fire" needs.
+  const [deployState, setDeployState] = useState('idle'); // idle | deploying | deployed | error
+
+  const handleDeploy = useCallback(async (exported) => {
+    setDeployState('deploying');
+    try {
+      const saved = await call(`/automation/playbooks/${playbookId}`, {
+        method: 'PUT',
+        body: { ...exported, channels: [channel], playbookType: 'default', status: 'active' },
+      });
+      setSyncStatus('saved');
+      setDeployState('deployed');
+      setTimeout(() => setDeployState('idle'), 2500);
+      return saved;
+    } catch (err) {
+      console.warn('Deploy failed:', err.message);
+      setDeployState('error');
+      setTimeout(() => setDeployState('idle'), 3000);
+    }
+  }, [call, playbookId, channel]);
 
   // Guards the autosave effect from firing while we're still hydrating (or
   // re-hydrating after a channel/playbookId change) — otherwise the very
@@ -200,6 +229,8 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
               onGraphChange={handleGraphChange}
               onTitleChange={handleTitleChange}
               onTestBot={() => setTab('simulate')}
+              onDeploy={handleDeploy}
+              deployState={deployState}
             />
           )
         ) : (

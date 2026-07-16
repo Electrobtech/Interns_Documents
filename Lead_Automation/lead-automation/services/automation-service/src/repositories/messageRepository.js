@@ -45,8 +45,14 @@ async function insertMessage({ organizationId, conversationId, direction, body, 
 function describeInteraction(interaction) {
   if (!interaction) return { body: '', messageType: 'text' };
   if (interaction.type === 'text') return { body: interaction.text || '', messageType: 'text' };
-  if (interaction.type === 'button_click') return { body: `[button] ${interaction.selectedId}`, messageType: 'button_click' };
-  if (interaction.type === 'list_select') return { body: `[list] ${interaction.selectedId}`, messageType: 'list_select' };
+  // A real inbound webhook from Meta only ever gives us a raw button/row id
+  // (that's all WhatsApp itself sends back) — `label` only exists when this
+  // came from the Unified Inbox's "tap an option" simulate flow (see
+  // selectOption in the inbox page), which already knows the option's text
+  // and can pass it straight through instead of forcing the transcript to
+  // show a meaningless internal id like "[list] b_1783594854112".
+  if (interaction.type === 'button_click') return { body: interaction.label || `[button] ${interaction.selectedId}`, messageType: 'button_click' };
+  if (interaction.type === 'list_select') return { body: interaction.label || `[list] ${interaction.selectedId}`, messageType: 'list_select' };
   return { body: JSON.stringify(interaction), messageType: interaction.type || 'text' };
 }
 

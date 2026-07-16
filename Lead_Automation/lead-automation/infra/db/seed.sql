@@ -5,9 +5,11 @@
 -- =====================================================================
 
 INSERT INTO roles (name, description) VALUES
+  ('owner',   'Tenant owner — full access, billing, and org settings'),
   ('admin',   'Full access'),
   ('manager', 'Manage team and campaigns'),
-  ('agent',   'Handle conversations')
+  ('agent',   'Handle conversations'),
+  ('viewer',  'Read-only access')
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO organizations (id, name, slug) VALUES
@@ -58,13 +60,20 @@ INSERT INTO ai_agents (organization_id, name, type, status, config) VALUES
 ON CONFLICT DO NOTHING;
 
 -- ---------- Contacts ----------
-INSERT INTO contacts (organization_id, name, email, phone, source, tags) VALUES
-  ('11111111-1111-1111-1111-111111111111','Rohan Verma','rohan@example.com','+919000000001','whatsapp','{vip}'),
-  ('11111111-1111-1111-1111-111111111111','Ananya Singh','ananya@example.com','+919000000002','instagram','{}'),
-  ('11111111-1111-1111-1111-111111111111','Neha Patel','neha@example.com','+919000000003','webchat','{}'),
-  ('11111111-1111-1111-1111-111111111111','Vikram Joshi','vikram@example.com','+919000000004','messenger','{}'),
-  ('11111111-1111-1111-1111-111111111111','Pooja Mehta','pooja@example.com','+919000000005','sms','{}'),
-  ('11111111-1111-1111-1111-111111111111','Amit Kumar','amit@example.com','+919000000006','voice','{}')
+-- external_id mirrors phone here for the demo seed — for a real WhatsApp
+-- contact this would be the raw wa_id Meta sends as msg.from (see
+-- normalizeWhatsApp() in automation-service's webhookController.js), but
+-- since these rows are inserted manually rather than resolved from a live
+-- webhook, contacts.external_id would otherwise stay NULL and the Unified
+-- Inbox's "Customer (simulate)" send mode would 422 with "no channel
+-- identity to simulate a reply from" for every seeded conversation.
+INSERT INTO contacts (organization_id, name, email, phone, source, external_id, tags) VALUES
+  ('11111111-1111-1111-1111-111111111111','Rohan Verma','rohan@example.com','+919000000001','whatsapp','919000000001','{vip}'),
+  ('11111111-1111-1111-1111-111111111111','Ananya Singh','ananya@example.com','+919000000002','instagram','919000000002','{}'),
+  ('11111111-1111-1111-1111-111111111111','Neha Patel','neha@example.com','+919000000003','webchat','919000000003','{}'),
+  ('11111111-1111-1111-1111-111111111111','Vikram Joshi','vikram@example.com','+919000000004','messenger','919000000004','{}'),
+  ('11111111-1111-1111-1111-111111111111','Pooja Mehta','pooja@example.com','+919000000005','sms','919000000005','{}'),
+  ('11111111-1111-1111-1111-111111111111','Amit Kumar','amit@example.com','+919000000006','voice','919000000006','{}')
 ON CONFLICT DO NOTHING;
 
 -- ---------- Leads ----------

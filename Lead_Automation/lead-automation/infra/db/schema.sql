@@ -6,11 +6,42 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ---------- Tenancy ----------
 CREATE TABLE IF NOT EXISTS organizations (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name          TEXT NOT NULL,
-  slug          TEXT UNIQUE NOT NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name                    TEXT NOT NULL,
+  slug                    TEXT UNIQUE NOT NULL,
+  -- ---- Company Registration (Tenant Onboarding) profile ----
+  legal_name              TEXT,
+  business_type           TEXT,   -- proprietorship | partnership | llp | private_limited | public_limited | startup | ngo | other
+  industry                TEXT,
+  website                 TEXT,
+  logo_url                TEXT,
+  employee_count          TEXT,
+  description             TEXT,
+  company_email           TEXT,
+  company_phone           TEXT,
+  support_email           TEXT,
+  alternate_phone         TEXT,
+  address_line1           TEXT,
+  address_line2           TEXT,
+  city                    TEXT,
+  state                   TEXT,
+  country                 TEXT,
+  postal_code             TEXT,
+  gst_number              TEXT,
+  pan_number              TEXT,
+  registration_number     TEXT,
+  incorporation_cert_url  TEXT,
+  gst_cert_url            TEXT,
+  registration_cert_url   TEXT,
+  subscription_plan       TEXT DEFAULT 'starter', -- starter | professional | enterprise
+  coupon_code             TEXT,
+  status                  TEXT DEFAULT 'pending', -- pending | active | suspended
+  onboarding_step         INT DEFAULT 1,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS organizations_name_ci_idx ON organizations (lower(name));
 
 -- ---------- Auth / Users / Roles ----------
 CREATE TABLE IF NOT EXISTS roles (
@@ -33,16 +64,38 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 );
 
 CREATE TABLE IF NOT EXISTS users (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  role_id         UUID REFERENCES roles(id),
-  name            TEXT NOT NULL,
-  email           TEXT NOT NULL,
-  password_hash   TEXT NOT NULL,
-  availability    TEXT DEFAULT 'offline',  -- online | away | offline
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  role_id             UUID REFERENCES roles(id),
+  name                TEXT NOT NULL,
+  email               TEXT NOT NULL,
+  mobile              TEXT,
+  password_hash       TEXT NOT NULL,
+  availability        TEXT DEFAULT 'offline',  -- online | away | offline
+  is_email_verified   BOOLEAN NOT NULL DEFAULT false,
+  is_phone_verified   BOOLEAN NOT NULL DEFAULT false,
+  two_factor_enabled  BOOLEAN NOT NULL DEFAULT false,
+  two_factor_method   TEXT,                     -- authenticator | sms
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (organization_id, email)
 );
+
+-- Verification codes used by the registration wizard (Step 1 2FA setup and
+-- Step 5 email/mobile verification). organization_id is nullable because
+-- verification can happen mid-wizard, before the tenant row exists yet.
+CREATE TABLE IF NOT EXISTS verification_codes (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  channel         TEXT NOT NULL,           -- email | mobile
+  target          TEXT NOT NULL,           -- the email address or phone number
+  code_hash       TEXT NOT NULL,
+  purpose         TEXT NOT NULL DEFAULT 'signup',
+  consumed        BOOLEAN NOT NULL DEFAULT false,
+  expires_at      TIMESTAMPTZ NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS verification_codes_target_idx ON verification_codes (channel, target);
 
 CREATE TABLE IF NOT EXISTS teams (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -202,6 +255,71 @@ CREATE TABLE IF NOT EXISTS social_comments (
   reply           TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ---------- Google Business Profile Reviews (see migrations/004_google_reviews.sql) ----------
+-- One connected Google account per organization. refresh_token is stored
+-- encrypted (AES-256-GCM) when GOOGLE_TOKEN_ENC_KEY is set — see
+-- services/review-service/src/google/crypto.js.
+CREATE TABLE IF NOT EXISTS google_tokens (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  access_token      TEXT,
+  access_expires_at TIMESTAMPTZ,
+  refresh_token     TEXT NOT NULL,
+  scope             TEXT,
+  connected_by      UUID REFERENCES users(id),
+  last_sync_at      TIMESTAMPTZ,
+  last_sync_status  TEXT,                 -- ok | error
+  last_sync_error   TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id)
+);
+
+CREATE TABLE IF NOT EXISTS google_accounts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  account_id        TEXT NOT NULL,        -- Google resource name suffix, e.g. "accounts/123"
+  account_name      TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, account_id)
+);
+
+CREATE TABLE IF NOT EXISTS google_locations (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  account_id        TEXT NOT NULL,
+  location_id       TEXT NOT NULL,        -- Google resource name suffix, e.g. "locations/456"
+  location_name     TEXT,
+  address           TEXT,
+  phone             TEXT,
+  is_selected       BOOLEAN NOT NULL DEFAULT false,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, location_id)
+);
+
+CREATE TABLE IF NOT EXISTS google_reviews (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  location_id         TEXT NOT NULL,
+  review_id           TEXT NOT NULL,       -- Google review resource name suffix
+  reviewer_name       TEXT,
+  reviewer_photo_url  TEXT,
+  star_rating         INT,
+  comment              TEXT,
+  create_time          TIMESTAMPTZ,
+  update_time          TIMESTAMPTZ,
+  reply_comment         TEXT,
+  reply_update_time     TIMESTAMPTZ,
+  synced_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, review_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_google_reviews_org_location
+  ON google_reviews (organization_id, location_id);
+
+CREATE INDEX IF NOT EXISTS idx_google_reviews_org_created
+  ON google_reviews (organization_id, create_time DESC);
 
 -- ---------- Ecommerce & Revenue ----------
 CREATE TABLE IF NOT EXISTS ecommerce_orders (

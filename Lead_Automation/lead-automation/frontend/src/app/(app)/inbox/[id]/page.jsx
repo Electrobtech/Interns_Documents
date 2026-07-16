@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Send, Bot, Headset, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Send, Bot, Headset, RotateCcw, FileText } from 'lucide-react';
 import { useApi } from '@/lib/useApi';
 
 // Bot messages carry their raw send-template in `metadata` — see
@@ -54,6 +54,17 @@ export default function ConversationView() {
   const [resetting, setResetting] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [err, setErr] = useState('');
+  // Two very different things can happen when you hit "Send" here:
+  //  - 'agent'    -> POST /conversations/:id/reply, a plain outbound message
+  //                  logged as written by the logged-in CRM user. Never
+  //                  touches the automation engine.
+  //  - 'customer' -> POST /automation/internal/inbox-reply with a free-text
+  //                  interaction, running the EXACT SAME engine turn a real
+  //                  inbound WhatsApp/Instagram message would (resolves a
+  //                  playbook by trigger keyword, walks the flow, sends +
+  //                  logs the bot's reply). This is what lets someone type
+  //                  "hi" in the inbox and see the automation fire, for demos.
+  const [sendAs, setSendAs] = useState('customer');
 
   const load = useCallback(() => {
     call(`/conversations/${id}`).then(setConv).catch((e) => setErr(e.message));
@@ -107,7 +118,20 @@ export default function ConversationView() {
     setSending(true);
     setErr('');
     try {
-      await call(`/conversations/${id}/reply`, { method: 'POST', body: { body } });
+      if (sendAs === 'customer') {
+        // Simulate the customer texting in — same engine turn a real inbound
+        // webhook triggers: logs the inbound line, resolves/continues a
+        // playbook (matching "hi" etc. against triggerKeywords), and
+        // delivers + logs whatever the bot replies with next.
+        await call('/automation/internal/inbox-reply', {
+          method: 'POST',
+          body: { conversationId: id, interaction: { type: 'text', text: body } },
+        });
+      } else {
+        // A human agent's own outbound reply — plain transcript entry, no
+        // automation engine involvement.
+        await call(`/conversations/${id}/reply`, { method: 'POST', body: { body } });
+      }
       setReply('');
       load();
     } catch (e) { setErr(e.message); }
@@ -128,7 +152,13 @@ export default function ConversationView() {
     try {
       await call('/automation/internal/inbox-reply', {
         method: 'POST',
-        body: { conversationId: id, interaction: { type: interactionType, selectedId: option.id } },
+        // `label` rides along purely for the transcript line (see
+        // describeInteraction in automation-service's messageRepository.js)
+        // — the engine itself only ever looks at `selectedId` to route,
+        // so this can't affect which branch fires, only how the customer's
+        // pick reads back in the Unified Inbox (was showing as a raw
+        // "[list] b_1783594854112" id with no label before this).
+        body: { conversationId: id, interaction: { type: interactionType, selectedId: option.id, label: option.label } },
       });
       load();
     } catch (e) { setErr(e.message); }
@@ -204,11 +234,37 @@ export default function ConversationView() {
             // rendered as plain history instead of re-clickable buttons.
             const isLatest = i === messages.length - 1;
             const opts = isLatest && m.direction === 'outbound' ? getMessageOptions(m) : null;
+            // A document's file lives in metadata.document, but the field name
+            // differs by channel: buildSendTemplate()'s WhatsApp branch emits
+            // the Cloud-API-native `link` (webhookController.js), while the
+            // generic Instagram/Messenger fallback passes the node's original
+            // `url` through as-is. The persisted metadata is that raw template
+            // untouched, so read either — same as getMessageOptions() already
+            // normalizes the per-channel button/list shapes above.
+            const doc = m.metadata?.document;
+            const docUrl = m.message_type === 'document' ? (doc?.url || doc?.link) : null;
             return (
               <div key={m.id} className={`flex flex-col ${m.direction === 'outbound' ? 'items-end' : 'items-start'}`}>
                 <div className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
                   m.direction === 'outbound' ? 'bg-brand text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
                   {m.body}
+                  {/* buildSendTemplate()'s document case stores the actual
+                      file in metadata.document (see webhookController.js);
+                      without this the bubble only rendered `m.body` (the
+                      caption/filename text) with no indication there was a
+                      real attachment behind it, let alone a way to open it. */}
+                  {docUrl && (
+                    <a
+                      href={docUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`mt-1.5 flex items-center gap-1.5 text-xs font-medium rounded-lg px-2.5 py-1.5 ${
+                        m.direction === 'outbound' ? 'bg-white/15 hover:bg-white/25' : 'bg-slate-50 hover:bg-slate-100 border border-slate-200'}`}
+                    >
+                      <FileText size={13} />
+                      <span className="truncate">{doc?.filename || 'Attachment'}</span>
+                    </a>
+                  )}
                   <div className={`text-[10px] mt-1 ${m.direction === 'outbound' ? 'text-white/70' : 'text-slate-400'}`}>
                     {m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                   </div>
@@ -233,14 +289,46 @@ export default function ConversationView() {
           })}
         </div>
 
+        {/* Send-as toggle */}
+        <div className="px-5 pt-3 flex items-center gap-2 border-t border-slate-100">
+          <span className="text-[11px] text-slate-400">Send as:</span>
+          <div className="flex items-center rounded-lg border border-slate-200 p-0.5 bg-slate-50">
+            <button
+              onClick={() => setSendAs('customer')}
+              title='Simulates an inbound message from the customer — triggers the automation flow, e.g. type "hi" to fire the welcome playbook'
+              className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+              style={{
+                background: sendAs === 'customer' ? '#fff' : 'transparent',
+                color: sendAs === 'customer' ? '#26241F' : '#8A8578',
+                boxShadow: sendAs === 'customer' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+              }}
+            >
+              <Bot size={13} /> Customer (simulate)
+            </button>
+            <button
+              onClick={() => setSendAs('agent')}
+              title="Sends as you, the logged-in agent — a plain outbound message, no automation triggered"
+              className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md transition-colors"
+              style={{
+                background: sendAs === 'agent' ? '#fff' : 'transparent',
+                color: sendAs === 'agent' ? '#26241F' : '#8A8578',
+                boxShadow: sendAs === 'agent' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+              }}
+            >
+              <Headset size={13} /> Agent
+            </button>
+          </div>
+        </div>
+
         {/* Reply box */}
-        <div className="px-5 py-3 border-t border-slate-100 flex items-center gap-2">
+        <div className="px-5 pb-3 pt-2 flex items-center gap-2">
           <input value={reply} onChange={(e) => setReply(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && send()}
-            placeholder="Type a reply…" className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none" />
-          <button onClick={() => send()} disabled={sending}
+            placeholder={sendAs === 'customer' ? 'Type what the customer would say… (e.g. "hi")' : 'Type a reply…'}
+            className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none" />
+          <button onClick={() => send()} disabled={sending || (sendAs === 'customer' && selecting)}
             className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium flex items-center gap-1.5 disabled:opacity-60">
-            <Send size={15} /> Send
+            <Send size={15} /> {sending ? 'Sending…' : 'Send'}
           </button>
         </div>
       </div>
