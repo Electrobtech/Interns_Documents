@@ -3,12 +3,12 @@ import { useMemo, useState } from 'react';
 import {
   Headphones, Sparkles, AlertTriangle, MessageSquare, Inbox,
   Database, ShieldAlert, ListChecks, HelpCircle, BookOpen,
-  Clock, User, Hash, ChevronRight, Zap, UserCheck,
+  Clock, User, Hash, ChevronRight, Zap, UserCheck, Send,
 } from 'lucide-react';
 import {
   useRunSupportAgent, useSupportRuns, useAgentAnalytics, useKnowledgeSources,
 } from '@/lib/queries/aiAgents';
-import { useConversations } from '@/lib/queries/crm';
+import { useConversations, useSendReply, useFindConversationByName } from '@/lib/queries/crm';
 import KpiCard from './KpiCard';
 import KnowledgeUploadPanel from './KnowledgeUploadPanel';
 
@@ -67,9 +67,13 @@ export default function SupportWorkspace() {
   const { data: convoData }   = useConversations();
   const { data: analytics }   = useAgentAnalytics('7d');
   const { data: knowledge }   = useKnowledgeSources('support');
+  const sendReply             = useSendReply();
+  const findConversation      = useFindConversationByName();
 
-  const [query, setQuery]         = useState('');
-  const [customerName, setCName]  = useState('');
+  const [query, setQuery]              = useState('');
+  const [customerName, setCName]       = useState('');
+  const [selectedTicket, setSelected]  = useState(null); // conversation row, if the user clicked one
+  const [sendState, setSendState]      = useState('idle'); // idle | sending | sent | not_found | error
 
   const conversations = Array.isArray(convoData) ? convoData  : [];
   const runs          = Array.isArray(runsData)  ? runsData   : [];
@@ -87,6 +91,7 @@ export default function SupportWorkspace() {
   const submit = (e) => {
     e.preventDefault();
     if (!query.trim()) return;
+    setSendState('idle');
     run.mutate({
       brief: query.trim(),
       customer_name: customerName.trim() || null,
@@ -95,6 +100,29 @@ export default function SupportWorkspace() {
   };
 
   const out = run.data;
+
+  const selectTicket = (c) => {
+    setSelected(c);
+    setCName(c.contact_name || '');
+    setSendState('idle');
+  };
+
+  const sendViaInbox = async () => {
+    if (!out?.suggested_reply) return;
+    setSendState('sending');
+    try {
+      const conversationId = selectedTicket?.id
+        || (await findConversation.mutateAsync(customerName.trim()))?.id;
+      if (!conversationId) {
+        setSendState('not_found');
+        return;
+      }
+      await sendReply.mutateAsync({ conversationId, content: out.suggested_reply });
+      setSendState('sent');
+    } catch {
+      setSendState('error');
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -205,7 +233,12 @@ export default function SupportWorkspace() {
                   </thead>
                   <tbody>
                     {conversations.slice(0, 10).map((c) => (
-                      <tr key={c.id} className="group cursor-pointer">
+                      <tr
+                        key={c.id}
+                        onClick={() => selectTicket(c)}
+                        className={`group cursor-pointer ${selectedTicket?.id === c.id ? 'bg-violet-50/60' : ''}`}
+                        title="Click to load this ticket into the AI Support Assistant"
+                      >
                         <td>
                           <span className="font-mono text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
                             #{c.id.slice(0, 8)}
@@ -377,7 +410,25 @@ export default function SupportWorkspace() {
                   </div>
                   <div className="flex items-center gap-2 mt-3">
                     <span className="w-1 h-1 rounded-full bg-amber-400" />
-                    <p className="text-[11px] text-slate-400">AI-generated — review before sending via Unified Inbox.</p>
+                    <p className="text-[11px] text-slate-400">AI-generated — review before sending.</p>
+                  </div>
+                  <div className="flex items-center gap-3 mt-3">
+                    <button
+                      onClick={sendViaInbox}
+                      disabled={sendState === 'sending' || sendState === 'sent'}
+                      className="btn-violet btn-sm"
+                    >
+                      <Send size={13} />
+                      {sendState === 'sending' ? 'Sending…' : sendState === 'sent' ? 'Sent' : 'Send via Unified Inbox'}
+                    </button>
+                    {sendState === 'not_found' && (
+                      <span className="text-[11px] text-amber-600">
+                        No matching ticket found{customerName ? ` for "${customerName}"` : ''} — click a row in the Ticket Queue above, or reply from Unified Inbox instead.
+                      </span>
+                    )}
+                    {sendState === 'error' && (
+                      <span className="text-[11px] text-red-500">Failed to send. Try again from Unified Inbox.</span>
+                    )}
                   </div>
                   {out.knowledge_base_references?.length > 0 && (
                     <div className="flex items-center gap-1.5 mt-2">

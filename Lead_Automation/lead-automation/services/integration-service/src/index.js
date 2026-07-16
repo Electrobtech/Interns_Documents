@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const { Pool } = require('pg');
+const { authenticate } = require('@lead/shared');
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -10,6 +11,41 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'integration-service' }));
+
+// --- Channels (Connect Channels page / per-channel pages) ---
+// Applied only to these routes — /crm/* below is called service-to-service
+// without a user JWT, so it stays outside `authenticate`.
+
+app.get('/channels', authenticate, async (req, res) => {
+  const { type } = req.query;
+  const { rows } = await pool.query(
+    `SELECT * FROM channels WHERE organization_id=$1 AND ($2::text IS NULL OR type=$2) ORDER BY created_at DESC`,
+    [req.user.organizationId, type || null]
+  );
+  res.json(rows);
+});
+
+app.post('/channels', authenticate, async (req, res) => {
+  const { type, display_name, status } = req.body;
+  if (!type) return res.status(400).json({ error: 'type required' });
+  const { rows } = await pool.query(
+    `INSERT INTO channels (organization_id, type, display_name, status)
+     VALUES ($1,$2,$3,COALESCE($4,'disconnected')) RETURNING *`,
+    [req.user.organizationId, type, display_name || null, status]
+  );
+  res.status(201).json(rows[0]);
+});
+
+app.put('/channels/:id', authenticate, async (req, res) => {
+  const { display_name, status } = req.body;
+  const { rows } = await pool.query(
+    `UPDATE channels SET display_name=COALESCE($1,display_name), status=COALESCE($2,status)
+      WHERE id=$3 AND organization_id=$4 RETURNING *`,
+    [display_name, status, req.params.id, req.user.organizationId]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'not found' });
+  res.json(rows[0]);
+});
 
 // --- CRM connection management ---
 

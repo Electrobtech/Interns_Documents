@@ -3,10 +3,10 @@ import { useMemo, useState } from 'react';
 import {
   TrendingUp, Sparkles, Target, Flame, Snowflake, Sun, ListChecks,
   HelpCircle, AlertTriangle, UserCheck, Mail, Users, Trophy, Gauge,
-  Kanban, ChevronRight, ArrowRight, Zap,
+  Kanban, ChevronRight, ArrowRight, Zap, UserPlus, Send, CheckCircle2,
 } from 'lucide-react';
 import { useRunSalesAgent, useSalesRuns } from '@/lib/queries/aiAgents';
-import { useLeads } from '@/lib/queries/crm';
+import { useLeads, useCreateLead, useSendReply, useFindConversationByName } from '@/lib/queries/crm';
 import KpiCard from './KpiCard';
 import KnowledgeUploadPanel from './KnowledgeUploadPanel';
 
@@ -32,6 +32,12 @@ function isEmpty(v) {
   return false;
 }
 
+function priorityForScore(score) {
+  if (score >= 70) return 'high';
+  if (score >= 40) return 'medium';
+  return 'low';
+}
+
 function ResultSection({ icon: Icon, title, accentColor = 'text-emerald-600', children }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5">
@@ -50,10 +56,15 @@ export default function SalesWorkspace() {
   const run = useRunSalesAgent();
   const { data: runsData } = useSalesRuns();
   const { data: leadsData } = useLeads();
+  const createLead = useCreateLead();
+  const sendReply = useSendReply();
+  const findConversation = useFindConversationByName();
 
   const [brief, setBrief] = useState('');
   const [leadName, setLeadName] = useState('');
   const [company, setCompany] = useState('');
+  const [leadSaved, setLeadSaved] = useState(false);
+  const [sendState, setSendState] = useState('idle'); // idle | sending | sent | not_found | error
 
   const leads = Array.isArray(leadsData) ? leadsData : [];
   const runs = Array.isArray(runsData) ? runsData : [];
@@ -83,10 +94,45 @@ export default function SalesWorkspace() {
   const submit = (e) => {
     e.preventDefault();
     if (!brief.trim()) return;
+    setLeadSaved(false);
+    setSendState('idle');
     run.mutate({ brief: brief.trim(), lead_name: leadName.trim() || null, company: company.trim() || null });
   };
 
   const out = run.data;
+
+  const saveAsLead = async () => {
+    if (!leadName.trim() || !out) return;
+    try {
+      await createLead.mutateAsync({
+        name: leadName.trim(),
+        company: company.trim() || null,
+        score: out.lead_score ?? 0,
+        priority: priorityForScore(out.lead_score ?? 0),
+        stage: 'new',
+        source: 'ai-sales-agent',
+      });
+      setLeadSaved(true);
+    } catch {
+      // createLead.isError below surfaces the failure
+    }
+  };
+
+  const sendViaInbox = async () => {
+    if (!out?.follow_up_message) return;
+    setSendState('sending');
+    try {
+      const match = await findConversation.mutateAsync(leadName.trim() || company.trim());
+      if (!match) {
+        setSendState('not_found');
+        return;
+      }
+      await sendReply.mutateAsync({ conversationId: match.id, content: out.follow_up_message });
+      setSendState('sent');
+    } catch {
+      setSendState('error');
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -336,6 +382,26 @@ export default function SalesWorkspace() {
                     )}
                   </div>
                 </div>
+
+                <div className="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-slate-100">
+                  {leadSaved ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
+                      <CheckCircle2 size={13} /> Saved to Contacts & Leads
+                    </span>
+                  ) : (
+                    <button
+                      onClick={saveAsLead}
+                      disabled={!leadName.trim() || createLead.isPending}
+                      className="btn-emerald btn-sm"
+                      title={!leadName.trim() ? 'Add a lead name above to save this lead' : undefined}
+                    >
+                      <UserPlus size={13} /> {createLead.isPending ? 'Saving…' : 'Save as Lead'}
+                    </button>
+                  )}
+                  {createLead.isError && (
+                    <span className="text-[11px] text-red-500">{createLead.error?.message || 'Failed to save lead'}</span>
+                  )}
+                </div>
               </div>
 
               {!isEmpty(out.buying_intent_summary) && (
@@ -355,8 +421,24 @@ export default function SalesWorkspace() {
                   </div>
                   <p className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
                     <span className="w-1 h-1 rounded-full bg-amber-400" />
-                    AI-generated — review before sending via Unified Inbox.
+                    AI-generated — review before sending.
                   </p>
+                  <div className="flex items-center gap-3 mt-3">
+                    <button
+                      onClick={sendViaInbox}
+                      disabled={sendState === 'sending' || sendState === 'sent'}
+                      className="btn-emerald btn-sm"
+                    >
+                      <Send size={13} />
+                      {sendState === 'sending' ? 'Sending…' : sendState === 'sent' ? 'Sent' : 'Send via Unified Inbox'}
+                    </button>
+                    {sendState === 'not_found' && (
+                      <span className="text-[11px] text-amber-600">No matching conversation found for "{leadName || company}" — reply from Unified Inbox instead.</span>
+                    )}
+                    {sendState === 'error' && (
+                      <span className="text-[11px] text-red-500">Failed to send. Try again from Unified Inbox.</span>
+                    )}
+                  </div>
                 </ResultSection>
               )}
               {!isEmpty(out.next_best_actions) && (

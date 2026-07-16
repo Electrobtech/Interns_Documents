@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Inbox, Users, Bot, Megaphone, ShoppingCart,
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
   MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown,
-  Zap, FileText,
+  Zap, FileText, Linkedin,
 } from 'lucide-react';
 
 const PLATFORM = [
@@ -26,6 +26,7 @@ const CHANNELS = [
   { label: 'WhatsApp',  icon: MessageCircle, href: '/channels/whatsapp',  expandable: false },
   { label: 'Instagram', icon: Instagram,     href: '/channels/instagram', expandable: false },
   { label: 'Messenger', icon: MessageSquare, href: '/channels/messenger', expandable: false },
+  { label: 'LinkedIn',  icon: Linkedin,      href: '/channels/linkedin',  expandable: false },
   { label: 'SMS / RCS', icon: Smartphone,    href: '/channels/sms',       expandable: false },
   { label: 'Web Chat',  icon: Globe,         href: '/channels/webchat',   expandable: false },
   { label: 'Voice Call',icon: Phone,         href: '/channels/voice',     expandable: false },

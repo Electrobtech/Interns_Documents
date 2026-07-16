@@ -1,9 +1,11 @@
 'use client';
+import { useState } from 'react';
 import {
   Sparkles, Users2, Search, Hash, FileText, Smile,
   MessageSquareReply, TrendingUp, ListChecks, HelpCircle, UserCheck,
-  Mail, Radio, BookOpen,
+  Mail, Radio, BookOpen, Database, Megaphone,
 } from 'lucide-react';
+import CreateCampaignFromDraftModal from './CreateCampaignFromDraftModal';
 
 /* ── helpers ─────────────────────────────────────────── */
 function isEmpty(v) {
@@ -46,10 +48,22 @@ function SectionCard({ icon: Icon, title, accent = 'from-blue-50 to-indigo-100',
 
 /* ── main export ─────────────────────────────────────── */
 export default function MarketingRunResult({ out }) {
+  const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   if (!out) return null;
+
+  const hasContentToExecute = !isEmpty(out.content_assets) || !isEmpty(out.campaign_summary);
 
   return (
     <div className="space-y-4 animate-slide-up">
+
+      {hasContentToExecute && (
+        <button
+          onClick={() => setShowCreateCampaign(true)}
+          className="btn-primary w-full justify-center"
+        >
+          <Megaphone size={14} /> Create Campaign from This Draft
+        </button>
+      )}
 
       {out.human_handoff && (
         <div className="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-2xl">
@@ -259,6 +273,10 @@ export default function MarketingRunResult({ out }) {
             knowledge source{out.knowledge_sources_used.length === 1 ? '' : 's'}
           </p>
         </div>
+      )}
+
+      {showCreateCampaign && (
+        <CreateCampaignFromDraftModal out={out} onClose={() => setShowCreateCampaign(false)} />
       )}
     </div>
   );

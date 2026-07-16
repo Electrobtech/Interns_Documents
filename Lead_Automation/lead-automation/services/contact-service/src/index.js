@@ -76,5 +76,39 @@ app.put('/leads/:id/stage', async (req, res) => {
   res.json(rows[0] || {});
 });
 
+// Creates a lead from a name (e.g. the AI Sales Agent's "Save as Lead"
+// action) — finds-or-creates the backing contact by name+source first,
+// since these callers usually only have a free-text name/company, not an
+// existing contact_id.
+app.post('/leads', canWrite, async (req, res) => {
+  const { name, company, email, phone, score, priority, stage, source } = req.body;
+  if (!name) return res.status(400).json({ error: 'name required' });
+
+  const leadSource = source || 'ai-sales-agent';
+  const { rows: existing } = await pool.query(
+    `SELECT * FROM contacts WHERE organization_id=$1 AND name=$2 AND source=$3 LIMIT 1`,
+    [req.user.organizationId, name, leadSource]
+  );
+  let contact = existing[0];
+  if (!contact) {
+    const { rows: created } = await pool.query(
+      `INSERT INTO contacts (organization_id, name, email, phone, source, notes)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.user.organizationId, name, email || null, phone || null, leadSource, company ? `Company: ${company}` : null]
+    );
+    contact = created[0];
+    logAudit(req, 'contact.create', { id: contact.id, name });
+  }
+
+  const { rows } = await pool.query(
+    `INSERT INTO leads (organization_id, contact_id, stage, priority, score)
+     VALUES ($1,$2,COALESCE($3,'new'),COALESCE($4,'medium'),COALESCE($5,0))
+     RETURNING *, (SELECT name FROM contacts WHERE id=$2) as name`,
+    [req.user.organizationId, contact.id, stage, priority, score]
+  );
+  logAudit(req, 'lead.create', { id: rows[0].id, contact_id: contact.id, score });
+  res.status(201).json(rows[0]);
+});
+
 const PORT = process.env.CONTACT_PORT || 4003;
 app.listen(PORT, () => console.log(`contact-service on :${PORT}`));

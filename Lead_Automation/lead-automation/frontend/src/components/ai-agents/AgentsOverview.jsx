@@ -90,13 +90,13 @@ export default function AgentsOverview() {
         </div>
         <div className="animate-slide-up delay-150">
           <KpiCard icon={Database} label="Knowledge Chunks" tone="emerald" loading={isLoading}
-            value={status?.knowledgeChunkCount ?? 0} />
+            value={status?.knowledge_base?.total_chunks ?? 0} />
         </div>
         <div className="animate-slide-up delay-225">
           <KpiCard
             icon={Activity} label="LLM Health"
-            tone={status?.llmHealthy ? 'emerald' : 'amber'} loading={isLoading}
-            value={status?.llmHealthy ? 'Healthy' : 'Degraded'}
+            tone={status?.provider?.healthy ? 'emerald' : 'amber'} loading={isLoading}
+            value={status?.provider?.healthy ? 'Healthy' : 'Degraded'}
           />
         </div>
         <div className="animate-slide-up delay-300">

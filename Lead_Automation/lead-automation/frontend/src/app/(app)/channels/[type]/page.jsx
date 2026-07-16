@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
-  MessageCircle, Instagram, MessageSquare, Smartphone, Globe, Phone, Mail,
+  MessageCircle, Instagram, MessageSquare, Smartphone, Globe, Phone, Mail, Linkedin,
 } from 'lucide-react';
 import { useApi } from '@/lib/useApi';
 import ConversationList from '@/components/ConversationList';
@@ -11,6 +11,7 @@ const META = {
   whatsapp:  { label: 'WhatsApp', icon: MessageCircle },
   instagram: { label: 'Instagram', icon: Instagram },
   messenger: { label: 'Messenger', icon: MessageSquare },
+  linkedin:  { label: 'LinkedIn', icon: Linkedin },
   sms:       { label: 'SMS / RCS', icon: Smartphone },
   webchat:   { label: 'Web Chat', icon: Globe },
   voice:     { label: 'Voice Call', icon: Phone },

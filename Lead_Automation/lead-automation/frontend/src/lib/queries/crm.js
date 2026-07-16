@@ -53,3 +53,37 @@ export function useDeleteCampaign() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns', 'list'] }),
   });
 }
+
+// POST /leads — { name, company?, email?, phone?, score?, priority?, stage?, source? }
+export function useCreateLead() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => call('/leads', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['leads', 'list'] }),
+  });
+}
+
+// POST /conversations/:id/reply — { content } — used by "Send via Unified
+// Inbox" actions on AI-drafted follow-ups/replies.
+export function useSendReply() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, content }) =>
+      call(`/conversations/${conversationId}/reply`, { method: 'POST', body: { content } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations', 'list'] }),
+  });
+}
+
+// GET /conversations?q=name — best-effort lookup so agent workspaces without
+// a directly-selected ticket can still find a matching conversation to reply on.
+export function useFindConversationByName() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: async (name) => {
+      const rows = await call(`/conversations?q=${encodeURIComponent(name)}&limit=1`);
+      return Array.isArray(rows) && rows.length ? rows[0] : null;
+    },
+  });
+}

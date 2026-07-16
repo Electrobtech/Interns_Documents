@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import pg from 'pg';
+import { authenticate } from '@lead/shared';
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -103,6 +104,80 @@ async function getDashboard(workspaceId) {
 }
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'analytics-service' }));
+
+// GET /summary — real CRM-schema dashboard summary (conversations, revenue,
+// message trend, channel mix, recent inbox activity) for the main Dashboard.
+// Separate from getDashboard() above, which queries a different (unused)
+// ai_conversations/ai_contacts schema from an earlier prototype.
+app.get('/analytics/summary', authenticate, async (req, res) => {
+  try {
+    const orgId = req.user.organizationId;
+    const [convRes, openRes, unrepliedRes, revenueRes, trendRes, channelRes, inboxRes] = await Promise.all([
+      q(`SELECT COUNT(*)::int as count FROM conversations WHERE organization_id=$1`, [orgId]),
+      q(`SELECT COUNT(*)::int as count FROM conversations WHERE organization_id=$1 AND status IN ('open','pending','new')`, [orgId]),
+      q(
+        `SELECT COUNT(*)::int as count FROM conversations c
+          WHERE c.organization_id=$1 AND c.status='open'
+            AND EXISTS (
+              SELECT 1 FROM messages m WHERE m.conversation_id = c.id
+                AND m.direction = 'inbound'
+                AND m.created_at = (SELECT MAX(created_at) FROM messages WHERE conversation_id = c.id)
+            )`,
+        [orgId]
+      ),
+      q(`SELECT COALESCE(SUM(amount), 0) as total FROM ecommerce_orders WHERE organization_id=$1 AND status != 'cancelled'`, [orgId]),
+      q(
+        `SELECT DATE_TRUNC('day', created_at) as day, COUNT(*)::int as count
+           FROM messages WHERE organization_id=$1 AND created_at > NOW() - INTERVAL '7 days'
+          GROUP BY day ORDER BY day ASC`,
+        [orgId]
+      ),
+      q(`SELECT channel_type, COUNT(*)::int as count FROM conversations WHERE organization_id=$1 GROUP BY channel_type ORDER BY count DESC`, [orgId]),
+      q(
+        `SELECT ct.name, c.channel_type, c.status, c.last_message_at,
+                (SELECT body FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message
+           FROM conversations c JOIN contacts ct ON ct.id = c.contact_id
+          WHERE c.organization_id=$1
+          ORDER BY c.last_message_at DESC NULLS LAST LIMIT 5`,
+        [orgId]
+      ),
+    ]);
+
+    const totalChannelConvos = channelRes.rows.reduce((sum, r) => sum + Number(r.count), 0) || 1;
+    const topChannels = channelRes.rows.map((r) => [
+      r.channel_type,
+      Math.round((Number(r.count) / totalChannelConvos) * 100),
+    ]);
+
+    const trend = trendRes.rows.map((r) => ({
+      d: r.day.toISOString().slice(5, 10),
+      v: Number(r.count),
+    }));
+
+    const recentInbox = inboxRes.rows.map((r) => ({
+      name: r.name,
+      channel: r.channel_type,
+      message: r.last_message || '',
+      status: r.status,
+      time: r.last_message_at
+        ? new Date(r.last_message_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        : '',
+    }));
+
+    res.json({
+      totalConversations: convRes.rows[0].count,
+      revenueImpact: Number(revenueRes.rows[0].total),
+      openConversations: openRes.rows[0].count,
+      unreplied: unrepliedRes.rows[0].count,
+      trend,
+      topChannels,
+      recentInbox,
+    });
+  } catch (e) {
+    console.error('[analytics-service] /summary failed:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
 
 app.get('/dashboard/:workspaceId', async (req, res) => {
   try {

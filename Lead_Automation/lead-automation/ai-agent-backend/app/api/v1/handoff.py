@@ -109,6 +109,11 @@ async def update_handoff_status(
     if not updated:
         raise HTTPException(status_code=404, detail="Handoff request not found")
 
+    # Build the response before commit — expire_on_commit would otherwise
+    # expire `updated`'s attributes, forcing a lazy (sync-context) reload
+    # inside model_validate() and raising MissingGreenlet.
+    result = HandoffOut.model_validate(updated)
+
     await log_audit(
         session, organization_id, user.user_id, f"ai_agents.handoff.{body.status}",
         {"handoff_id": str(handoff_id), "note": body.resolution_note},
@@ -122,4 +127,4 @@ async def update_handoff_status(
     )
 
     await session.commit()
-    return HandoffOut.model_validate(updated)
+    return result

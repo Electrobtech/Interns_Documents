@@ -117,3 +117,23 @@ export function useAgentAnalytics(range = '7d') {
     refetchInterval: 30_000,
   });
 }
+
+// GET /ai-agents/handoff?status=X&agent_type=Y — human handoff queue.
+export function useHandoffs(status) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['ai-agents', 'handoff', status || 'all'],
+    queryFn: () => call(`/ai-agents/handoff${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+    refetchInterval: 20_000,
+  });
+}
+
+// PATCH /ai-agents/handoff/:id — { status: 'assigned'|'resolved'|'rejected', resolution_note? }
+export function useUpdateHandoff() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }) => call(`/ai-agents/handoff/${id}`, { method: 'PATCH', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ai-agents', 'handoff'] }),
+  });
+}
