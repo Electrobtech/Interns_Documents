@@ -63,6 +63,38 @@ app.delete('/campaigns/:id', canWrite, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Human-approval gate — a campaign sitting in 'needs_approval' cannot be sent
+// until a reviewer decides. Approving moves it to 'scheduled' if it already
+// has a scheduled_at, otherwise back to 'draft' (ready, but still requires
+// an explicit send/schedule action). Rejecting is a distinct terminal status
+// so the Approval Queue can show it was reviewed and declined, not just reset.
+app.post('/campaigns/:id/decision', canWrite, async (req, res) => {
+  const { decision, note } = req.body;
+  if (!['approved', 'rejected'].includes(decision)) {
+    return res.status(400).json({ error: "decision must be 'approved' or 'rejected'" });
+  }
+  const { rows: existing } = await pool.query(
+    `SELECT * FROM campaigns WHERE id=$1 AND organization_id=$2`,
+    [req.params.id, req.user.organizationId]
+  );
+  const campaign = existing[0];
+  if (!campaign) return res.status(404).json({ error: 'not found' });
+  if (campaign.status !== 'needs_approval') {
+    return res.status(400).json({ error: 'campaign is not pending approval' });
+  }
+
+  const newStatus = decision === 'approved'
+    ? (campaign.scheduled_at ? 'scheduled' : 'draft')
+    : 'rejected';
+
+  const { rows } = await pool.query(
+    `UPDATE campaigns SET status=$1 WHERE id=$2 AND organization_id=$3 RETURNING *`,
+    [newStatus, req.params.id, req.user.organizationId]
+  );
+  logAudit(req, `campaign.${decision}`, { id: campaign.id, name: campaign.name, note: note || null });
+  res.json(rows[0]);
+});
+
 // automation-service owns the channel Send API credentials + the Unified
 // Inbox transcript writes (messageRepository), so actually delivering a
 // campaign message is a service-to-service call there rather than campaign-

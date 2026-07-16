@@ -54,6 +54,27 @@ export function useDeleteCampaign() {
   });
 }
 
+// PUT /campaigns/:id — partial update (e.g. status: 'needs_approval' to
+// submit a draft for review).
+export function useUpdateCampaign() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }) => call(`/campaigns/${id}`, { method: 'PUT', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns', 'list'] }),
+  });
+}
+
+// POST /campaigns/:id/decision — { decision: 'approved'|'rejected', note? }
+export function useCampaignDecision() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }) => call(`/campaigns/${id}/decision`, { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns', 'list'] }),
+  });
+}
+
 // POST /leads — { name, company?, email?, phone?, score?, priority?, stage?, source? }
 export function useCreateLead() {
   const { call } = useApi();

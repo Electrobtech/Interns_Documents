@@ -5,9 +5,9 @@ import {
   Clock, CheckCircle2, Play, Pause, XCircle, Radio, Mail,
   Smartphone, MessageCircle, Instagram, MessageSquare,
   Sparkles, TrendingUp, Send, Filter, MoreHorizontal,
-  BarChart3, Users, AlertTriangle, ChevronDown,
+  BarChart3, Users, AlertTriangle, ChevronDown, ShieldCheck, Check,
 } from 'lucide-react';
-import { useCampaigns } from '@/lib/queries/crm';
+import { useCampaigns, useUpdateCampaign, useCampaignDecision } from '@/lib/queries/crm';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '@/lib/useApi';
 
@@ -40,12 +40,14 @@ const CHANNEL_CFG = {
 };
 
 const STATUS_CFG = {
-  draft:     { label: 'Draft',     Icon: Edit,         bg: 'bg-slate-100',  text: 'text-slate-600',  pulse: false },
-  scheduled: { label: 'Scheduled', Icon: Clock,        bg: 'bg-amber-50',   text: 'text-amber-700',  pulse: false },
-  sent:      { label: 'Sent',      Icon: CheckCircle2, bg: 'bg-emerald-50', text: 'text-emerald-700',pulse: false },
-  active:    { label: 'Active',    Icon: Play,         bg: 'bg-blue-50',    text: 'text-blue-700',   pulse: true  },
-  paused:    { label: 'Paused',    Icon: Pause,        bg: 'bg-orange-50',  text: 'text-orange-700', pulse: false },
-  failed:    { label: 'Failed',    Icon: XCircle,      bg: 'bg-red-50',     text: 'text-red-700',    pulse: false },
+  draft:          { label: 'Draft',           Icon: Edit,         bg: 'bg-slate-100',  text: 'text-slate-600',  pulse: false },
+  needs_approval: { label: 'Needs Approval',  Icon: ShieldCheck,  bg: 'bg-violet-50',  text: 'text-violet-700', pulse: false },
+  scheduled:      { label: 'Scheduled',       Icon: Clock,        bg: 'bg-amber-50',   text: 'text-amber-700',  pulse: false },
+  sent:           { label: 'Sent',            Icon: CheckCircle2, bg: 'bg-emerald-50', text: 'text-emerald-700',pulse: false },
+  active:         { label: 'Active',          Icon: Play,         bg: 'bg-blue-50',    text: 'text-blue-700',   pulse: true  },
+  paused:         { label: 'Paused',          Icon: Pause,        bg: 'bg-orange-50',  text: 'text-orange-700', pulse: false },
+  rejected:       { label: 'Rejected',        Icon: XCircle,      bg: 'bg-red-50',     text: 'text-red-700',    pulse: false },
+  failed:         { label: 'Failed',          Icon: XCircle,      bg: 'bg-red-50',     text: 'text-red-700',    pulse: false },
 };
 
 const TYPE_CFG = {
@@ -55,7 +57,7 @@ const TYPE_CFG = {
 };
 
 const ALL_CHANNELS = ['all', 'whatsapp', 'instagram', 'messenger', 'sms', 'email'];
-const ALL_STATUSES = ['all', 'draft', 'scheduled', 'sent', 'active', 'paused'];
+const ALL_STATUSES = ['all', 'draft', 'needs_approval', 'scheduled', 'sent', 'active', 'paused', 'rejected'];
 const ALL_TYPES    = ['all', 'broadcast', 'drip', 'transactional'];
 
 /* ─── helpers ───────────────────────────────────────────── */
@@ -69,7 +71,7 @@ function fmtTime(iso) {
 }
 
 /* ─── CampaignCard ──────────────────────────────────────── */
-function CampaignCard({ c, onDelete, idx }) {
+function CampaignCard({ c, onDelete, onSubmitForApproval, idx }) {
   const ch  = CHANNEL_CFG[c.channel_type] || CHANNEL_CFG.default;
   const st  = STATUS_CFG[c.status]        || STATUS_CFG.draft;
   const ty  = TYPE_CFG[c.type]            || { label: c.type || '—', bg: 'bg-slate-100 text-slate-600' };
@@ -119,10 +121,18 @@ function CampaignCard({ c, onDelete, idx }) {
                 <MoreHorizontal size={14} />
               </button>
               {menu && (
-                <div className="absolute right-0 top-8 z-20 bg-white rounded-xl shadow-card-lg border border-slate-200 py-1 w-36 animate-scale-in">
+                <div className="absolute right-0 top-8 z-20 bg-white rounded-xl shadow-card-lg border border-slate-200 py-1 w-44 animate-scale-in">
                   <button className="flex items-center gap-2 w-full px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">
                     <Edit size={12} /> Edit
                   </button>
+                  {c.status === 'draft' && (
+                    <button
+                      onClick={() => { onSubmitForApproval(c.id); setMenu(false); }}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-xs text-violet-600 hover:bg-violet-50"
+                    >
+                      <ShieldCheck size={12} /> Submit for Approval
+                    </button>
+                  )}
                   <button
                     onClick={() => { onDelete(c.id); setMenu(false); }}
                     className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-500 hover:bg-red-50"
@@ -278,6 +288,8 @@ export default function CampaignsPage() {
   const { data, isLoading, isError } = useCampaigns();
   const create = useCreateCampaign();
   const remove = useDeleteCampaign();
+  const updateCampaign = useUpdateCampaign();
+  const decide = useCampaignDecision();
 
   const [showCreate,     setCreate]   = useState(false);
   const [search,         setSearch]   = useState('');
@@ -286,13 +298,18 @@ export default function CampaignsPage() {
   const [filterType,     setType]     = useState('all');
 
   const campaigns = Array.isArray(data) ? data : [];
+  const pendingApproval = useMemo(
+    () => campaigns.filter((c) => c.status === 'needs_approval'),
+    [campaigns],
+  );
 
   /* ── computed stats ── */
   const stats = useMemo(() => ({
-    total:     campaigns.length,
-    active:    campaigns.filter((c) => ['active', 'sent'].includes(c.status)).length,
-    scheduled: campaigns.filter((c) => c.status === 'scheduled').length,
-    draft:     campaigns.filter((c) => c.status === 'draft').length,
+    total:          campaigns.length,
+    active:         campaigns.filter((c) => ['active', 'sent'].includes(c.status)).length,
+    scheduled:      campaigns.filter((c) => c.status === 'scheduled').length,
+    draft:          campaigns.filter((c) => c.status === 'draft').length,
+    needsApproval:  campaigns.filter((c) => c.status === 'needs_approval').length,
   }), [campaigns]);
 
   /* ── channel breakdown ── */
@@ -326,6 +343,14 @@ export default function CampaignsPage() {
     remove.mutate(id);
   };
 
+  const handleSubmitForApproval = (id) => {
+    updateCampaign.mutate({ id, status: 'needs_approval' });
+  };
+
+  const handleDecision = (id, decision) => {
+    decide.mutate({ id, decision });
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fade-in">
 
@@ -348,12 +373,13 @@ export default function CampaignsPage() {
       </div>
 
       {/* ── KPI stats row ───────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {[
-          { label: 'Total',     value: stats.total,     icon: Megaphone,  from: 'from-blue-50',    to: 'to-indigo-100', text: 'text-blue-600'    },
-          { label: 'Active',    value: stats.active,    icon: TrendingUp, from: 'from-emerald-50', to: 'to-teal-100',   text: 'text-emerald-600' },
-          { label: 'Scheduled', value: stats.scheduled, icon: Calendar,   from: 'from-amber-50',   to: 'to-orange-100', text: 'text-amber-600'   },
-          { label: 'Drafts',    value: stats.draft,     icon: Edit,       from: 'from-slate-50',   to: 'to-slate-100',  text: 'text-slate-500'   },
+          { label: 'Total',          value: stats.total,         icon: Megaphone,   from: 'from-blue-50',    to: 'to-indigo-100', text: 'text-blue-600'    },
+          { label: 'Active',         value: stats.active,        icon: TrendingUp,  from: 'from-emerald-50', to: 'to-teal-100',   text: 'text-emerald-600' },
+          { label: 'Scheduled',      value: stats.scheduled,     icon: Calendar,    from: 'from-amber-50',   to: 'to-orange-100', text: 'text-amber-600'   },
+          { label: 'Needs Approval', value: stats.needsApproval, icon: ShieldCheck, from: 'from-violet-50',  to: 'to-purple-100', text: 'text-violet-600'  },
+          { label: 'Drafts',         value: stats.draft,         icon: Edit,        from: 'from-slate-50',   to: 'to-slate-100',  text: 'text-slate-500'   },
         ].map(({ label, value, icon: Icon, from, to, text }, i) => (
           <div key={label}
             className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 animate-slide-up"
@@ -378,6 +404,61 @@ export default function CampaignsPage() {
 
         {/* LEFT: channel breakdown sidebar */}
         <div className="xl:col-span-1 space-y-4">
+
+          {/* Approval Queue — human-approved execution: nothing sends without a decision here */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-purple-100 text-violet-600">
+                  <ShieldCheck size={15} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 text-sm">Approval Queue</h4>
+                  <p className="text-[11px] text-slate-400">Review before it can send</p>
+                </div>
+              </div>
+              {pendingApproval.length > 0 && (
+                <span className="text-[10px] font-bold text-violet-600 bg-violet-50 px-2 py-1 rounded-full">
+                  {pendingApproval.length}
+                </span>
+              )}
+            </div>
+            {pendingApproval.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-4">Nothing waiting on review.</p>
+            ) : (
+              <div className="space-y-3">
+                {pendingApproval.map((c) => {
+                  const ch = CHANNEL_CFG[c.channel_type] || CHANNEL_CFG.default;
+                  return (
+                    <div key={c.id} className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+                      <p className="text-xs font-semibold text-slate-700 truncate">{c.name}</p>
+                      <p className={`text-[10px] font-semibold mt-1 ${ch.text}`}>{ch.label}</p>
+                      {c.message_body && (
+                        <p className="text-[11px] text-slate-500 mt-1.5 line-clamp-2">{c.message_body}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-2.5">
+                        <button
+                          onClick={() => handleDecision(c.id, 'approved')}
+                          disabled={decide.isPending}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-60"
+                        >
+                          <Check size={11} /> Approve
+                        </button>
+                        <button
+                          onClick={() => handleDecision(c.id, 'rejected')}
+                          disabled={decide.isPending}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-red-600 border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-60"
+                        >
+                          <X size={11} /> Reject
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5">
             <div className="flex items-center gap-2.5 mb-4">
               <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-purple-100 text-violet-600">
@@ -542,7 +623,7 @@ export default function CampaignsPage() {
           {!isLoading && filtered.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filtered.map((c, i) => (
-                <CampaignCard key={c.id} c={c} onDelete={handleDelete} idx={i} />
+                <CampaignCard key={c.id} c={c} onDelete={handleDelete} onSubmitForApproval={handleSubmitForApproval} idx={i} />
               ))}
             </div>
           )}
