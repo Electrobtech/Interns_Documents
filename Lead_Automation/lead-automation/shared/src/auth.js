@@ -9,6 +9,13 @@ function sign(payload) {
   });
 }
 
+// Verify + decode a token signed with sign(). Throws if invalid/expired —
+// callers that need a boolean/try-catch (e.g. OAuth 'state' round-trips
+// that can't carry an Authorization header) wrap this themselves.
+function verify(token, opts) {
+  return jwt.verify(token, SECRET, opts);
+}
+
 // Express middleware: verifies JWT and attaches req.user.
 // req.user = { userId, organizationId, role }
 function authenticate(req, res, next) {
@@ -33,4 +40,4 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { sign, authenticate, requireRole, SECRET };
+module.exports = { sign, verify, authenticate, requireRole, SECRET };

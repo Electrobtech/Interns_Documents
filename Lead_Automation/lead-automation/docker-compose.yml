@@ -28,6 +28,11 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4001:4001"]
+    # Persists uploaded logos/certificates (see companyController.js) across
+    # container restarts/rebuilds. Local-disk-only, same caveat as
+    # automation_uploads below — swap for S3 before scaling to >1 replica.
+    volumes:
+      - auth_uploads:/app/services/auth-service/public/uploads
 
   inbox-service:
     build: { context: ., dockerfile: services/inbox-service/Dockerfile }
@@ -124,6 +129,11 @@ services:
     volumes:
       - automation_uploads:/app/services/automation-service/public/uploads
 
+  notification-service:
+    build: { context: ., dockerfile: services/notification-service/Dockerfile }
+    env_file: .env
+    ports: ["4012:4012"]
+
   api-gateway:
     build: { context: ., dockerfile: api-gateway/Dockerfile }
     env_file: .env
@@ -139,6 +149,7 @@ services:
       INTEGRATION_SERVICE_URL: http://integration-service:4009
       TEAM_SERVICE_URL: http://team-service:4010
       AUTOMATION_SERVICE_URL: http://automation-service:4011
+      NOTIFICATION_SERVICE_URL: http://notification-service:4012
     depends_on:
       - auth-service
       - inbox-service
@@ -151,8 +162,10 @@ services:
       - integration-service
       - team-service
       - automation-service
+      - notification-service
     ports: ["8080:8080"]
 
 volumes:
   pgdata:
   automation_uploads:
+  auth_uploads:

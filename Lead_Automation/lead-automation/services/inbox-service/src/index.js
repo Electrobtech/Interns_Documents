@@ -30,8 +30,18 @@ app.get('/conversations', async (req, res) => {
 
 app.get('/conversations/:id', async (req, res) => {
   const org = req.user.organizationId;
+  // Joined to contacts for contact_name/contact_id — previously this was a
+  // bare `SELECT *` on conversations alone, so the Unified Inbox's
+  // conversation header always fell back to displaying the raw internal
+  // contact UUID (conv.contact_id) instead of the contact's actual name,
+  // since contact_name was never present on this response at all. The list
+  // endpoint above already joined contacts correctly; this brings the
+  // single-conversation view in line with it.
   const conv = await pool.query(
-    `SELECT * FROM conversations WHERE id=$1 AND organization_id=$2`,
+    `SELECT c.*, ct.name AS contact_name, ct.external_id AS contact_external_id
+       FROM conversations c
+       LEFT JOIN contacts ct ON ct.id = c.contact_id
+      WHERE c.id=$1 AND c.organization_id=$2`,
     [req.params.id, org]
   );
   if (!conv.rows.length) return res.status(404).json({ error: 'Not found' });

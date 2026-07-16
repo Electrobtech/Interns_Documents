@@ -70,6 +70,25 @@ async function resolveConversation({ organizationId, channel, externalId }) {
 }
 
 /**
+ * Pins to an EXACT known conversation rather than re-resolving "most
+ * recently active open conversation for this contact/channel" from
+ * scratch. Needed because a contact can have more than one open
+ * conversation on the same channel (e.g. seeded demo data, or a customer
+ * who messaged in, got closed out, and messaged in again) — resolveConversation()
+ * above has no way to know which one a CRM user is looking at in the
+ * Unified Inbox, so it can silently pick a different one than what's on
+ * screen. inboxReplyController.js already has the real conversationId from
+ * the URL the user is viewing, so it should use this instead.
+ */
+async function resolveConversationById({ conversationId, organizationId }) {
+  const { rows } = await pool.query(
+    `SELECT * FROM conversations WHERE id = $1 AND organization_id = $2`,
+    [conversationId, organizationId]
+  );
+  return rows[0] || null;
+}
+
+/**
  * Flips who owns replying on this conversation. Called with 'human' when
  * the flow reaches a Handoff node; called with either value from the
  * inbox UI's toggle (see PUT /conversations/:id/handled-by in inbox-service).
@@ -92,5 +111,6 @@ module.exports = {
   findOrCreateContact,
   findOrCreateConversation,
   resolveConversation,
+  resolveConversationById,
   setHandledBy,
 };

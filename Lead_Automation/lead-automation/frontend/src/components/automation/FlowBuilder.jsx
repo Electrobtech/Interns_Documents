@@ -3,7 +3,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import {
   ChevronLeft, Check, Plus, Trash2, ZoomIn, ZoomOut, Maximize2,
   Undo2, Redo2, Search, MessageSquare, GitBranch, Headset, FileText, X, Copy,
-  Loader2, AlertCircle, Download, CloudOff,
+  Loader2, AlertCircle, Download, CloudOff, Play,
 } from "lucide-react";
 import { apiUpload } from "@/lib/api";
 import { getToken } from "@/lib/auth";
@@ -326,7 +326,7 @@ function SyncStatusPill({ status }) {
 /* ------------------------------------------------------------------ */
 /* Node card renderer — dispatches by type                             */
 /* ------------------------------------------------------------------ */
-function NodeCard({ node, selected, onMouseDownDrag, onUpdate, onDelete, onStartConnect, onAddBranch, onRemoveBranch }) {
+function NodeCard({ node, selected, isEntry, onSetEntry, onMouseDownDrag, onUpdate, onDelete, onStartConnect, onAddBranch, onRemoveBranch }) {
   const header =
     node.type === "message" ? { icon: <MessageSquare size={13} />, tone: tokens.message, label: "Message" }
     : node.type === "answer_branch" ? { icon: <GitBranch size={13} />, tone: tokens.branch, label: "Conditional Branching" }
@@ -337,10 +337,34 @@ function NodeCard({ node, selected, onMouseDownDrag, onUpdate, onDelete, onStart
       className="absolute rounded-xl shadow-sm border group"
       style={{
         left: node.position.x, top: node.position.y, width: NODE_WIDTH,
-        background: tokens.card, borderColor: selected ? tokens.accent : tokens.cardBorder,
-        borderWidth: selected ? 2 : 1,
+        background: tokens.card, borderColor: selected ? tokens.accent : (isEntry ? tokens.accent : tokens.cardBorder),
+        borderWidth: selected || isEntry ? 2 : 1,
       }}
     >
+      {/* Every playbook needs exactly one of these — it's the node
+          evaluateWorkflowStep() starts a brand-new conversation at. Shown on
+          every card so it's obvious at a glance which one is live, since
+          canvas position/order has no bearing on where the engine actually
+          begins (only entryNodeId does). */}
+      {isEntry ? (
+        <div
+          className="absolute -top-2.5 left-2 text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full flex items-center gap-1"
+          style={{ background: tokens.accent, color: "#fff" }}
+        >
+          <Play size={9} fill="#fff" /> Start
+        </div>
+      ) : (
+        <button
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={onSetEntry}
+          title="Make this the node a brand-new conversation starts at"
+          className="absolute -top-2.5 left-2 text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition"
+          style={{ background: "#fff", border: `1px solid ${tokens.cardBorder}`, color: tokens.muted }}
+        >
+          Set as start
+        </button>
+      )}
+
       {/* input handle (top) */}
       <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 bg-white" style={{ borderColor: tokens.line }} />
 
@@ -500,13 +524,41 @@ export function exportFlowJson(graph, title) {
   const nodes = graph.nodes.map((n) => {
     if (n.type === "message") {
       const edge = graph.edges.find((e) => e.sourceNodeId === n.id);
+      const isInteractive = n.data.messageType === "interactive";
+      // A WhatsApp `list` message needs list.sections[].rows[] to even be
+      // valid — this was never built anywhere before (only messageType got
+      // renamed "interactive" -> "list"), which is what made buildSendTemplate
+      // crash reading list.buttonLabel of undefined and silently drop every
+      // reply with no error surfaced to the inbox.
+      //
+      // The canvas doesn't give this node its own per-option editor — the
+      // "Options" pills the person actually fills in live one hop
+      // downstream, on the Conditional Branching node this connects to (see
+      // the n.type === "answer_branch" case below). So: if this interactive
+      // message's one outgoing edge leads to a branch node, mirror that
+      // node's branches as the WhatsApp list's rows, using each branch's OWN
+      // id as the row id — evaluateAnswerBranchNode() (conditionEvaluator.js)
+      // matches a tapped row back to a branch via `matchOptionId === b.id`,
+      // so these ids have to line up exactly for a selection to route
+      // anywhere. All rows share this node's single nextNodeId (the branch
+      // node itself) as their fallback target, since it's the branch node —
+      // not this message node — that actually decides where to go next.
+      let list;
+      if (isInteractive) {
+        const targetNode = graph.nodes.find((gn) => gn.id === edge?.targetNodeId);
+        const rows = targetNode?.type === "answer_branch"
+          ? targetNode.data.branches.map((b) => ({ id: b.id, title: (b.label || "Option").slice(0, 24) }))
+          : [];
+        list = { buttonLabel: "Options", sections: [{ title: "Choose one", rows }] };
+      }
       return {
         id: n.id, type: "message", position: n.position,
         data: {
-          messageType: n.data.messageType === "interactive" ? "list" : n.data.messageType,
+          messageType: isInteractive ? "list" : n.data.messageType,
           body: n.data.body,
           document: n.data.document,
-          waitForReply: n.data.messageType === "interactive",
+          list,
+          waitForReply: isInteractive,
           nextNodeId: edge?.targetNodeId ?? null,
         },
       };
@@ -526,7 +578,18 @@ export function exportFlowJson(graph, title) {
     return { id: n.id, type: "handoff", position: n.position, data: { team: n.data.team, nextNodeId: null } };
   });
 
-  return { name: title, entryNodeId: graph.entryNodeId, nodes };
+  // Guards against a stale/deleted entryNodeId ever reaching Postgres: if
+  // it somehow doesn't match any node currently on the canvas (e.g. an
+  // older saved playbook whose entry node was deleted before this
+  // safeguard existed), fall back to the first node rather than deploying
+  // a playbook the engine can never find a start for. deleteNode() and
+  // setEntryNode() above keep this in sync going forward; this is just the
+  // last line of defense at export time.
+  const validEntryNodeId = graph.nodes.some((n) => n.id === graph.entryNodeId)
+    ? graph.entryNodeId
+    : graph.nodes[0]?.id ?? null;
+
+  return { name: title, entryNodeId: validEntryNodeId, nodes };
 }
 
 /**
@@ -585,7 +648,7 @@ export function importFlowJson(playbook) {
 /* ------------------------------------------------------------------ */
 /* Root component                                                      */
 /* ------------------------------------------------------------------ */
-export default function FlowBuilder({ initialGraph, initialTitle, syncStatus = "saved", onGraphChange, onTitleChange, onTestBot }) {
+export default function FlowBuilder({ initialGraph, initialTitle, syncStatus = "saved", onGraphChange, onTitleChange, onTestBot, onDeploy, deployState = "idle" }) {
   const [graph, setGraph] = useState(initialGraph || seedGraph);
   const [title, setTitleState] = useState(initialTitle || "WEB — Ecommerce Customer Support");
   const [viewport, setViewport] = useState({ x: -200, y: -10, zoom: 0.85 });
@@ -794,12 +857,32 @@ export default function FlowBuilder({ initialGraph, initialTitle, syncStatus = "
     commit({ ...graph, nodes: graph.nodes.map((n) => (n.id === nodeId ? { ...n, data } : n)) });
   }
 
+  // Marks which node the engine starts a brand-new conversation at
+  // (see evaluateWorkflowStep in automation-service's workflowEngine.js —
+  // it walks forward from `playbook.entryNodeId` for every first-ever
+  // inbound message). There was previously NO way to set this from the UI
+  // at all — entryNodeId was frozen at whatever seedGraph() hardcoded
+  // ("n_greet") and never updated again, so a flow built from scratch (or
+  // one that later deleted its original entry node) could silently end up
+  // with a stale/missing entryNodeId — the engine would then find zero
+  // nodes to walk through and send nothing, with no error surfaced anywhere.
+  function setEntryNode(nodeId) {
+    commit({ ...graph, entryNodeId: nodeId });
+  }
+
   function deleteNode(nodeId) {
-    commit({
-      ...graph,
-      nodes: graph.nodes.filter((n) => n.id !== nodeId),
-      edges: graph.edges.filter((e) => e.sourceNodeId !== nodeId && e.targetNodeId !== nodeId),
-    });
+    const nextNodes = graph.nodes.filter((n) => n.id !== nodeId);
+    const nextEdges = graph.edges.filter((e) => e.sourceNodeId !== nodeId && e.targetNodeId !== nodeId);
+    // Deleting the current entry node would otherwise leave entryNodeId
+    // pointing at nothing — the engine has no way to signal that back to
+    // the person deploying, it would just silently do nothing on every
+    // inbound message. Fall back to another node automatically so the flow
+    // always has *a* valid start, and let the person re-pick a better one
+    // via "Set as start" if this guess isn't the right one.
+    const entryNodeId = nodeId === graph.entryNodeId
+      ? (nextNodes[0]?.id ?? null)
+      : graph.entryNodeId;
+    commit({ ...graph, nodes: nextNodes, edges: nextEdges, entryNodeId });
   }
 
   function addBranch(nodeId) {
@@ -938,6 +1021,8 @@ export default function FlowBuilder({ initialGraph, initialTitle, syncStatus = "
               key={node.id}
               node={node}
               selected={selectedId === node.id}
+              isEntry={node.id === graph.entryNodeId}
+              onSetEntry={() => setEntryNode(node.id)}
               onMouseDownDrag={(e) => startDragNode(e, node)}
               onUpdate={(data) => updateNodeData(node.id, data)}
               onDelete={() => deleteNode(node.id)}
@@ -994,21 +1079,33 @@ export default function FlowBuilder({ initialGraph, initialTitle, syncStatus = "
         <div className="absolute inset-0 flex justify-end" style={{ background: "#00000040" }} onClick={() => setShowExport(false)}>
           <div className="w-[480px] h-full bg-white flex flex-col shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: tokens.cardBorder }}>
-              <span className="text-sm font-semibold">Flow JSON — ready to POST to Playbook API</span>
+              <span className="text-sm font-semibold">Deploy this flow</span>
               <button onClick={() => setShowExport(false)}><X size={16} /></button>
             </div>
             <pre className="flex-1 overflow-auto p-4 text-[11px]" style={{ fontFamily: "ui-monospace, monospace", color: tokens.text }}>
               {JSON.stringify(exported, null, 2)}
             </pre>
-            <div className="p-3 border-t" style={{ borderColor: tokens.cardBorder }}>
+            <div className="p-3 border-t flex gap-2" style={{ borderColor: tokens.cardBorder }}>
               <button
                 onClick={() => navigator.clipboard?.writeText(JSON.stringify(exported, null, 2))}
-                className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold rounded-lg py-2"
-                style={{ background: tokens.accent, color: "#fff" }}
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold rounded-lg py-2 border"
+                style={{ borderColor: tokens.cardBorder, color: tokens.text }}
               >
                 <Copy size={13} /> Copy JSON
               </button>
+              <button
+                onClick={() => onDeploy?.(exported)}
+                disabled={deployState === "deploying" || !onDeploy}
+                title="Sets this playbook's status to active in Postgres — this is what actually makes it the live bot for this channel. Copy JSON above does not do this."
+                className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold rounded-lg py-2 disabled:opacity-60"
+                style={{ background: tokens.accent, color: "#fff" }}
+              >
+                {deployState === "deploying" ? "Deploying…" : deployState === "deployed" ? "Deployed ✓" : "Deploy — go live"}
+              </button>
             </div>
+            {deployState === "error" && (
+              <p className="px-3 pb-3 text-[11px] text-red-600">Deploy failed — check your connection and try again.</p>
+            )}
           </div>
         </div>
       )}

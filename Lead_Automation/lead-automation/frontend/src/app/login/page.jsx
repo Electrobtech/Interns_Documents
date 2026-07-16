@@ -34,6 +34,9 @@ export default function Login() {
         {err && <p className="text-xs text-red-500">{err}</p>}
         <button className="w-full bg-brand text-white rounded-lg py-2 text-sm font-medium">Login</button>
         <a className="block text-center text-xs text-brand cursor-pointer">Forgot password?</a>
+        <p className="text-center text-xs text-slate-400">
+          New company? <a href="/register" className="text-brand font-medium">Register here</a>
+        </p>
       </form>
     </div>
   );

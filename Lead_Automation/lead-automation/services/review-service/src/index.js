@@ -1,13 +1,24 @@
 const express = require('express');
 const cors = require('cors');
 const { pool, authenticate } = require('@lead/shared');
+const googleRoutes = require('./google/routes');
+const googleSync = require('./google/sync');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Google's OAuth redirect lands here directly from the user's browser, so
+// it can't carry our Authorization header — this must be mounted before
+// the authenticate middleware below. Every other route (including the rest
+// of the Google integration) still requires a valid JWT.
+app.use(googleRoutes.publicRouter);
+
 app.use(authenticate);
 
 app.get('/health', (_req, res) => res.json({ service: 'review', ok: true }));
+
+app.use(googleRoutes.router);
 
 // ---------- Reviews ----------
 app.get('/reviews', async (req, res) => {
@@ -97,5 +108,16 @@ app.delete('/social/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Error handler for the Google routes, which use next(e) rather than
+// inline try/catch responses (that module talks to an external API, so it
+// needs to distinguish "Google rejected the request" from "our DB failed").
+app.use((err, _req, res, _next) => {
+  console.error('[review-service] error:', err.message);
+  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+});
+
 const PORT = process.env.REVIEW_PORT || 4007;
-app.listen(PORT, () => console.log(`review-service on :${PORT}`));
+app.listen(PORT, () => {
+  console.log(`review-service on :${PORT}`);
+  googleSync.startCronJob();
+});
