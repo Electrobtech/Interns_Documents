@@ -134,25 +134,6 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ---------- AI ----------
-CREATE TABLE IF NOT EXISTS ai_agents (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  name            TEXT NOT NULL,           -- Support | Sales | Marketing | Voice
-  type            TEXT NOT NULL,
-  status          TEXT DEFAULT 'active',
-  config          JSONB DEFAULT '{}'::jsonb
-);
-
-CREATE TABLE IF NOT EXISTS ai_suggestions (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
-  suggestion      TEXT,
-  confidence      NUMERIC,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
 -- ---------- Campaigns ----------
 CREATE TABLE IF NOT EXISTS campaigns (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

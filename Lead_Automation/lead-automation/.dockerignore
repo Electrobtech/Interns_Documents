@@ -1,0 +1,58 @@
+# ── Secrets & local config ──────────────────────────────────────────────────
+.env
+**/.env.local
+**/.env.*.local
+
+# ── Node ─────────────────────────────────────────────────────────────────────
+**/node_modules/
+**/.npm/
+**/npm-debug.log*
+**/yarn-error.log*
+
+# ── Python ───────────────────────────────────────────────────────────────────
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+**/*.pyd
+**/.Python
+**/.venv/
+**/venv/
+**/*.egg-info/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/dist/
+**/build/
+**/.eggs/
+
+# ── Next.js / frontend build artifacts ───────────────────────────────────────
+frontend/.next/
+frontend/out/
+
+# ── OS & editor noise ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+**/*.log
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Git ───────────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ── Docs / local tooling (not needed in images) ──────────────────────────────
+docs/
+*.md
+!ai-agent-backend/alembic/README
+README.md
+
+# ── Uploads (runtime data, never baked into images) ──────────────────────────
+services/automation-service/public/uploads/
+
+# ── Test / CI artefacts ───────────────────────────────────────────────────────
+**/.coverage
+**/htmlcov/
+**/coverage/
+**/test-results/

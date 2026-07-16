@@ -10,6 +10,38 @@ INSERT INTO roles (name, description) VALUES
   ('agent',   'Handle conversations')
 ON CONFLICT (name) DO NOTHING;
 
+-- ---------- RBAC permission catalogue + role mapping ----------
+INSERT INTO permissions (code, description) VALUES
+  ('contacts:read',   'View contacts & leads'),
+  ('contacts:write',  'Create/update contacts & leads'),
+  ('contacts:delete', 'Delete contacts'),
+  ('campaigns:read',  'View campaigns'),
+  ('campaigns:write', 'Create/update campaigns'),
+  ('campaigns:send',  'Send/broadcast a campaign'),
+  ('inbox:read',      'View conversations'),
+  ('inbox:write',     'Reply to / manage conversations'),
+  ('team:read',       'View team members & teams'),
+  ('team:manage',     'Add/remove/edit team members and teams'),
+  ('roles:manage',    'Manage roles and permission assignments'),
+  ('settings:write',  'Change organization settings'),
+  ('ai_agents:manage','Configure AI agents, knowledge base, webhooks'),
+  ('audit:read',      'View audit logs')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r CROSS JOIN permissions p WHERE r.name = 'admin'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
+ WHERE r.name = 'manager' AND p.code NOT IN ('roles:manage', 'settings:write')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
+ WHERE r.name = 'agent' AND p.code IN ('contacts:read', 'contacts:write', 'campaigns:read', 'inbox:read', 'inbox:write', 'team:read')
+ON CONFLICT DO NOTHING;
+
 INSERT INTO organizations (id, name, slug) VALUES
   ('11111111-1111-1111-1111-111111111111', 'Electrobtech Innovations', 'electrobtech')
 ON CONFLICT (slug) DO NOTHING;
@@ -47,14 +79,6 @@ INSERT INTO integrations (organization_id, provider, status) VALUES
   ('11111111-1111-1111-1111-111111111111', 'stripe',        'connected'),
   ('11111111-1111-1111-1111-111111111111', 'google_sheets', 'disconnected'),
   ('11111111-1111-1111-1111-111111111111', 'zapier',        'disconnected')
-ON CONFLICT DO NOTHING;
-
--- ---------- AI Agents ----------
-INSERT INTO ai_agents (organization_id, name, type, status, config) VALUES
-  ('11111111-1111-1111-1111-111111111111', 'Support Agent',   'support',   'active', '{"tone":"friendly"}'),
-  ('11111111-1111-1111-1111-111111111111', 'Sales Agent',     'sales',     'active', '{"tone":"persuasive"}'),
-  ('11111111-1111-1111-1111-111111111111', 'Marketing Agent', 'marketing', 'active', '{"tone":"upbeat"}'),
-  ('11111111-1111-1111-1111-111111111111', 'Voice Agent',     'voice',     'active', '{"tone":"calm"}')
 ON CONFLICT DO NOTHING;
 
 -- ---------- Contacts ----------

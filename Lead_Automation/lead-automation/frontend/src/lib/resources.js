@@ -1,5 +1,5 @@
 import {
-  Users, Megaphone, Bot, ShoppingCart, Star, MessageSquare,
+  Users, Megaphone, ShoppingCart, Star, MessageSquare,
   Plug, KeyRound, Webhook, Radio, UserCog, UsersRound, Inbox, Target,
 } from 'lucide-react';
 
@@ -65,22 +65,6 @@ export const campaigns = {
     { key: 'message_body', label: 'Message', type: 'textarea' },
     { key: 'scheduled_at', label: 'Schedule', type: 'datetime' },
     { key: 'status', label: 'Status', type: 'select', options: ['draft', 'scheduled', 'sent'] },
-  ],
-};
-
-export const aiAgents = {
-  path: '/ai-agents', title: 'AI Agents & Automation', icon: Bot,
-  columns: [
-    { key: 'name', label: 'Name' },
-    { key: 'type', label: 'Type' },
-    { key: 'status', label: 'Status', badge: true },
-    { key: 'config', label: 'Config' },
-  ],
-  fields: [
-    { key: 'name', label: 'Name', type: 'text', required: true },
-    { key: 'type', label: 'Type', type: 'select', options: ['support', 'sales', 'marketing', 'voice'] },
-    { key: 'status', label: 'Status', type: 'select', options: ['active', 'paused'] },
-    { key: 'config', label: 'Config (JSON)', type: 'textarea' },
   ],
 };
 

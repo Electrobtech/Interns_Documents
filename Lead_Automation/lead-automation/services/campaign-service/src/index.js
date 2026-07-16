@@ -1,11 +1,14 @@
 const express = require('express');
 const cors = require('cors');
-const { pool, authenticate } = require('@lead/shared');
+const { pool, authenticate, requirePermission, logAudit } = require('@lead/shared');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(authenticate);
+
+const canWrite = requirePermission('campaigns:write');
+const canSend = requirePermission('campaigns:send');
 
 // jsonb columns accept either a JSON string (from a textarea) or a JS object.
 const asJson = (v) => (v == null || v === '' ? null : typeof v === 'string' ? v : JSON.stringify(v));
@@ -20,13 +23,14 @@ app.get('/campaigns', async (req, res) => {
   res.json(rows);
 });
 
-app.post('/campaigns', async (req, res) => {
+app.post('/campaigns', canWrite, async (req, res) => {
   const { name, type, channel_type, message_body, cta, scheduled_at, status } = req.body;
   const { rows } = await pool.query(
     `INSERT INTO campaigns (organization_id, name, type, channel_type, message_body, cta, scheduled_at, status)
      VALUES ($1,$2,COALESCE($3,'broadcast'),$4,$5,$6,$7,COALESCE($8,'draft')) RETURNING *`,
     [req.user.organizationId, name, type, channel_type, message_body, asJson(cta), scheduled_at || null, status]
   );
+  logAudit(req, 'campaign.create', { id: rows[0].id, name });
   res.status(201).json(rows[0]);
 });
 
@@ -38,7 +42,7 @@ app.get('/campaigns/:id', async (req, res) => {
   res.json(rows[0] || {});
 });
 
-app.put('/campaigns/:id', async (req, res) => {
+app.put('/campaigns/:id', canWrite, async (req, res) => {
   const { name, type, channel_type, message_body, cta, scheduled_at, status } = req.body;
   const { rows } = await pool.query(
     `UPDATE campaigns SET name=COALESCE($1,name), type=COALESCE($2,type),
@@ -48,12 +52,14 @@ app.put('/campaigns/:id', async (req, res) => {
     [name, type, channel_type, message_body, asJson(cta), scheduled_at || null, status,
      req.params.id, req.user.organizationId]
   );
+  logAudit(req, 'campaign.update', { id: req.params.id, changes: { name, status } });
   res.json(rows[0] || {});
 });
 
-app.delete('/campaigns/:id', async (req, res) => {
+app.delete('/campaigns/:id', canWrite, async (req, res) => {
   await pool.query(`DELETE FROM campaigns WHERE id=$1 AND organization_id=$2`,
     [req.params.id, req.user.organizationId]);
+  logAudit(req, 'campaign.delete', { id: req.params.id });
   res.json({ ok: true });
 });
 
@@ -71,13 +77,14 @@ const AUTOMATION_SERVICE_URL = process.env.AUTOMATION_SERVICE_URL || 'http://loc
 // failure (bad/missing number, expired token, a transcript write hiccup on
 // the automation-service side, etc) never aborts the rest of the run —
 // every outcome is caught and recorded rather than thrown.
-app.post('/campaigns/:id/send', async (req, res) => {
+app.post('/campaigns/:id/send', canSend, async (req, res) => {
   const { rows } = await pool.query(
     `UPDATE campaigns SET status='sent' WHERE id=$1 AND organization_id=$2 RETURNING *`,
     [req.params.id, req.user.organizationId]
   );
   const campaign = rows[0];
   if (!campaign) return res.json({});
+  logAudit(req, 'campaign.send', { id: campaign.id, name: campaign.name, channel: campaign.channel_type });
 
   const { rows: audience } = await pool.query(
     `SELECT c.* FROM campaign_audiences ca

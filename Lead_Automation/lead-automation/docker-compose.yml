@@ -1,11 +1,18 @@
 services:
+
+  # ─────────────────────────────────────────────
+  # Infrastructure
+  # ─────────────────────────────────────────────
+
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-lead}
+      POSTGRES_USER:     ${POSTGRES_USER:-lead}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leadpass}
-      POSTGRES_DB: ${POSTGRES_DB:-lead_automation}
-    ports: ["5432:5432"]
+      POSTGRES_DB:       ${POSTGRES_DB:-lead_automation}
+    # Host port 5435 — native Windows Postgres already occupies 5432.
+    # Container-internal traffic still uses postgres:5432.
+    ports: ["5435:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
@@ -18,7 +25,25 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    # Host port 6380 — the other checkout already binds 6379.
+    ports: ["6380:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    # Host port 11435 — native Ollama install already binds 11434.
+    ports: ["11435:11434"]
+    volumes:
+      - ollama:/root/.ollama
+
+  # ─────────────────────────────────────────────
+  # Backend micro-services (Node)
+  # ─────────────────────────────────────────────
 
   auth-service:
     build: { context: ., dockerfile: services/auth-service/Dockerfile }
@@ -28,15 +53,6 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4001:4001"]
-
-  inbox-service:
-    build: { context: ., dockerfile: services/inbox-service/Dockerfile }
-    env_file: .env
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
-    depends_on:
-      postgres: { condition: service_healthy }
-    ports: ["4002:4002"]
 
   contact-service:
     build: { context: ., dockerfile: services/contact-service/Dockerfile }
@@ -56,13 +72,27 @@ services:
       postgres: { condition: service_healthy }
     ports: ["4004:4004"]
 
-  ai-service:
-    build: { context: ., dockerfile: services/ai-service/Dockerfile }
+  # ai-agent-service — Python / FastAPI (Marketing + Sales + Support agents)
+  ai-agent-service:
+    build: { context: ., dockerfile: ai-agent-backend/Dockerfile }
+    container_name: ai-agent-service
     env_file: .env
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      DATABASE_URL:        postgresql+asyncpg://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      JWT_SECRET:          ${JWT_SECRET:-change-me-in-prod}
+      LLM_PROVIDER:        groq
+      LLM_FALLBACK_PROVIDER: ollama
+      GROQ_API_KEY:        ${GROQ_API_KEY}
+      GROQ_BASE_URL:       ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL:          ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      OLLAMA_HOST:         http://ollama:11434
+      OLLAMA_MODEL:        ${OLLAMA_MODEL:-qwen3:8b}
+      EMBEDDING_MODEL:     ${EMBEDDING_MODEL:-nomic-embed-text}
+      CONTACT_SERVICE_URL: http://contact-service:4003
+      CAMPAIGN_SERVICE_URL: http://campaign-service:4004
     depends_on:
       postgres: { condition: service_healthy }
+      ollama:   { condition: service_started }
     ports: ["4005:4005"]
 
   ecommerce-service:
@@ -85,18 +115,38 @@ services:
 
   analytics-service:
     build: { context: ., dockerfile: services/analytics-service/Dockerfile }
+    container_name: analytics-service
     env_file: .env
     environment:
+      PORT: "4107"
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    # Host port 4107 — review-service already owns 4007 on the host.
+    ports: ["4107:4007"]
+
+  integration-service:
+    build: { context: ., dockerfile: services/integration-service/Dockerfile }
+    container_name: integration-service
+    env_file: .env
+    environment:
+      PORT: "4008"
       DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4008:4008"]
 
-  integration-service:
-    build: { context: ., dockerfile: services/integration-service/Dockerfile }
+  linkedin-service:
+    build: { context: ., dockerfile: services/linkedin-service/Dockerfile }
+    container_name: linkedin-service
     env_file: .env
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      PORT: "4009"
+      DATABASE_URL:             postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      LINKEDIN_CLIENT_ID:       ${LINKEDIN_CLIENT_ID:-}
+      LINKEDIN_CLIENT_SECRET:   ${LINKEDIN_CLIENT_SECRET:-}
+      LINKEDIN_REDIRECT_URI:    ${LINKEDIN_REDIRECT_URI:-http://localhost:4009/api/v1/integrations/linkedin/callback}
+      LINKEDIN_WEBHOOK_SECRET:  ${LINKEDIN_WEBHOOK_SECRET:-}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4009:4009"]
@@ -118,41 +168,75 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4011:4011"]
-    # Persists uploaded documents (see mediaController.js) across
-    # container restarts/rebuilds. Local-disk-only — doesn't help if you
-    # ever scale this service to >1 replica; swap for S3 at that point.
     volumes:
       - automation_uploads:/app/services/automation-service/public/uploads
+
+  inbox-service:
+    build: { context: ., dockerfile: services/inbox-service/Dockerfile }
+    container_name: inbox-service
+    env_file: .env
+    environment:
+      PORT: "4006"
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    # Host port 4106 — ecommerce-service owns 4006 on the host.
+    ports: ["4106:4006"]
+
+  # ─────────────────────────────────────────────
+  # API Gateway
+  # ─────────────────────────────────────────────
 
   api-gateway:
     build: { context: ., dockerfile: api-gateway/Dockerfile }
     env_file: .env
     environment:
-      AUTH_SERVICE_URL: http://auth-service:4001
-      INBOX_SERVICE_URL: http://inbox-service:4002
-      CONTACT_SERVICE_URL: http://contact-service:4003
-      CAMPAIGN_SERVICE_URL: http://campaign-service:4004
-      AI_SERVICE_URL: http://ai-service:4005
-      ECOMMERCE_SERVICE_URL: http://ecommerce-service:4006
-      REVIEW_SERVICE_URL: http://review-service:4007
-      ANALYTICS_SERVICE_URL: http://analytics-service:4008
-      INTEGRATION_SERVICE_URL: http://integration-service:4009
-      TEAM_SERVICE_URL: http://team-service:4010
-      AUTOMATION_SERVICE_URL: http://automation-service:4011
+      AUTH_SERVICE_URL:        http://auth-service:4001
+      INBOX_SERVICE_URL:       http://inbox-service:4006
+      CONTACT_SERVICE_URL:     http://contact-service:4003
+      CAMPAIGN_SERVICE_URL:    http://campaign-service:4004
+      AI_SERVICE_URL:          http://ai-agent-service:4005
+      ECOMMERCE_SERVICE_URL:   http://ecommerce-service:4006
+      REVIEW_SERVICE_URL:      http://review-service:4007
+      ANALYTICS_SERVICE_URL:   http://analytics-service:4007
+      INTEGRATION_SERVICE_URL: http://integration-service:4008
+      LINKEDIN_SERVICE_URL:    http://linkedin-service:4009
+      TEAM_SERVICE_URL:        http://team-service:4010
+      AUTOMATION_SERVICE_URL:  http://automation-service:4011
     depends_on:
       - auth-service
       - inbox-service
       - contact-service
       - campaign-service
-      - ai-service
+      - ai-agent-service
       - ecommerce-service
       - review-service
       - analytics-service
       - integration-service
+      - linkedin-service
       - team-service
       - automation-service
     ports: ["8080:8080"]
 
+  # ─────────────────────────────────────────────
+  # Frontend (Next.js 14)
+  # ─────────────────────────────────────────────
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: frontend.Dockerfile
+    container_name: frontend
+    env_file: .env
+    environment:
+      # The browser-side API base URL — points at the gateway inside Docker.
+      # Override with your public hostname in production.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+    depends_on:
+      - api-gateway
+    ports: ["3000:3000"]
+
 volumes:
   pgdata:
   automation_uploads:
+  ollama:

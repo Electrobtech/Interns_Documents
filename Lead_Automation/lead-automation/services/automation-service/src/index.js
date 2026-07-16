@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
+const { Pool } = require('pg');
 // Reuse the CRM's own JWT auth (@lead/shared) — imported directly from the
 // auth module (not the package's top-level index) so this stays consistent
 // with the auth-only import style other lightweight route handlers use.
@@ -12,6 +14,10 @@ const inboxReplyController = require('./controllers/inboxReplyController');
 const mediaController = require('./controllers/mediaController');
 const playbookController = require('./controllers/playbookController');
 const conversationSessionRepository = require('./repositories/conversationSessionRepository');
+const { runFlow } = require('./services/flowEngine');
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const db = { query: (text, params) => pool.query(text, params) };
 
 const app = express();
 app.use(cors());
@@ -119,6 +125,87 @@ app.use('/', mediaController);
 // persistence layer the builder writes to now instead of only localStorage.
 app.use('/automation/playbooks', authenticate);
 app.use('/', playbookController);
+
+// Workflow Automation Engine routes
+app.get('/flows', async (req, res) => {
+  const { workspace_id } = req.query;
+  const { rows } = await db.query(
+    `SELECT * FROM automation_flows
+     WHERE workspace_id = $1
+     ORDER BY updated_at DESC`,
+    [workspace_id]
+  );
+  res.json(rows);
+});
+
+app.post('/flows', async (req, res) => {
+  const { workspace_id, name, description, definition } = req.body;
+  const { rows } = await db.query(
+    `INSERT INTO automation_flows (id, workspace_id, name, description, definition, active, published, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) RETURNING *`,
+    [crypto.randomUUID(), workspace_id, name, description || '', JSON.stringify(definition || { nodes: [] }), true, false]
+  );
+  res.status(201).json(rows[0]);
+});
+
+app.get('/flows/:id', async (req, res) => {
+  const { rows } = await db.query(
+    `SELECT * FROM automation_flows WHERE id = $1`,
+    [req.params.id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'not found' });
+  res.json(rows[0]);
+});
+
+app.put('/flows/:id', async (req, res) => {
+  const { name, description, definition, active, published } = req.body;
+  const { rows } = await db.query(
+    `UPDATE automation_flows
+     SET name = COALESCE($1, name),
+         description = COALESCE($2, description),
+         definition = COALESCE($3, definition),
+         active = COALESCE($4, active),
+         published = COALESCE($5, published),
+         updated_at = NOW()
+     WHERE id = $6 RETURNING *`,
+    [name, description, definition ? JSON.stringify(definition) : null, active, published, req.params.id]
+  );
+  res.json(rows[0]);
+});
+
+app.post('/flows/:id/publish', async (req, res) => {
+  await db.query(
+    `UPDATE automation_flows SET published = true, updated_at = NOW() WHERE id = $1`,
+    [req.params.id]
+  );
+  res.json({ published: true });
+});
+
+app.post('/flows/:id/trigger', async (req, res) => {
+  try {
+    const run = await runFlow(req.params.id, req.body, db);
+    res.json(run);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/flows/:id/executions', async (req, res) => {
+  const { rows } = await db.query(
+    `SELECT * FROM flow_executions WHERE flow_id = $1 ORDER BY started_at DESC LIMIT 50`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
+app.get('/executions/:id/logs', async (req, res) => {
+  const { rows } = await db.query(
+    `SELECT * FROM flow_execution_logs WHERE execution_id = $1 ORDER BY created_at ASC`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
 
 // Real inbound webhook entry point (public — see comment in webhookController.js)
 app.use('/', webhookController);

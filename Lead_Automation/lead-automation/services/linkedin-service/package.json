@@ -1,0 +1,22 @@
+{
+  "name": "linkedin-service",
+  "version": "1.0.0",
+  "description": "LinkedIn Marketing API integration service",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "pg": "^8.12.0",
+    "axios": "^1.7.2",
+    "crypto": "^1.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
