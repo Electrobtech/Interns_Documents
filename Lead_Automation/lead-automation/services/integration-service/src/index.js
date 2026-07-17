@@ -1,16 +1,68 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const { pool, authenticate } = require('@lead/shared');
 
+const webhookRoutes = require("./routes/webhook");
+const authRoutes = require("./routes/auth");
+const instagramRoutes = require("./routes/instagram");
+const facebookRoutes = require("./routes/facebook");
+const whatsappRoutes = require("./routes/whatsapp");
+const { startTokenRefreshScheduler } = require('./services/tokenRefreshJob');
+const { startWebhookWorker } = require('./services/webhookWorker');
+
 const app = express();
+
+app.use((req, res, next) => {
+  console.log("==================================");
+  console.log(new Date().toISOString());
+  console.log(req.method, req.originalUrl);
+  console.log("Headers:", req.headers);
+  next();
+});
+
 app.use(cors());
+
+// Webhook needs its own raw-body handling before any JSON parsing.
+app.use('/webhook', webhookRoutes);
+
 app.use(express.json());
+
+// /auth stays public at the router level — it protects its own sensitive
+// sub-route (GET /connect-url) internally via `authenticate` in auth.js.
+// The OAuth callback itself must remain public since Meta calls it directly.
+app.use('/auth', authRoutes);
+
+app.get('/health', (_req, res) => {
+    res.json({
+        service: 'integration',
+        ok: true
+    });
+});
+
+// Public root — lets a browser / tunnel smoke-test hit "/" and get 200 OK
+// instead of the confusing 401 from the auth guard below. Must stay ABOVE
+// app.use(authenticate).
+app.get('/', (_req, res) => {
+    res.json({
+        service: 'integration',
+        ok: true,
+        webhook: '/webhook/meta'
+    });
+});
+
+// Everything below requires a valid JWT — including /instagram and
+// /facebook, so req.user.organizationId is available for proper
+// multi-tenant scoping of publish/status routes.
 app.use(authenticate);
 
-const asJson = (v) => (v == null || v === '' ? null : typeof v === 'string' ? v : JSON.stringify(v));
+app.use('/instagram', instagramRoutes);
+app.use('/facebook', facebookRoutes);
+app.use('/whatsapp', whatsappRoutes);
 
-app.get('/health', (_req, res) => res.json({ service: 'integration', ok: true }));
+const asJson = (v) => (v == null || v === '' ? null : typeof v === 'string' ? v : JSON.stringify(v));
 
 // ---------- Integrations ----------
 app.get('/integrations', async (req, res) => {
@@ -173,4 +225,8 @@ app.delete('/channels/:id', async (req, res) => {
 });
 
 const PORT = process.env.INTEGRATION_PORT || 4009;
-app.listen(PORT, () => console.log(`integration-service on :${PORT}`));
+app.listen(PORT, () => {
+  console.log(`integration-service on :${PORT}`);
+  startTokenRefreshScheduler();
+  startWebhookWorker();
+});

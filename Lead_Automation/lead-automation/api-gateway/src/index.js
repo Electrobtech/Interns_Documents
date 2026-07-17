@@ -15,18 +15,29 @@ const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:400
 const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
 const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
 const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
-const AUTOMATION   = process.env.AUTOMATION_SERVICE_URL  || 'http://localhost:4011';
-const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4012';
 
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
 
 // Route table — the single public entry point for the frontend.
+//
+// NOTE: integration-service mounts its own OAuth sub-routes under /auth
+// (see services/integration-service/src/routes/auth.js: /auth/connect-url,
+// /auth/facebook, /auth/facebook/callback, /auth/refresh-tokens,
+// /auth/deauthorize, /auth/data-deletion*) — distinct from auth-service's
+// /auth/login and /auth/register. Express matches app.use() middleware in
+// registration order and the first match wins, so these more specific
+// /auth/* entries MUST be listed before the generic '/auth' -> AUTH entry
+// below, or they'd be swallowed by it and 404 against auth-service instead.
 const routes = [
+  { path: '/auth/connect-url',    target: INTEGRATION },
+  { path: '/auth/facebook',       target: INTEGRATION }, // covers /auth/facebook and /auth/facebook/callback
+  { path: '/auth/refresh-tokens', target: INTEGRATION },
+  { path: '/auth/deauthorize',    target: INTEGRATION },
+  { path: '/auth/data-deletion',  target: INTEGRATION }, // covers /auth/data-deletion and /auth/data-deletion-status
+  { path: '/instagram',       target: INTEGRATION },
+  { path: '/facebook',        target: INTEGRATION },
+  { path: '/whatsapp',        target: INTEGRATION },
   { path: '/auth',            target: AUTH },
-  // Company Registration (Tenant Onboarding): GET/PUT /company/:id and
-  // POST /company/upload live in auth-service, which already owns the
-  // organizations (tenant) table. See services/auth-service/src/controllers/companyController.js.
-  { path: '/company',         target: AUTH },
   { path: '/conversations',   target: INBOX },
   { path: '/contacts',        target: CONTACT },
   { path: '/leads',           target: CONTACT },
@@ -37,20 +48,14 @@ const routes = [
   { path: '/recovery-flows',  target: ECOMMERCE },
   { path: '/reviews',         target: REVIEW },
   { path: '/social',          target: REVIEW },
-  { path: '/google',          target: REVIEW }, // Google Business Profile Reviews integration (review-service)
   { path: '/analytics',       target: ANALYTICS },
   { path: '/integrations',    target: INTEGRATION },
   { path: '/api-keys',        target: INTEGRATION },
   { path: '/webhooks',        target: INTEGRATION },
+  { path: '/webhook',         target: INTEGRATION },   // Meta webhook callback (/webhook/meta)
   { path: '/channels',        target: INTEGRATION },
   { path: '/users',           target: TEAM },
   { path: '/teams',           target: TEAM },
-  // Lead Automation module (WhatsApp > Automation): flow engine, its
-  // simulate/reset helpers, and its own inbound webhook receiver — all
-  // namespaced under /automation so they never collide with the CRM's own
-  // /webhooks (subscription management, routed to INTEGRATION above).
-  { path: '/automation',      target: AUTOMATION },
-  { path: '/notifications',   target: NOTIFICATION },
 ];
 
 for (const r of routes) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the whole backend locally (no Docker): all 11 services + the API gateway.
+# Run the whole backend locally (no Docker): all 10 services + the API gateway.
 # Each service connects to the local Postgres and shares one JWT secret so tokens
 # issued by auth-service verify everywhere. Ctrl-C stops all of them.
 set -euo pipefail
@@ -34,7 +34,6 @@ start review      services/review-service/src/index.js
 start analytics   services/analytics-service/src/index.js
 start integration services/integration-service/src/index.js
 start team        services/team-service/src/index.js
-start automation  services/automation-service/src/index.js
 start gateway     api-gateway/src/index.js
 
 wait

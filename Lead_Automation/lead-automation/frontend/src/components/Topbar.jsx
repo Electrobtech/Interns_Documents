@@ -1,7 +1,6 @@
 'use client';
-import { Search, HelpCircle, LogOut } from 'lucide-react';
+import { Search, Bell, HelpCircle, LogOut } from 'lucide-react';
 import { logout } from '@/lib/auth';
-import NotificationBell from './NotificationBell';
 
 export default function Topbar({ profile }) {
   const name = profile?.name || 'Arjun Kumar';
@@ -19,7 +18,7 @@ export default function Topbar({ profile }) {
           <Search size={15} className="text-slate-400" />
           <input className="bg-transparent text-sm outline-none w-full" placeholder="Search (Leads, Contacts, Conversations...)" />
         </div>
-        <NotificationBell />
+        <Bell size={18} className="text-slate-500" />
         <HelpCircle size={18} className="text-slate-500" />
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-brand text-white grid place-items-center text-xs font-bold">{initials}</div>
