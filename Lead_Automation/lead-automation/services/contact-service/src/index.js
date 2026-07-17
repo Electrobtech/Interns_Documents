@@ -58,6 +58,24 @@ app.delete('/contacts/:id', canDelete, async (req, res) => {
   res.json({ ok: true });
 });
 
+// Bulk-tags every contact matching a real, existing `source` value — used by
+// the Marketing Agent's "Apply Segment Tags" action. Deliberately scoped to
+// an actual contact attribute rather than an AI-guessed match: the agent's
+// audience_segments are free-text personas with no contact_id mapping, so
+// this only ever tags a real, queryable group, never a fabricated one.
+app.post('/contacts/bulk-tag', canWrite, async (req, res) => {
+  const { source, tag } = req.body;
+  if (!source || !tag) return res.status(400).json({ error: 'source and tag required' });
+  const { rows } = await pool.query(
+    `UPDATE contacts SET tags = array_append(tags, $1::text)
+      WHERE organization_id=$2 AND source=$3 AND NOT ($1::text = ANY(tags))
+      RETURNING id`,
+    [tag, req.user.organizationId, source]
+  );
+  logAudit(req, 'contact.bulk_tag', { source, tag, tagged: rows.length });
+  res.json({ tagged: rows.length });
+});
+
 // Leads
 app.get('/leads', async (req, res) => {
   const { rows } = await pool.query(

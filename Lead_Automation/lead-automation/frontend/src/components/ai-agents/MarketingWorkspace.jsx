@@ -298,7 +298,14 @@ export default function MarketingWorkspace() {
             </div>
           )}
 
-          {run.data && <MarketingRunResult out={run.data} />}
+          {run.data && (
+            <MarketingRunResult
+              out={run.data}
+              contacts={Array.isArray(contacts) ? contacts : []}
+              onGenerateIdea={(brief) => run.mutate(brief)}
+              generating={run.isPending}
+            />
+          )}
         </div>
 
         {/* Right sidebar */}

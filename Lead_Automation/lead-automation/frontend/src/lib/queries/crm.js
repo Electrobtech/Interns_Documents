@@ -108,3 +108,31 @@ export function useFindConversationByName() {
     },
   });
 }
+
+// POST /contacts/bulk-tag — { source, tag } — tags every contact with a
+// given real `source` value. Used by the Marketing Agent's "Apply Segment
+// Tags" action.
+export function useBulkTagContacts() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => call('/contacts/bulk-tag', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['contacts', 'list'] }),
+  });
+}
+
+// GET /reviews — { id, source, author, rating, body, reply, created_at }
+export function useReviews() {
+  const { call } = useApi();
+  return useQuery({ queryKey: ['reviews', 'list'], queryFn: () => call('/reviews') });
+}
+
+// PUT /reviews/:id — { reply } — used by the Marketing Agent's "Post Reply" action.
+export function usePostReviewReply() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reply }) => call(`/reviews/${id}`, { method: 'PUT', body: { reply } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reviews', 'list'] }),
+  });
+}

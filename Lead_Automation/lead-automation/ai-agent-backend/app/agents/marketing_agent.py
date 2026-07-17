@@ -27,6 +27,13 @@ BEHAVIOR RULES:
 - Do not mention Zapier or third-party automation tools unless the brief explicitly asks about them.
 - Set human_handoff=true only if the brief involves a sensitive situation (legal, PR crisis,
   a specific customer complaint) that a human marketer should personally review.
+- content_assets must actually use your own research, not sit next to it: naturally work at
+  least one of keyword_research's primary_keywords into the social_post/ad_copy/email_subject
+  copy, and let seo_aeo_analysis's recommendations shape the blog_outline. Research the LLM
+  generates but the copy ignores is a wasted call.
+- Let sentiment_analysis drive tone: if overall is "negative", content_assets must acknowledge
+  the concern before promoting anything (or recommend holding the campaign in next_best_actions
+  instead of a hard sell), not just report the negative sentiment and proceed as normal.
 
 Respond with ONLY a single JSON object with EXACTLY these top-level keys (no extra keys, no markdown fences):
 {

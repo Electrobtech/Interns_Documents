@@ -1,11 +1,12 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Sparkles, Users2, Search, Hash, FileText, Smile,
   MessageSquareReply, TrendingUp, ListChecks, HelpCircle, UserCheck,
-  Mail, Radio, BookOpen, Database, Megaphone,
+  Mail, Radio, BookOpen, Database, Megaphone, Wand2, Tag, Send, CheckCircle2,
 } from 'lucide-react';
 import CreateCampaignFromDraftModal from './CreateCampaignFromDraftModal';
+import { useBulkTagContacts, usePostReviewReply, useReviews } from '@/lib/queries/crm';
 
 /* ── helpers ─────────────────────────────────────────── */
 function isEmpty(v) {
@@ -16,7 +17,7 @@ function isEmpty(v) {
   return false;
 }
 
-function Chip({ children, tone = 'slate' }) {
+function Chip({ children, tone = 'slate', onClick, title }) {
   const tones = {
     slate:   'bg-slate-100 text-slate-600',
     blue:    'bg-blue-50 text-blue-700',
@@ -24,10 +25,162 @@ function Chip({ children, tone = 'slate' }) {
     amber:   'bg-amber-50 text-amber-700',
     violet:  'bg-violet-50 text-violet-700',
   };
+  const cls = `inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full mr-1.5 mb-1.5 ${tones[tone]}`;
+  if (!onClick) return <span className={cls}>{children}</span>;
   return (
-    <span className={`inline-flex items-center text-[11px] font-semibold px-2.5 py-1 rounded-full mr-1.5 mb-1.5 ${tones[tone]}`}>
-      {children}
-    </span>
+    <button type="button" onClick={onClick} title={title} className={`${cls} hover:brightness-95 transition-all cursor-pointer`}>
+      <Wand2 size={10} /> {children}
+    </button>
+  );
+}
+
+function slugTag(name) {
+  return (name || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'segment';
+}
+
+/* Bulk-tags contacts by a real, existing `source` value — the AI segment is
+   a free-text persona with no contact_id mapping, so the user picks which
+   actual audience (a real source, not a guessed match) gets the tag. */
+function TagSegmentControl({ segment, contacts }) {
+  const bulkTag = useBulkTagContacts();
+  const [open, setOpen] = useState(false);
+  const [source, setSource] = useState('');
+  const [tag, setTag] = useState(slugTag(segment.name));
+  const [result, setResult] = useState(null);
+
+  const sources = useMemo(() => {
+    const set = new Set((contacts || []).map((c) => c.source).filter(Boolean));
+    return Array.from(set);
+  }, [contacts]);
+
+  if (result != null) {
+    return (
+      <p className="text-[11px] text-emerald-600 font-semibold mt-1.5 flex items-center gap-1.5">
+        <CheckCircle2 size={11} /> Tagged {result} contact{result === 1 ? '' : 's'} with "{tag}"
+      </p>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 mt-1.5"
+      >
+        <Tag size={11} /> Tag Contacts
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 p-2.5 bg-white rounded-lg border border-slate-200 space-y-2">
+      {sources.length === 0 ? (
+        <p className="text-[11px] text-slate-400">No contact sources found to tag yet.</p>
+      ) : (
+        <>
+          <div className="flex items-center gap-2">
+            <select
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              className="input-premium py-1.5 text-[11px] flex-1"
+            >
+              <option value="">Which real audience?</option>
+              {sources.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <input
+              value={tag}
+              onChange={(e) => setTag(e.target.value)}
+              className="input-premium py-1.5 text-[11px] flex-1"
+              placeholder="tag name"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!source || !tag.trim() || bulkTag.isPending}
+              onClick={async () => {
+                const res = await bulkTag.mutateAsync({ source, tag: tag.trim() });
+                setResult(res.tagged);
+              }}
+              className="btn-emerald btn-sm"
+            >
+              {bulkTag.isPending ? 'Tagging…' : 'Apply Tag'}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} className="btn-ghost btn-sm">Cancel</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* Attaches a generic AI-drafted reply scenario to a real, existing review —
+   the agent's review_replies are scenario templates, not tied to a specific
+   review_id, so the user picks which real review it answers. */
+function PostReplyControl({ reply }) {
+  const { data: reviews } = useReviews();
+  const post = usePostReviewReply();
+  const [open, setOpen] = useState(false);
+  const [reviewId, setReviewId] = useState('');
+  const [posted, setPosted] = useState(false);
+
+  const candidates = useMemo(
+    () => (Array.isArray(reviews) ? reviews.filter((r) => !r.reply) : []),
+    [reviews],
+  );
+
+  if (posted) {
+    return (
+      <p className="text-[11px] text-emerald-600 font-semibold mt-2 flex items-center gap-1.5">
+        <CheckCircle2 size={11} /> Posted as reply
+      </p>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-teal-600 hover:text-teal-700 mt-2"
+      >
+        <Send size={11} /> Post Reply
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 p-2.5 bg-white rounded-lg border border-slate-200 space-y-2">
+      {candidates.length === 0 ? (
+        <p className="text-[11px] text-slate-400">No unreplied reviews found in Reviews & Social.</p>
+      ) : (
+        <>
+          <select value={reviewId} onChange={(e) => setReviewId(e.target.value)} className="input-premium py-1.5 text-[11px] w-full">
+            <option value="">Which review?</option>
+            {candidates.map((r) => (
+              <option key={r.id} value={r.id}>
+                {(r.author || 'Anonymous')} · {r.rating ? `${r.rating}★` : ''} · {(r.body || '').slice(0, 40)}
+              </option>
+            ))}
+          </select>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!reviewId || post.isPending}
+              onClick={async () => {
+                await post.mutateAsync({ id: reviewId, reply: reply.reply });
+                setPosted(true);
+              }}
+              className="btn-emerald btn-sm"
+            >
+              {post.isPending ? 'Posting…' : 'Confirm & Post'}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} className="btn-ghost btn-sm">Cancel</button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -47,9 +200,14 @@ function SectionCard({ icon: Icon, title, accent = 'from-blue-50 to-indigo-100',
 }
 
 /* ── main export ─────────────────────────────────────── */
-export default function MarketingRunResult({ out }) {
+export default function MarketingRunResult({ out, contacts = [], onGenerateIdea, generating = false }) {
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   if (!out) return null;
+
+  const generateIdea = (prefix, text) => {
+    if (!onGenerateIdea || !text) return;
+    onGenerateIdea(`${prefix} "${text}" for our next channel post or broadcast.`);
+  };
 
   const hasContentToExecute = !isEmpty(out.content_assets) || !isEmpty(out.campaign_summary);
 
@@ -89,6 +247,7 @@ export default function MarketingRunResult({ out }) {
               {seg.rationale && (
                 <p className="text-[11px] text-slate-400 mt-1.5 italic border-t border-slate-100 pt-1.5">{seg.rationale}</p>
               )}
+              <TagSegmentControl segment={seg} contacts={contacts} />
             </div>
           ))}
         </div>
@@ -157,8 +316,22 @@ export default function MarketingRunResult({ out }) {
         {out.seo_aeo_analysis?.recommendations?.length > 0 && (
           <ul className="space-y-1.5">
             {out.seo_aeo_analysis.recommendations.map((r, i) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-slate-500">
-                <span className="text-sky-400 mt-0.5">•</span>{r}
+              <li key={i} className="flex items-start justify-between gap-2 text-xs text-slate-500 group">
+                <span className="flex items-start gap-2 min-w-0">
+                  <span className="text-sky-400 mt-0.5 shrink-0">•</span>
+                  <span>{r}</span>
+                </span>
+                {onGenerateIdea && (
+                  <button
+                    type="button"
+                    disabled={generating}
+                    onClick={() => generateIdea('Write a post idea based on this SEO/AEO recommendation:', r)}
+                    title="Generate a post idea from this recommendation"
+                    className="opacity-0 group-hover:opacity-100 shrink-0 text-sky-500 hover:text-sky-700 transition-opacity disabled:opacity-40"
+                  >
+                    <Wand2 size={12} />
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -172,13 +345,25 @@ export default function MarketingRunResult({ out }) {
         {out.keyword_research?.primary_keywords?.length > 0 && (
           <div className="mb-3">
             <p className="text-[11px] font-bold text-slate-400 uppercase mb-2">Primary Keywords</p>
-            <div>{out.keyword_research.primary_keywords.map((k, i) => <Chip key={i} tone="blue">{k}</Chip>)}</div>
+            <div>{out.keyword_research.primary_keywords.map((k, i) => (
+              <Chip key={i} tone="blue"
+                onClick={onGenerateIdea && !generating ? () => generateIdea('Write a post idea targeting the keyword', k) : undefined}
+                title="Generate a post idea targeting this keyword">
+                {k}
+              </Chip>
+            ))}</div>
           </div>
         )}
         {out.keyword_research?.long_tail_keywords?.length > 0 && (
           <div className="mb-3">
             <p className="text-[11px] font-bold text-slate-400 uppercase mb-2">Long-tail Keywords</p>
-            <div>{out.keyword_research.long_tail_keywords.map((k, i) => <Chip key={i} tone="violet">{k}</Chip>)}</div>
+            <div>{out.keyword_research.long_tail_keywords.map((k, i) => (
+              <Chip key={i} tone="violet"
+                onClick={onGenerateIdea && !generating ? () => generateIdea('Write a post idea targeting the keyword', k) : undefined}
+                title="Generate a post idea targeting this keyword">
+                {k}
+              </Chip>
+            ))}</div>
           </div>
         )}
         {out.keyword_research?.notes && (
@@ -217,6 +402,7 @@ export default function MarketingRunResult({ out }) {
               </div>
               <div className="px-4 py-3">
                 <p className="text-sm text-slate-600 leading-relaxed">{r.reply}</p>
+                <PostReplyControl reply={r} />
               </div>
             </div>
           ))}
