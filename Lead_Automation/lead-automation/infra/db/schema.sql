@@ -380,3 +380,119 @@ CREATE TABLE IF NOT EXISTS throttle_counters (
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (scope_key, bucket, limit_type)
 );
+
+-- ---------- LinkedIn integration (services/linkedin-service) ----------
+-- Single-connection model for now (user_id defaults to 'default_user' in
+-- the service, not yet organization-scoped like the rest of the schema).
+
+CREATE TABLE IF NOT EXISTS oauth_states (
+  state       TEXT PRIMARY KEY,
+  used        BOOLEAN NOT NULL DEFAULT false,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_connections (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id           TEXT NOT NULL UNIQUE,
+  access_token      TEXT NOT NULL,
+  refresh_token     TEXT,
+  expires_at        TIMESTAMPTZ NOT NULL,
+  linkedin_user_id  TEXT,
+  linkedin_org_urn  TEXT,
+  display_name      TEXT,
+  granted_scopes    TEXT[] NOT NULL DEFAULT '{}',
+  status            TEXT NOT NULL DEFAULT 'healthy',
+  last_error        TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_lead_forms (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         TEXT NOT NULL,
+  form_urn        TEXT NOT NULL,
+  name            TEXT,
+  new_lead_count  INT NOT NULL DEFAULT 0,
+  last_synced_at  TIMESTAMPTZ,
+  sync_status     TEXT NOT NULL DEFAULT 'synced',
+  auto_approve    BOOLEAN NOT NULL DEFAULT false,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, form_urn)
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_leads (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  linkedin_lead_id  TEXT NOT NULL UNIQUE,
+  form_urn          TEXT NOT NULL,
+  submitted_at      TIMESTAMPTZ,
+  form_response     JSONB NOT NULL DEFAULT '{}',
+  status            TEXT NOT NULL DEFAULT 'received',
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_campaigns (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id               TEXT NOT NULL,
+  campaign_urn          TEXT NOT NULL,
+  name                  TEXT,
+  sync_status           TEXT NOT NULL DEFAULT 'synced',
+  last_synced_at        TIMESTAMPTZ,
+  spend_to_date_cents   BIGINT NOT NULL DEFAULT 0,
+  error_code            TEXT,
+  error_detail          TEXT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, campaign_urn)
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_campaign_metrics (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         TEXT NOT NULL,
+  campaign_urn    TEXT NOT NULL,
+  date            DATE NOT NULL,
+  impressions     INT NOT NULL DEFAULT 0,
+  clicks          INT NOT NULL DEFAULT 0,
+  ctr             NUMERIC NOT NULL DEFAULT 0,
+  spend_cents     BIGINT NOT NULL DEFAULT 0,
+  leads           INT NOT NULL DEFAULT 0,
+  UNIQUE (user_id, campaign_urn, date)
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_organizations (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         TEXT NOT NULL,
+  org_urn         TEXT,
+  description     TEXT,
+  logo_url        TEXT,
+  follower_count  INT,
+  last_synced_at  TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_approvals (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id           TEXT NOT NULL,
+  type              TEXT NOT NULL,
+  title             TEXT NOT NULL,
+  detail            TEXT,
+  status            TEXT NOT NULL DEFAULT 'pending',
+  payload_preview   JSONB NOT NULL DEFAULT '{}',
+  decision_note     TEXT,
+  decided_by        TEXT,
+  decided_at        TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_sync_logs (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     TEXT NOT NULL,
+  module      TEXT NOT NULL,
+  event       TEXT NOT NULL,
+  status      TEXT NOT NULL,
+  actor_type  TEXT NOT NULL DEFAULT 'system',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_linkedin_approvals_user_status ON linkedin_approvals (user_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_linkedin_sync_logs_user_created ON linkedin_sync_logs (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_linkedin_campaign_metrics_lookup ON linkedin_campaign_metrics (user_id, campaign_urn, date);

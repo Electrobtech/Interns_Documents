@@ -97,15 +97,22 @@ function ScopeRow({ label, scope, status }) {
 
 export default function LinkedInIntegrationPage() {
   const [connection, setConnection] = useState("disconnected");
+  const [statusData, setStatusData] = useState(null);
   const [approvals, setApprovals] = useState([]);
   const [logs, setLogs] = useState([]);
   const [forms, setForms] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
+  const [metrics, setMetrics] = useState(null);
 
   const chartData = useMemo(() => {
-    const base = [1.6,1.7,1.9,2.1,2.0,1.8,2.2,2.4,2.1,1.9,2.3,2.5,2.2,2.04];
-    return base.map((v, i) => ({ day: `${i+1}`, ctr: v }));
-  }, []);
+    return (metrics?.daily || []).map((d) => ({ day: String(d.date).slice(5, 10), ctr: Number(d.ctr) }));
+  }, [metrics]);
+
+  const tokenDaysLeft = useMemo(() => {
+    if (!statusData?.token_expires_at) return null;
+    const ms = new Date(statusData.token_expires_at).getTime() - Date.now();
+    return Math.max(0, Math.round(ms / 86_400_000));
+  }, [statusData]);
 
   const connect = async () => {
     try {
@@ -164,8 +171,23 @@ export default function LinkedInIntegrationPage() {
       const res = await fetch(`${API}/api/v1/integrations/linkedin/status`);
       const data = await res.json();
       setConnection(data.status);
+      setStatusData(data);
     } catch (error) {
       console.error('Status error:', error);
+    }
+  };
+
+  const fetchMetrics = async () => {
+    try {
+      const to = new Date();
+      const from = new Date(to.getTime() - 14 * 86_400_000);
+      const res = await fetch(
+        `${API}/api/v1/integrations/linkedin/campaigns/metrics?from=${from.toISOString().slice(0, 10)}&to=${to.toISOString().slice(0, 10)}`
+      );
+      const data = await res.json();
+      setMetrics(data);
+    } catch (error) {
+      console.error('Metrics error:', error);
     }
   };
 
@@ -215,6 +237,7 @@ export default function LinkedInIntegrationPage() {
     fetchLogs();
     fetchForms();
     fetchCampaigns();
+    fetchMetrics();
   }, []);
 
   const isConnected = connection === "healthy" || connection === "expiring";
@@ -259,8 +282,14 @@ export default function LinkedInIntegrationPage() {
               </div>
               {isConnected || connection === "error" ? (
                 <p className="text-xs" style={{ color: COLORS.textSecondary }}>
-                  Connected as <span style={{ fontWeight: 500, color: COLORS.textPrimary }}>Acme Marketing</span> · Organization page ·
-                  {connection === "expiring" ? " token expires in 3 days" : connection === "error" ? " last successful sync 15 hours ago" : " token valid for 47 days"}
+                  Connected as <span style={{ fontWeight: 500, color: COLORS.textPrimary }}>{statusData?.display_name || 'LinkedIn organization'}</span> · Organization page ·
+                  {connection === "expiring" && tokenDaysLeft != null
+                    ? ` token expires in ${tokenDaysLeft} day${tokenDaysLeft === 1 ? '' : 's'}`
+                    : connection === "error"
+                    ? " reconnect to resume syncing"
+                    : tokenDaysLeft != null
+                    ? ` token valid for ${tokenDaysLeft} days`
+                    : ""}
                 </p>
               ) : (
                 <p className="text-xs" style={{ color: COLORS.textSecondary }}>Connect an account to start syncing leads, campaigns, and page data.</p>
@@ -396,11 +425,11 @@ export default function LinkedInIntegrationPage() {
         <Panel title="Campaign & ad performance" description="Aggregated across connected LinkedIn ad accounts, last 14 days" className="mb-5">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
             {[
-              ["Impressions", "482,300"],
-              ["Clicks", "9,840"],
-              ["CTR", "2.04%"],
-              ["Spend", "$46,680"],
-              ["Leads captured", "162"],
+              ["Impressions", metrics?.summary ? metrics.summary.impressions.toLocaleString() : "—"],
+              ["Clicks", metrics?.summary ? metrics.summary.clicks.toLocaleString() : "—"],
+              ["CTR", metrics?.summary ? `${metrics.summary.ctr}%` : "—"],
+              ["Spend", metrics?.summary ? `$${(metrics.summary.spend_cents / 100).toLocaleString()}` : "—"],
+              ["Leads captured", metrics?.summary ? metrics.summary.leads.toLocaleString() : "—"],
             ].map(([label, value]) => (
               <div key={label} className="rounded-lg p-3" style={{ background: COLORS.bg }}>
                 <p className="text-[11px]" style={{ color: COLORS.textTertiary }}>{label}</p>
