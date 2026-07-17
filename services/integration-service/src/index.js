@@ -9,7 +9,9 @@ const webhookRoutes = require("./routes/webhook");
 const authRoutes = require("./routes/auth");
 const instagramRoutes = require("./routes/instagram");
 const facebookRoutes = require("./routes/facebook");
+const whatsappRoutes = require("./routes/whatsapp");
 const { startTokenRefreshScheduler } = require('./services/tokenRefreshJob');
+const { startWebhookWorker } = require('./services/webhookWorker');
 
 const app = express();
 
@@ -58,6 +60,7 @@ app.use(authenticate);
 
 app.use('/instagram', instagramRoutes);
 app.use('/facebook', facebookRoutes);
+app.use('/whatsapp', whatsappRoutes);
 
 const asJson = (v) => (v == null || v === '' ? null : typeof v === 'string' ? v : JSON.stringify(v));
 
@@ -225,4 +228,5 @@ const PORT = process.env.INTEGRATION_PORT || 4009;
 app.listen(PORT, () => {
   console.log(`integration-service on :${PORT}`);
   startTokenRefreshScheduler();
+  startWebhookWorker();
 });

@@ -16,6 +16,7 @@ const router = express.Router();
 const { GRAPH_URL, withAuth, getAppSecretProof, validateToken } = require('../services/graphApi');
 const { mapMetaError } = require('../services/errorMapper');
 const { getConnectedCredentials } = require('../services/credentials');
+const metaService = require('../services/metaService');
 
 /**
  * POST /facebook/publish
@@ -116,6 +117,102 @@ router.post('/publish-photo', async (req, res) => {
     res.json({ success: true, photoId: photoData.id, postId: photoData.post_id });
   } catch (err) {
     console.error('Facebook photo publish route error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /facebook/publish-video
+ * Body: { "videoUrl": "https://...", "description": "optional caption/description" }
+ * Posts a video to the Page's feed. Meta processes the video asynchronously
+ * after upload, but /{page_id}/videos (unlike IG's container flow) accepts
+ * the post as complete immediately — no separate publish step needed.
+ */
+router.post('/publish-video', async (req, res) => {
+  const { videoUrl, description } = req.body;
+
+  if (!videoUrl) {
+    return res.status(400).json({ error: 'videoUrl is required' });
+  }
+
+  try {
+    const creds = await getConnectedCredentials(req.user.organizationId);
+    const { page_id, page_access_token } = creds;
+
+    if (!page_id || !page_access_token) {
+      return res.status(400).json({ error: 'Missing Page credentials in saved integration.' });
+    }
+
+    const validation = await validateToken(page_access_token);
+    if (!validation.valid) {
+      console.warn('Facebook token failed validation before video publish:', validation.raw);
+      return res.status(401).json({
+        error: 'Facebook connection is no longer valid. Please reconnect via /auth/connect-url.',
+      });
+    }
+
+    const videoRes = await fetch(`${GRAPH_URL}/${page_id}/videos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: withAuth({ file_url: videoUrl, description: description || '' }, page_access_token),
+    });
+    const videoData = await videoRes.json();
+
+    if (videoData.error) {
+      console.error('Facebook video post failed:', videoData.error);
+      const mapped = mapMetaError(videoData.error);
+      return res.status(mapped.httpStatus).json(mapped);
+    }
+
+    console.log('FACEBOOK VIDEO ID:', videoData.id);
+    res.json({ success: true, videoId: videoData.id });
+  } catch (err) {
+    console.error('Facebook video publish route error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /facebook/reply-comment
+ * Body: { "commentId": "1234_5678", "message": "Thanks for your comment!" }
+ * Replies to a comment on a Page post.
+ */
+router.post('/reply-comment', async (req, res) => {
+  const { commentId, message } = req.body;
+
+  if (!commentId || !message) {
+    return res.status(400).json({ error: 'commentId and message are both required.' });
+  }
+
+  try {
+    const creds = await getConnectedCredentials(req.user.organizationId);
+    const result = await metaService.replyToComment(creds, commentId, message);
+    res.json({ success: true, replyId: result.id, raw: result });
+  } catch (err) {
+    console.error('Facebook reply-comment route error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /facebook/send-message
+ * Body: { "recipientId": "PSID...", "text": "Hi there!" }
+ * Sends a Messenger DM reply. recipientId is the PSID from an inbound
+ * message/webhook (see messageNormalizer.js).
+ */
+router.post('/send-message', async (req, res) => {
+  const { recipientId, text } = req.body;
+
+  if (!recipientId || !text) {
+    return res.status(400).json({ error: 'recipientId and text are both required.' });
+  }
+
+  try {
+    const creds = await getConnectedCredentials(req.user.organizationId);
+    const result = await metaService.sendPageMessage(creds, recipientId, text);
+    res.json({ success: true, messageId: result.message_id, raw: result });
+  } catch (err) {
+    console.error('Facebook send-message route error:', err);
     res.status(500).json({ error: err.message });
   }
 });

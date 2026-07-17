@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Inbox, Users, Bot, Megaphone, ShoppingCart,
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
-  MessageSquare, Smartphone, Globe, Phone, Mail,
+  MessageSquare, Smartphone, Globe, Phone, Mail, Clapperboard,
 } from 'lucide-react';
 
 const platform = [
@@ -12,6 +12,7 @@ const platform = [
   ['Unified Inbox', Inbox, '/inbox'],
   ['Contacts & Leads', Users, '/contacts'],
   ['AI Agents & Automation', Bot, '/ai-agents'],
+  ['Social Studio', Clapperboard, '/social-studio'],
   ['Campaigns & Broadcasts', Megaphone, '/campaigns'],
   ['Ecommerce & Revenue', ShoppingCart, '/ecommerce'],
   ['Reviews & Social', Star, '/reviews'],

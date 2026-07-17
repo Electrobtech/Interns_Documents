@@ -9,6 +9,29 @@ app.use(authenticate);
 
 app.get('/health', (_req, res) => res.json({ service: 'review', ok: true }));
 
+const INTEGRATION_SERVICE_URL = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
+
+/**
+ * Actually posts a reply to the underlying Facebook/Instagram comment via
+ * integration-service, using the caller's own JWT so its multi-tenant
+ * scoping still applies. Returns silently (no-op) for sources we don't
+ * have a live connector for (e.g. linkedin) or rows with no captured
+ * external_comment_id (e.g. manually-entered comments).
+ */
+async function deliverCommentReply(authHeader, row, message) {
+  if (!row.external_comment_id) return { delivered: false, reason: 'No external comment id on file for this row.' };
+
+  const path = row.source === 'instagram' ? '/instagram/reply-comment' : '/facebook/reply-comment';
+  const resp = await fetch(`${INTEGRATION_SERVICE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+    body: JSON.stringify({ commentId: row.external_comment_id, message }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || data.message || 'Failed to post reply.');
+  return { delivered: true, raw: data };
+}
+
 // ---------- Reviews ----------
 app.get('/reviews', async (req, res) => {
   const { rows } = await pool.query(
@@ -82,13 +105,61 @@ app.get('/social/:id', async (req, res) => {
 
 app.put('/social/:id', async (req, res) => {
   const { source, author, body, reply } = req.body;
+
+  const { rows: existingRows } = await pool.query(
+    `SELECT * FROM social_comments WHERE id=$1 AND organization_id=$2`,
+    [req.params.id, req.user.organizationId]
+  );
+  if (!existingRows.length) return res.json({});
+  const existing = existingRows[0];
+
+  // If `reply` is being set/changed, actually post it to Meta first — no
+  // point saving a reply in our own DB that was never really sent.
+  let deliveryNote = null;
+  if (reply && reply !== existing.reply) {
+    try {
+      const result = await deliverCommentReply(req.headers.authorization, existing, reply);
+      if (!result.delivered) deliveryNote = result.reason;
+    } catch (err) {
+      console.error('Comment reply delivery failed:', err.message);
+      return res.status(502).json({ error: `Could not post reply: ${err.message}` });
+    }
+  }
+
   const { rows } = await pool.query(
     `UPDATE social_comments SET source=COALESCE($1,source), author=COALESCE($2,author),
             body=COALESCE($3,body), reply=COALESCE($4,reply)
       WHERE id=$5 AND organization_id=$6 RETURNING *`,
     [source, author, body, reply, req.params.id, req.user.organizationId]
   );
-  res.json(rows[0] || {});
+  res.json({ ...rows[0], _deliveryNote: deliveryNote });
+});
+
+// Explicit reply action (used by the inbox-style "Reply" UI) — same
+// delivery path as PUT /social/:id with a `reply`, exposed as its own
+// endpoint for clients that don't want to resend the whole row.
+app.post('/social/:id/reply', async (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ error: 'message is required.' });
+
+  const { rows: existingRows } = await pool.query(
+    `SELECT * FROM social_comments WHERE id=$1 AND organization_id=$2`,
+    [req.params.id, req.user.organizationId]
+  );
+  if (!existingRows.length) return res.status(404).json({ error: 'Not found' });
+
+  try {
+    await deliverCommentReply(req.headers.authorization, existingRows[0], message);
+  } catch (err) {
+    console.error('Comment reply delivery failed:', err.message);
+    return res.status(502).json({ error: `Could not post reply: ${err.message}` });
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE social_comments SET reply=$1 WHERE id=$2 AND organization_id=$3 RETURNING *`,
+    [message, req.params.id, req.user.organizationId]
+  );
+  res.json(rows[0]);
 });
 
 app.delete('/social/:id', async (req, res) => {

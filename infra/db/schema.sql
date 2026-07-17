@@ -95,14 +95,18 @@ CREATE TABLE IF NOT EXISTS leads (
 
 -- ---------- Conversations & Messages ----------
 CREATE TABLE IF NOT EXISTS conversations (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  contact_id      UUID REFERENCES contacts(id),
-  channel_type    TEXT NOT NULL,
-  assigned_to     UUID REFERENCES users(id),
-  status          TEXT DEFAULT 'open',     -- open | pending | missed | campaign | closed
-  last_message_at TIMESTAMPTZ DEFAULT now(),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  contact_id          UUID REFERENCES contacts(id),
+  channel_type        TEXT NOT NULL,
+  assigned_to         UUID REFERENCES users(id),
+  status              TEXT DEFAULT 'open',     -- open | pending | missed | campaign | closed
+  last_message_at     TIMESTAMPTZ DEFAULT now(),
+  -- Platform-specific thread/recipient id (WhatsApp wa_id, IG-scoped ID,
+  -- Messenger PSID) — needed to actually deliver a reply to Meta, not just
+  -- log it in our own DB.
+  external_contact_id TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -112,6 +116,9 @@ CREATE TABLE IF NOT EXISTS messages (
   direction       TEXT NOT NULL,           -- inbound | outbound
   body            TEXT,
   sender          TEXT,
+  media_url       TEXT,
+  media_type      TEXT,                    -- image | video | document
+  external_id     TEXT,                    -- Meta's message id, for outbound sends
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -142,6 +149,9 @@ CREATE TABLE IF NOT EXISTS campaigns (
   type            TEXT DEFAULT 'broadcast',
   channel_type    TEXT,
   message_body    TEXT,
+  media_url       TEXT,                    -- optional image/video attachment
+  media_type      TEXT,                    -- image | video
+  template_name   TEXT,                    -- pre-approved WhatsApp template, if any
   cta             JSONB,
   scheduled_at    TIMESTAMPTZ,
   status          TEXT DEFAULT 'draft',    -- draft | scheduled | sent
@@ -158,7 +168,8 @@ CREATE TABLE IF NOT EXISTS campaign_logs (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   campaign_id     UUID REFERENCES campaigns(id) ON DELETE CASCADE,
   contact_id      UUID REFERENCES contacts(id),
-  event           TEXT,                    -- delivered | opened | clicked | replied | converted
+  event           TEXT,                    -- delivered | opened | clicked | replied | converted | failed
+  detail          TEXT,                    -- error message, when event = 'failed'
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -175,13 +186,15 @@ CREATE TABLE IF NOT EXISTS reviews (
 );
 
 CREATE TABLE IF NOT EXISTS social_comments (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  source          TEXT,                    -- facebook | linkedin
-  author          TEXT,
-  body            TEXT,
-  reply           TEXT,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  source              TEXT,                    -- facebook | instagram | linkedin
+  author              TEXT,
+  body                TEXT,
+  reply               TEXT,
+  external_comment_id TEXT,                    -- Meta's comment id — required to actually reply
+  post_id             TEXT,                    -- the post/media the comment is on
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ---------- Ecommerce & Revenue ----------

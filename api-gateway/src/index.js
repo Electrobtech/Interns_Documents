@@ -19,7 +19,24 @@ const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:401
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
 
 // Route table — the single public entry point for the frontend.
+//
+// NOTE: integration-service mounts its own OAuth sub-routes under /auth
+// (see services/integration-service/src/routes/auth.js: /auth/connect-url,
+// /auth/facebook, /auth/facebook/callback, /auth/refresh-tokens,
+// /auth/deauthorize, /auth/data-deletion*) — distinct from auth-service's
+// /auth/login and /auth/register. Express matches app.use() middleware in
+// registration order and the first match wins, so these more specific
+// /auth/* entries MUST be listed before the generic '/auth' -> AUTH entry
+// below, or they'd be swallowed by it and 404 against auth-service instead.
 const routes = [
+  { path: '/auth/connect-url',    target: INTEGRATION },
+  { path: '/auth/facebook',       target: INTEGRATION }, // covers /auth/facebook and /auth/facebook/callback
+  { path: '/auth/refresh-tokens', target: INTEGRATION },
+  { path: '/auth/deauthorize',    target: INTEGRATION },
+  { path: '/auth/data-deletion',  target: INTEGRATION }, // covers /auth/data-deletion and /auth/data-deletion-status
+  { path: '/instagram',       target: INTEGRATION },
+  { path: '/facebook',        target: INTEGRATION },
+  { path: '/whatsapp',        target: INTEGRATION },
   { path: '/auth',            target: AUTH },
   { path: '/conversations',   target: INBOX },
   { path: '/contacts',        target: CONTACT },

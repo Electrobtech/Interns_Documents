@@ -1,7 +1,7 @@
 /**
  * src/controllers/webhookController.js
  *
- * Handles Meta's webhook system for Instagram:
+ * Handles Meta's webhook system for Instagram/Facebook/WhatsApp:
  *   - GET  /webhook/meta  -> one-time verification handshake
  *   - POST /webhook/meta  -> incoming events (messages, comments, etc.)
  *
@@ -19,9 +19,7 @@
  */
 
 const crypto = require('crypto');
-const { normalizeMetaEvent } = require('../services/messageNormalizer');
-const metaService = require('../services/metaService');
-const { getCredentialsByMetaId } = require('../services/credentials');
+const { enqueueWebhookEvent } = require('../services/webhookQueue');
 
 const { META_WEBHOOK_VERIFY_TOKEN, META_APP_SECRET } = process.env;
 
@@ -45,8 +43,11 @@ function verify(req, res) {
 
 /**
  * POST /webhook/meta
- * Acknowledge immediately (Meta retries on timeout/non-200), then
- * process events and send auto-replies asynchronously.
+ * Acknowledge immediately (Meta retries on timeout/non-200), validate the
+ * signature, then enqueue each entry for async processing and return.
+ * The actual normalize -> lookup credentials -> send-reply work happens in
+ * services/webhookWorker.js, off the request/response cycle entirely, with
+ * BullMQ retry on failure.
  */
 async function receiveEvent(req, res) {
   res.sendStatus(200);
@@ -58,49 +59,19 @@ async function receiveEvent(req, res) {
 
   const body = req.body;
 
-  if (body.object !== 'page' && body.object !== 'instagram') {
+  if (body.object !== 'page' && body.object !== 'instagram' && body.object !== 'whatsapp_business_account') {
     return;
   }
 
   try {
     for (const entry of body.entry || []) {
       // entry.id is the Page ID (or IG Business Account ID, depending on
-      // object type) that this event belongs to — used to resolve which
-      // organization owns this connection.
-      const events = normalizeMetaEvent(entry, body.object);
-
-      for (const event of events) {
-        console.log('Normalized incoming event:', event);
-
-        if (event.type === 'message') {
-          await handleIncomingMessage(entry.id, event);
-        }
-
-        // TODO: handle event.type === 'comment' with metaService.replyToComment()
-        // once comment auto-replies are needed.
-      }
+      // object type) that this event belongs to — resolved to an
+      // organization's credentials later, inside the worker.
+      await enqueueWebhookEvent(entry, body.object);
     }
   } catch (err) {
-    console.error('Error processing webhook event:', err);
-  }
-}
-
-/**
- * Sends an automatic reply for an incoming DM.
- *
- * TODO: replace the hardcoded replyText with a real call to ai-service,
- * e.g.:
- *   const replyText = await aiService.generateReply(event.text);
- */
-async function handleIncomingMessage(metaEntryId, event) {
-  const replyText = `Thanks for your message! We received: "${event.text}"`;
-
-  try {
-    const { credentials } = await getCredentialsByMetaId(metaEntryId);
-    const result = await metaService.sendMessage(credentials, event.senderId, replyText);
-    console.log('Auto-reply sent:', result);
-  } catch (err) {
-    console.error('Failed to send auto-reply:', err.message);
+    console.error('Error enqueueing webhook event:', err);
   }
 }
 

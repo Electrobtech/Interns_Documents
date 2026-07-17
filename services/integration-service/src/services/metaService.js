@@ -69,6 +69,36 @@ async function sendMessage(credentials, recipientId, text) {
 }
 
 /**
+ * Send a Messenger DM reply from the Page (as opposed to sendMessage above,
+ * which sends from the Instagram Business Account). recipientId is the
+ * Messenger PSID from the incoming webhook event.
+ */
+async function sendPageMessage(credentials, recipientId, text) {
+  const { page_id, page_access_token } = credentials;
+
+  const resp = await fetch(`${GRAPH_URL}/${page_id}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: withAuth(
+      {
+        recipient: JSON.stringify({ id: recipientId }),
+        message: JSON.stringify({ text }),
+        messaging_type: 'RESPONSE',
+      },
+      page_access_token
+    ),
+  });
+
+  const data = await resp.json();
+
+  if (!resp.ok || data.error) {
+    throw new Error(`Failed to send Page message: ${JSON.stringify(data)}`);
+  }
+
+  return data; // { recipient_id, message_id }
+}
+
+/**
  * Reply to a comment on a post/media.
  * commentId comes from the normalized webhook event's conversationId
  * for type: 'comment'.
@@ -94,5 +124,6 @@ async function replyToComment(credentials, commentId, text) {
 module.exports = {
   getInstagramProfile,
   sendMessage,
+  sendPageMessage,
   replyToComment,
 };

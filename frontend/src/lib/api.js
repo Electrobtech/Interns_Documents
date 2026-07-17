@@ -9,6 +9,17 @@ export async function api(path, { method = 'GET', body, token } = {}) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    // Some services (e.g. integration-service's publish routes) return a
+    // structured shape ({category, message, retryable, httpStatus}) rather
+    // than {error}. Keep .message behavior unchanged for existing callers,
+    // but also attach the full body + status so callers that need the
+    // extra fields (e.g. "retryable") can read err.data.
+    const err = new Error(errBody.error || errBody.message || res.statusText);
+    err.status = res.status;
+    err.data = errBody;
+    throw err;
+  }
   return res.json();
 }

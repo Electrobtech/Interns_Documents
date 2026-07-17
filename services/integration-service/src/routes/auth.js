@@ -21,10 +21,11 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const { pool, authenticate } = require('@lead/shared');
+const { pool, authenticate, withTenantScope, withSystemAccess } = require('@lead/shared');
 const { getRedisClient } = require('../services/redisClient');
 const { getAppSecretProof, parseSignedRequest } = require('../services/graphApi');
 const { refreshExpiringTokens } = require('../services/tokenRefreshJob');
+const { encryptCredentialTokens } = require('../services/crypto');
 
 // Only used when /auth/facebook is hit directly without going through the
 // protected /auth/connect-url flow (e.g. manual testing via browser).
@@ -209,12 +210,17 @@ router.get('/facebook/callback', async (req, res) => {
       meta_user_id: metaUserId,
     };
 
-    const { rows } = await pool.query(
+    // Encrypt the two token fields at rest (AES-256-GCM, see services/crypto.js).
+    // Everything else (page_id, page_name, ig account id, expiry, meta_user_id)
+    // stays plaintext so it remains queryable/displayable without decrypting.
+    const storedCredentials = encryptCredentialTokens(credentials);
+
+    const { rows } = await withTenantScope(organizationId, () => pool.query(
       `INSERT INTO integrations (organization_id, provider, status, credentials)
        VALUES ($1, $2, $3, $4)
        RETURNING id, provider, status, created_at`,
-      [organizationId, 'instagram', 'connected', JSON.stringify(credentials)]
-    );
+      [organizationId, 'instagram', 'connected', JSON.stringify(storedCredentials)]
+    ));
 
     console.log('SAVED INTEGRATION ROW:', rows[0], 'for organization:', organizationId);
 
@@ -260,12 +266,12 @@ router.post('/deauthorize', async (req, res) => {
   console.log('Deauthorize callback received for user_id:', payload.user_id);
 
   try {
-    const result = await pool.query(
+    const result = await withSystemAccess(() => pool.query(
       `UPDATE integrations SET status = 'disconnected'
        WHERE provider = 'instagram' AND status = 'connected'
          AND credentials->>'meta_user_id' = $1`,
       [payload.user_id]
-    );
+    ));
     console.log(`Marked ${result.rowCount} integration(s) as disconnected for meta_user_id ${payload.user_id}.`);
   } catch (err) {
     console.error('Failed to update integration status on deauthorize:', err);
@@ -293,10 +299,10 @@ router.post('/data-deletion', async (req, res) => {
   console.log('Data deletion requested for user_id:', payload.user_id, 'confirmation:', confirmationCode);
 
   try {
-    const result = await pool.query(
+    const result = await withSystemAccess(() => pool.query(
       `DELETE FROM integrations WHERE provider = 'instagram' AND credentials->>'meta_user_id' = $1`,
       [payload.user_id]
-    );
+    ));
     console.log(`Deleted ${result.rowCount} integration(s) for meta_user_id ${payload.user_id}.`);
   } catch (err) {
     console.error('Failed to delete data on data-deletion callback:', err);

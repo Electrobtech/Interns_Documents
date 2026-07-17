@@ -1,174 +1,58 @@
 /**
- * src/routes/facebook.js
+ * src/services/webhookQueue.js
  *
- * Publishing + reading routes for Facebook Pages, using the Page access
- * token saved earlier during OAuth (see routes/auth.js). Reuses the same
- * `integrations` row (provider: 'instagram') since both Page and IG
- * credentials come from the same Facebook Login flow.
+ * BullMQ queue for incoming Meta webhook events (Instagram/Facebook DMs
+ * and comments), backed by the same Redis instance used elsewhere in this
+ * service (see services/redisClient.js — that one uses the `redis` package
+ * for OAuth state; BullMQ requires ioredis, hence a separate connection
+ * here, both pointed at the same REDIS_URL).
  *
- * Mounted in index.js AFTER app.use(authenticate), so req.user.organizationId
- * is always available here — that's what scopes every lookup to the
- * calling organization's own connection.
+ * Flow:
+ *   controllers/webhookController.js -> receiveEvent() validates the
+ *   signature and calls enqueueWebhookEvent() for each entry, then
+ *   returns immediately.
+ *
+ *   services/webhookWorker.js processes jobs off this queue: normalize ->
+ *   look up credentials -> send the auto-reply, with BullMQ's built-in
+ *   retry on failure. Started alongside the server in index.js, same
+ *   pattern as tokenRefreshJob.js's scheduler.
  */
 
-const express = require('express');
-const router = express.Router();
-const { GRAPH_URL, withAuth, getAppSecretProof, validateToken } = require('../services/graphApi');
-const { mapMetaError } = require('../services/errorMapper');
-const { getConnectedCredentials } = require('../services/credentials');
+const { Queue } = require('bullmq');
+const IORedis = require('ioredis');
 
-/**
- * POST /facebook/publish
- * Body: { "message": "some text" }
- * Posts a text post to the Page's feed.
- */
-router.post('/publish', async (req, res) => {
-  const { message } = req.body;
+const QUEUE_NAME = 'meta-webhook-events';
 
-  if (!message) {
-    return res.status(400).json({ error: 'message is required' });
-  }
-
-  try {
-    const creds = await getConnectedCredentials(req.user.organizationId);
-    const { page_id, page_access_token } = creds;
-
-    if (!page_id || !page_access_token) {
-      return res.status(400).json({ error: 'Missing Page credentials in saved integration.' });
-    }
-
-    // Pre-check: confirm the token is still valid before spending a
-    // publish attempt on it — gives a clear "please reconnect" message
-    // instead of a confusing Graph API error if the token was revoked.
-    const validation = await validateToken(page_access_token);
-    if (!validation.valid) {
-      console.warn('Facebook token failed validation before publish:', validation.raw);
-      return res.status(401).json({
-        error: 'Facebook connection is no longer valid. Please reconnect via /auth/connect-url.',
-      });
-    }
-
-    const postRes = await fetch(`${GRAPH_URL}/${page_id}/feed`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: withAuth({ message }, page_access_token),
-    });
-    const postData = await postRes.json();
-
-    if (postData.error) {
-      console.error('Facebook post failed:', postData.error);
-      const mapped = mapMetaError(postData.error);
-      return res.status(mapped.httpStatus).json(mapped);
-    }
-
-    console.log('FACEBOOK POST ID:', postData.id);
-    res.json({ success: true, postId: postData.id });
-  } catch (err) {
-    console.error('Facebook publish route error:', err);
-    res.status(500).json({ error: err.message });
-  }
+// BullMQ needs maxRetriesPerRequest: null on the ioredis connection it's
+// given (its own recommendation - see BullMQ docs on "Connections").
+const connection = new IORedis(process.env.REDIS_URL || 'redis://redis:6379', {
+  maxRetriesPerRequest: null,
 });
 
-/**
- * POST /facebook/publish-photo
- * Body: { "imageUrl": "https://...", "caption": "optional text" }
- * Posts a photo to the Page's feed.
- */
-router.post('/publish-photo', async (req, res) => {
-  const { imageUrl, caption } = req.body;
+connection.on('error', (err) => console.error('[webhook-queue] Redis connection error:', err));
 
-  if (!imageUrl) {
-    return res.status(400).json({ error: 'imageUrl is required' });
-  }
-
-  try {
-    const creds = await getConnectedCredentials(req.user.organizationId);
-    const { page_id, page_access_token } = creds;
-
-    if (!page_id || !page_access_token) {
-      return res.status(400).json({ error: 'Missing Page credentials in saved integration.' });
-    }
-
-    // Pre-check: confirm the token is still valid before spending a
-    // publish attempt on it.
-    const validation = await validateToken(page_access_token);
-    if (!validation.valid) {
-      console.warn('Facebook token failed validation before photo publish:', validation.raw);
-      return res.status(401).json({
-        error: 'Facebook connection is no longer valid. Please reconnect via /auth/connect-url.',
-      });
-    }
-
-    const photoRes = await fetch(`${GRAPH_URL}/${page_id}/photos`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: withAuth({ url: imageUrl, caption: caption || '' }, page_access_token),
-    });
-    const photoData = await photoRes.json();
-
-    if (photoData.error) {
-      console.error('Facebook photo post failed:', photoData.error);
-      const mapped = mapMetaError(photoData.error);
-      return res.status(mapped.httpStatus).json(mapped);
-    }
-
-    console.log('FACEBOOK PHOTO POST ID:', photoData.id, 'POST ID:', photoData.post_id);
-    res.json({ success: true, photoId: photoData.id, postId: photoData.post_id });
-  } catch (err) {
-    console.error('Facebook photo publish route error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
+const webhookQueue = new Queue(QUEUE_NAME, { connection });
 
 /**
- * GET /facebook/feed
- * Returns the Page's recent posts (sanity check that the token works).
+ * Enqueues one raw webhook entry for async processing.
+ * `entry` is a single item from the Meta payload's `body.entry[]`, and
+ * `objectType` is the top-level `body.object` ('page' | 'instagram').
+ *
+ * Retries: 3 attempts total, exponential backoff starting at 5s, so a
+ * transient failure (e.g. Graph API hiccup, credentials lookup race)
+ * doesn't just get dropped.
  */
-router.get('/feed', async (req, res) => {
-  try {
-    const creds = await getConnectedCredentials(req.user.organizationId);
-    const { page_id, page_access_token } = creds;
-
-    // GET requests: appsecret_proof + access_token go in the query string.
-    const proof = getAppSecretProof(page_access_token);
-    const feedRes = await fetch(
-      `${GRAPH_URL}/${page_id}/feed?fields=id,message,created_time&access_token=${page_access_token}&appsecret_proof=${proof}`
-    );
-    const feedData = await feedRes.json();
-
-    if (feedData.error) {
-      console.error('Fetching feed failed:', feedData.error);
-      const mapped = mapMetaError(feedData.error);
-      return res.status(mapped.httpStatus).json(mapped);
+async function enqueueWebhookEvent(entry, objectType) {
+  return webhookQueue.add(
+    'process-event',
+    { entry, objectType },
+    {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: 1000,
+      removeOnFail: 1000,
     }
+  );
+}
 
-    res.json(feedData);
-  } catch (err) {
-    console.error('Facebook feed route error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * GET /facebook/status
- * Checks whether the currently saved Page connection is still valid,
- * without publishing anything.
- */
-router.get('/status', async (req, res) => {
-  try {
-    const creds = await getConnectedCredentials(req.user.organizationId);
-    const validation = await validateToken(creds.page_access_token);
-
-    res.json({
-      connected: validation.valid,
-      expiresAt: validation.expiresAt,
-      scopes: validation.scopes,
-      pageId: creds.page_id,
-      pageName: creds.page_name,
-    });
-  } catch (err) {
-    res.status(400).json({ connected: false, error: err.message });
-  }
-});
-
-module.exports = router;
+module.exports = { webhookQueue, enqueueWebhookEvent, QUEUE_NAME, connection };

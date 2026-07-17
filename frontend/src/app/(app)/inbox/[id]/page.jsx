@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, Send } from 'lucide-react';
+import { ArrowLeft, Sparkles, Send, Paperclip, X } from 'lucide-react';
 import { useApi } from '@/lib/useApi';
 
 export default function ConversationView() {
@@ -14,6 +14,9 @@ export default function ConversationView() {
   const [suggesting, setSuggesting] = useState(false);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState('');
+  const [showAttach, setShowAttach] = useState(false);
+  const [mediaUrl, setMediaUrl] = useState('');
+  const [mediaType, setMediaType] = useState('image');
 
   const load = useCallback(() => {
     call(`/conversations/${id}`).then(setConv).catch((e) => setErr(e.message));
@@ -32,12 +35,17 @@ export default function ConversationView() {
 
   async function send(text) {
     const body = (text ?? reply).trim();
-    if (!body) return;
+    if (!body && !mediaUrl) return;
     setSending(true);
     setErr('');
     try {
-      await call(`/conversations/${id}/reply`, { method: 'POST', body: { body } });
+      await call(`/conversations/${id}/reply`, {
+        method: 'POST',
+        body: { body, ...(mediaUrl ? { mediaUrl, mediaType } : {}) },
+      });
       setReply('');
+      setMediaUrl('');
+      setShowAttach(false);
       setSuggestion(null);
       load();
     } catch (e) { setErr(e.message); }
@@ -72,6 +80,12 @@ export default function ConversationView() {
             <div key={m.id} className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
                 m.direction === 'outbound' ? 'bg-brand text-white' : 'bg-white border border-slate-200 text-slate-700'}`}>
+                {m.media_url && m.media_type === 'video' && (
+                  <video src={m.media_url} controls className="rounded-lg max-w-full mb-1.5" />
+                )}
+                {m.media_url && m.media_type !== 'video' && (
+                  <img src={m.media_url} alt="attachment" className="rounded-lg max-w-full mb-1.5" />
+                )}
                 {m.body}
                 <div className={`text-[10px] mt-1 ${m.direction === 'outbound' ? 'text-white/70' : 'text-slate-400'}`}>
                   {m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
@@ -105,8 +119,30 @@ export default function ConversationView() {
           )}
         </div>
 
+        {/* Optional image/video attachment */}
+        {showAttach && (
+          <div className="px-5 py-2.5 border-t border-slate-100 bg-slate-50/60 flex items-center gap-2">
+            <select value={mediaType} onChange={(e) => setMediaType(e.target.value)}
+              className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs outline-none">
+              <option value="image">Image</option>
+              <option value="video">Video</option>
+            </select>
+            <input value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)}
+              placeholder="https://... (public image or video URL)"
+              className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-xs outline-none" />
+            <button onClick={() => { setShowAttach(false); setMediaUrl(''); }} className="text-slate-400 hover:text-red-500 p-1">
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
         {/* Reply box */}
         <div className="px-5 py-3 border-t border-slate-100 flex items-center gap-2">
+          <button onClick={() => setShowAttach((s) => !s)}
+            className={`p-2 rounded-lg ${showAttach || mediaUrl ? 'text-brand bg-brand-light' : 'text-slate-400 hover:text-brand'}`}
+            title="Attach image or video">
+            <Paperclip size={16} />
+          </button>
           <input value={reply} onChange={(e) => setReply(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && send()}
             placeholder="Type a reply…" className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none" />

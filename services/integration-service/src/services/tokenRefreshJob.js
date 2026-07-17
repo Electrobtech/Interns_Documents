@@ -15,8 +15,9 @@
  */
 
 const cron = require('node-cron');
-const { pool } = require('@lead/shared');
+const { pool, withSystemAccess } = require('@lead/shared');
 const { GRAPH_URL, getAppSecretProof } = require('./graphApi');
+const { encryptCredentialTokens, decryptCredentialTokens } = require('./crypto');
 
 // Refresh anything expiring within the next 10 days, so there's always
 // comfortable buffer even if the job doesn't run for a day or two.
@@ -25,6 +26,14 @@ const REFRESH_WINDOW_DAYS = 10;
 async function refreshExpiringTokens() {
   console.log('[token-refresh] Checking for tokens nearing expiry...');
 
+  // This scans + updates across every organization's connections, not just
+  // one, so the whole pass runs under withSystemAccess (see
+  // infra/db/rls.sql) rather than a normal tenant-scoped request — there's
+  // no single req.user here, this is a cron job.
+  return withSystemAccess(() => refreshExpiringTokensInner());
+}
+
+async function refreshExpiringTokensInner() {
   const cutoff = new Date(Date.now() + REFRESH_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
   // credentials->>'token_expires_at' pulls the stored expiry out of the
@@ -50,7 +59,9 @@ async function refreshExpiringTokens() {
   let failed = 0;
 
   for (const row of rows) {
-    const creds = row.credentials;
+    // Row came straight from Postgres, not through services/credentials.js,
+    // so the two token fields are still ciphertext at this point.
+    const creds = decryptCredentialTokens(row.credentials);
     const currentToken = creds.long_lived_user_token;
 
     if (!currentToken) {
@@ -85,9 +96,14 @@ async function refreshExpiringTokens() {
         token_expires_at: newExpiresAt,
       };
 
+      // page_access_token isn't touched by this refresh (only the user
+      // token is refreshed here), so re-encrypt it back to ciphertext too -
+      // otherwise it would get written back to Postgres as plaintext.
+      const storedCredentials = encryptCredentialTokens(updatedCredentials);
+
       await pool.query(
         `UPDATE integrations SET credentials = $1 WHERE id = $2`,
-        [JSON.stringify(updatedCredentials), row.id]
+        [JSON.stringify(storedCredentials), row.id]
       );
 
       console.log(`[token-refresh] Refreshed token for row ${row.id}, new expiry: ${newExpiresAt}`);
