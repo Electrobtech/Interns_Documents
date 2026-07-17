@@ -1,4 +1,5 @@
 'use client';
+import { Bot, Headset } from 'lucide-react';
 
 // Renders a list of conversations using the dashboard's inbox-row style.
 export default function ConversationList({ items = [], loading }) {
@@ -23,6 +24,13 @@ export default function ConversationList({ items = [], loading }) {
                 {c.last_message_at ? new Date(c.last_message_at).toLocaleString() : ''}
               </p>
             </div>
+            {c.handled_by && (
+              <span className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                c.handled_by === 'human' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-500'}`}>
+                {c.handled_by === 'human' ? <Headset size={10} /> : <Bot size={10} />}
+                {c.handled_by === 'human' ? 'Human' : 'Bot'}
+              </span>
+            )}
             <span className={`text-[10px] px-2 py-0.5 rounded-full capitalize ${
               c.status === 'open' ? 'bg-emerald-50 text-emerald-600'
               : c.status === 'pending' ? 'bg-amber-50 text-amber-600'

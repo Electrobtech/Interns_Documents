@@ -55,7 +55,6 @@ export const campaigns = {
     { key: 'name', label: 'Name' },
     { key: 'channel_type', label: 'Channel' },
     { key: 'type', label: 'Type' },
-    { key: 'media_type', label: 'Media' },
     { key: 'status', label: 'Status', badge: true },
     { key: 'scheduled_at', label: 'Scheduled', type: 'datetime' },
   ],
@@ -64,16 +63,8 @@ export const campaigns = {
     { key: 'type', label: 'Type', type: 'select', options: ['broadcast', 'drip', 'transactional'] },
     { key: 'channel_type', label: 'Channel', type: 'select', options: ['whatsapp', 'instagram', 'messenger', 'sms', 'email'] },
     { key: 'message_body', label: 'Message', type: 'textarea' },
-    { key: 'media_url', label: 'Image/Video URL (optional)', type: 'text' },
-    { key: 'media_type', label: 'Media Type', type: 'select', options: ['image', 'video'] },
-    { key: 'template_name', label: 'WhatsApp Template Name (optional)', type: 'text' },
     { key: 'scheduled_at', label: 'Schedule', type: 'datetime' },
     { key: 'status', label: 'Status', type: 'select', options: ['draft', 'scheduled', 'sent'] },
-  ],
-  // Extra per-row action button rendered by DataTable/CrudPage, in addition
-  // to Edit/Delete — actually broadcasts the campaign to its audience.
-  rowActions: [
-    { key: 'send', label: 'Send', method: 'POST', path: (row) => `/campaigns/${row.id}/send`, confirm: 'Broadcast this campaign to its audience now?' },
   ],
 };
 

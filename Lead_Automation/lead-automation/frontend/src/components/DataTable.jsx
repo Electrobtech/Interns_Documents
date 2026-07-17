@@ -1,6 +1,5 @@
 'use client';
-import { useState } from 'react';
-import { Pencil, Trash2, Send, Loader2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 
 const emerald = 'bg-emerald-50 text-emerald-600';
 const amber = 'bg-amber-50 text-amber-600';
@@ -25,21 +24,9 @@ function fmt(value, col) {
   return String(value);
 }
 
-export default function DataTable({ columns, rows, loading, onEdit, onDelete, onRowAction, rowActions, readOnly, idKey = 'id' }) {
-  const [runningId, setRunningId] = useState(null);
-
+export default function DataTable({ columns, rows, loading, onEdit, onDelete, readOnly, idKey = 'id' }) {
   if (loading) return <p className="text-sm text-slate-400 py-8 text-center">Loading…</p>;
   if (!rows.length) return <p className="text-sm text-slate-400 py-8 text-center">No records yet.</p>;
-
-  async function runAction(action, row) {
-    if (action.confirm && !confirm(action.confirm)) return;
-    setRunningId(row[idKey]);
-    try {
-      await onRowAction(action, row);
-    } finally {
-      setRunningId(null);
-    }
-  }
 
   return (
     <div className="overflow-x-auto">
@@ -62,12 +49,6 @@ export default function DataTable({ columns, rows, loading, onEdit, onDelete, on
               ))}
               {!readOnly && (
                 <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                  {rowActions?.map((action) => (
-                    <button key={action.key} onClick={() => runAction(action, row)} disabled={runningId === row[idKey]}
-                      className="text-slate-400 hover:text-brand p-1 disabled:opacity-50" title={action.label}>
-                      {runningId === row[idKey] ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-                    </button>
-                  ))}
                   <button onClick={() => onEdit(row)} className="text-slate-400 hover:text-brand p-1" title="Edit"><Pencil size={15} /></button>
                   <button onClick={() => onDelete(row)} className="text-slate-400 hover:text-red-500 p-1" title="Delete"><Trash2 size={15} /></button>
                 </td>

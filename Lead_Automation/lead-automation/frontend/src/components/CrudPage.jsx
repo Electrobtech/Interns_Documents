@@ -8,7 +8,7 @@ import ResourceForm from './ResourceForm';
 
 // Generic list + create/edit/delete page driven by a resource config.
 // { path, title, icon, columns, fields, readOnly?, idKey? }
-export default function CrudPage({ path, title, icon: Icon, columns, fields, readOnly, idKey = 'id', header = true, rowActions }) {
+export default function CrudPage({ path, title, icon: Icon, columns, fields, readOnly, idKey = 'id', header = true }) {
   const { call } = useApi();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,7 +17,6 @@ export default function CrudPage({ path, title, icon: Icon, columns, fields, rea
   const [editing, setEditing] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [newKey, setNewKey] = useState('');
-  const [info, setInfo] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -59,21 +58,6 @@ export default function CrudPage({ path, title, icon: Icon, columns, fields, rea
     } catch (e) { setError(e.message); }
   }
 
-  async function runRowAction(action, row) {
-    setError('');
-    setInfo('');
-    try {
-      const result = await call(action.path(row), { method: action.method || 'POST' });
-      if (result?.sent != null || result?.failed != null) {
-        setInfo(`Sent to ${result.sent}/${result.total ?? result.sent + result.failed} contacts` +
-          (result.failed ? ` (${result.failed} failed)` : '.'));
-      }
-      load();
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
   return (
     <div className={`${header ? 'p-6' : ''} space-y-4`}>
       <div className="flex items-center justify-between">
@@ -90,7 +74,6 @@ export default function CrudPage({ path, title, icon: Icon, columns, fields, rea
       </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
-      {info && <p className="text-sm text-emerald-600">{info}</p>}
       {newKey && (
         <p className="text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-lg px-3 py-2">
           Copy your new key now — it won't be shown again: <code className="font-mono">{newKey}</code>
@@ -99,8 +82,7 @@ export default function CrudPage({ path, title, icon: Icon, columns, fields, rea
 
       <div className="bg-white rounded-xl border border-slate-200 p-2">
         <DataTable columns={columns} rows={rows} loading={loading}
-          onEdit={openEdit} onDelete={remove} readOnly={readOnly} idKey={idKey}
-          rowActions={rowActions} onRowAction={runRowAction} />
+          onEdit={openEdit} onDelete={remove} readOnly={readOnly} idKey={idKey} />
       </div>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)}

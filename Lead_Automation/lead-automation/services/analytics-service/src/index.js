@@ -142,5 +142,25 @@ app.get('/analytics/revenue', async (req, res) => {
   });
 });
 
+// Open conversations that have gone longest without a reply — the "needs
+// follow-up" queue for the Analytics dashboard's Upcoming Follow-ups widget.
+app.get('/analytics/follow-ups', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT c.id, c.channel_type, c.last_message_at, ct.name AS contact_name, ct.phone AS contact_phone
+       FROM conversations c LEFT JOIN contacts ct ON ct.id = c.contact_id
+      WHERE c.organization_id=$1 AND c.status='open'
+        AND NOT EXISTS (SELECT 1 FROM messages m
+                         WHERE m.conversation_id=c.id AND m.direction='outbound')
+      ORDER BY c.last_message_at ASC LIMIT 5`,
+    [req.user.organizationId]
+  );
+  res.json(rows.map((r) => ({
+    id: r.id,
+    name: r.contact_name || r.contact_phone || 'Unknown contact',
+    channel: r.channel_type,
+    waiting: relTime(r.last_message_at),
+  })));
+});
+
 const PORT = process.env.ANALYTICS_PORT || 4008;
 app.listen(PORT, () => console.log(`analytics-service on :${PORT}`));

@@ -5,16 +5,13 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-lead}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leadpass}
       POSTGRES_DB: ${POSTGRES_DB:-lead_automation}
-      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-apppass}
     ports: ["5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./infra/db/00-app-role.sh:/docker-entrypoint-initdb.d/00-app-role.sh
       - ./infra/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./infra/db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
-      - ./infra/db/rls.sql:/docker-entrypoint-initdb.d/03-rls.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lead} -d ${POSTGRES_DB:-lead_automation}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lead}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -27,16 +24,21 @@ services:
     build: { context: ., dockerfile: services/auth-service/Dockerfile }
     env_file: .env
     environment:
-      DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4001:4001"]
+    # Persists uploaded logos/certificates (see companyController.js) across
+    # container restarts/rebuilds. Local-disk-only, same caveat as
+    # automation_uploads below — swap for S3 before scaling to >1 replica.
+    volumes:
+      - auth_uploads:/app/services/auth-service/public/uploads
 
   inbox-service:
     build: { context: ., dockerfile: services/inbox-service/Dockerfile }
     env_file: .env
     environment:
-      DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4002:4002"]
@@ -45,7 +47,7 @@ services:
     build: { context: ., dockerfile: services/contact-service/Dockerfile }
     env_file: .env
     environment:
-      DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4003:4003"]
@@ -54,7 +56,7 @@ services:
     build: { context: ., dockerfile: services/campaign-service/Dockerfile }
     env_file: .env
     environment:
-      DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4004:4004"]
@@ -63,7 +65,7 @@ services:
     build: { context: ., dockerfile: services/ai-service/Dockerfile }
     env_file: .env
     environment:
-      DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4005:4005"]
@@ -72,7 +74,7 @@ services:
     build: { context: ., dockerfile: services/ecommerce-service/Dockerfile }
     env_file: .env
     environment:
-      DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4006:4006"]
@@ -81,18 +83,16 @@ services:
     build: { context: ., dockerfile: services/review-service/Dockerfile }
     env_file: .env
     environment:
-      DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4007:4007"]
-
-    
 
   analytics-service:
     build: { context: ., dockerfile: services/analytics-service/Dockerfile }
     env_file: .env
     environment:
-      DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4008:4008"]
@@ -101,7 +101,7 @@ services:
     build: { context: ., dockerfile: services/integration-service/Dockerfile }
     env_file: .env
     environment:
-      DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4009:4009"]
@@ -110,12 +110,29 @@ services:
     build: { context: ., dockerfile: services/team-service/Dockerfile }
     env_file: .env
     environment:
-      DATABASE_URL: postgres://app_user:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4010:4010"]
 
-    
+  automation-service:
+    build: { context: ., dockerfile: services/automation-service/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4011:4011"]
+    # Persists uploaded documents (see mediaController.js) across
+    # container restarts/rebuilds. Local-disk-only — doesn't help if you
+    # ever scale this service to >1 replica; swap for S3 at that point.
+    volumes:
+      - automation_uploads:/app/services/automation-service/public/uploads
+
+  notification-service:
+    build: { context: ., dockerfile: services/notification-service/Dockerfile }
+    env_file: .env
+    ports: ["4012:4012"]
 
   api-gateway:
     build: { context: ., dockerfile: api-gateway/Dockerfile }
@@ -131,6 +148,8 @@ services:
       ANALYTICS_SERVICE_URL: http://analytics-service:4008
       INTEGRATION_SERVICE_URL: http://integration-service:4009
       TEAM_SERVICE_URL: http://team-service:4010
+      AUTOMATION_SERVICE_URL: http://automation-service:4011
+      NOTIFICATION_SERVICE_URL: http://notification-service:4012
     depends_on:
       - auth-service
       - inbox-service
@@ -142,7 +161,11 @@ services:
       - analytics-service
       - integration-service
       - team-service
+      - automation-service
+      - notification-service
     ports: ["8080:8080"]
 
 volumes:
   pgdata:
+  automation_uploads:
+  auth_uploads:
