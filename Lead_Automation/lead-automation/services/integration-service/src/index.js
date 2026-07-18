@@ -1,176 +1,188 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
-const { pool, authenticate } = require('@lead/shared');
+const { Pool } = require('pg');
+const { authenticate } = require('@lead/shared');
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(authenticate);
 
-const asJson = (v) => (v == null || v === '' ? null : typeof v === 'string' ? v : JSON.stringify(v));
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'integration-service' }));
 
-app.get('/health', (_req, res) => res.json({ service: 'integration', ok: true }));
+// --- Channels (Connect Channels page / per-channel pages) ---
+// Applied only to these routes — /crm/* below is called service-to-service
+// without a user JWT, so it stays outside `authenticate`.
 
-// ---------- Integrations ----------
-app.get('/integrations', async (req, res) => {
+app.get('/channels', authenticate, async (req, res) => {
+  const { type } = req.query;
   const { rows } = await pool.query(
-    `SELECT * FROM integrations WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 200`,
-    [req.user.organizationId]
+    `SELECT * FROM channels WHERE organization_id=$1 AND ($2::text IS NULL OR type=$2) ORDER BY created_at DESC`,
+    [req.user.organizationId, type || null]
   );
   res.json(rows);
 });
 
-app.post('/integrations', async (req, res) => {
-  const { provider, status, credentials } = req.body;
-  const { rows } = await pool.query(
-    `INSERT INTO integrations (organization_id, provider, status, credentials)
-     VALUES ($1,$2,COALESCE($3,'disconnected'),COALESCE($4,'{}')) RETURNING *`,
-    [req.user.organizationId, provider, status, asJson(credentials)]
-  );
-  res.status(201).json(rows[0]);
-});
-
-app.get('/integrations/:id', async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT * FROM integrations WHERE id=$1 AND organization_id=$2`,
-    [req.params.id, req.user.organizationId]
-  );
-  res.json(rows[0] || {});
-});
-
-app.put('/integrations/:id', async (req, res) => {
-  const { provider, status, credentials } = req.body;
-  const { rows } = await pool.query(
-    `UPDATE integrations SET provider=COALESCE($1,provider), status=COALESCE($2,status),
-            credentials=COALESCE($3,credentials)
-      WHERE id=$4 AND organization_id=$5 RETURNING *`,
-    [provider, status, asJson(credentials), req.params.id, req.user.organizationId]
-  );
-  res.json(rows[0] || {});
-});
-
-app.delete('/integrations/:id', async (req, res) => {
-  await pool.query(`DELETE FROM integrations WHERE id=$1 AND organization_id=$2`,
-    [req.params.id, req.user.organizationId]);
-  res.json({ ok: true });
-});
-
-// ---------- API keys (secret shown once on creation) ----------
-app.get('/api-keys', async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT id, label, created_at FROM api_keys WHERE organization_id=$1 ORDER BY created_at DESC`,
-    [req.user.organizationId]
-  );
-  res.json(rows);
-});
-
-app.post('/api-keys', async (req, res) => {
-  const { label } = req.body;
-  const key = 'sk_' + crypto.randomBytes(24).toString('hex');
-  const keyHash = crypto.createHash('sha256').update(key).digest('hex');
-  const { rows } = await pool.query(
-    `INSERT INTO api_keys (organization_id, key_hash, label)
-     VALUES ($1,$2,$3) RETURNING id, label, created_at`,
-    [req.user.organizationId, keyHash, label]
-  );
-  // Return the plaintext key exactly once — it is never stored or retrievable again.
-  res.status(201).json({ ...rows[0], key });
-});
-
-app.delete('/api-keys/:id', async (req, res) => {
-  await pool.query(`DELETE FROM api_keys WHERE id=$1 AND organization_id=$2`,
-    [req.params.id, req.user.organizationId]);
-  res.json({ ok: true });
-});
-
-// ---------- Webhooks ----------
-app.get('/webhooks', async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT * FROM webhooks WHERE organization_id=$1 ORDER BY id LIMIT 200`,
-    [req.user.organizationId]
-  );
-  res.json(rows);
-});
-
-app.post('/webhooks', async (req, res) => {
-  const { url, event, active } = req.body;
-  const { rows } = await pool.query(
-    `INSERT INTO webhooks (organization_id, url, event, active)
-     VALUES ($1,$2,$3,COALESCE($4,true)) RETURNING *`,
-    [req.user.organizationId, url, event, active]
-  );
-  res.status(201).json(rows[0]);
-});
-
-app.get('/webhooks/:id', async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT * FROM webhooks WHERE id=$1 AND organization_id=$2`,
-    [req.params.id, req.user.organizationId]
-  );
-  res.json(rows[0] || {});
-});
-
-app.put('/webhooks/:id', async (req, res) => {
-  const { url, event, active } = req.body;
-  const { rows } = await pool.query(
-    `UPDATE webhooks SET url=COALESCE($1,url), event=COALESCE($2,event), active=COALESCE($3,active)
-      WHERE id=$4 AND organization_id=$5 RETURNING *`,
-    [url, event, active, req.params.id, req.user.organizationId]
-  );
-  res.json(rows[0] || {});
-});
-
-app.delete('/webhooks/:id', async (req, res) => {
-  await pool.query(`DELETE FROM webhooks WHERE id=$1 AND organization_id=$2`,
-    [req.params.id, req.user.organizationId]);
-  res.json({ ok: true });
-});
-
-// ---------- Channels (also used by the channel pages) ----------
-app.get('/channels', async (req, res) => {
-  const params = [req.user.organizationId];
-  let sql = `SELECT * FROM channels WHERE organization_id=$1`;
-  if (req.query.type) { params.push(req.query.type); sql += ` AND type=$${params.length}`; }
-  sql += ` ORDER BY created_at DESC`;
-  const { rows } = await pool.query(sql, params);
-  res.json(rows);
-});
-
-app.post('/channels', async (req, res) => {
+app.post('/channels', authenticate, async (req, res) => {
   const { type, display_name, status } = req.body;
+  if (!type) return res.status(400).json({ error: 'type required' });
   const { rows } = await pool.query(
     `INSERT INTO channels (organization_id, type, display_name, status)
      VALUES ($1,$2,$3,COALESCE($4,'disconnected')) RETURNING *`,
-    [req.user.organizationId, type, display_name, status]
+    [req.user.organizationId, type, display_name || null, status]
   );
   res.status(201).json(rows[0]);
 });
 
-app.get('/channels/:id', async (req, res) => {
+app.put('/channels/:id', authenticate, async (req, res) => {
+  const { display_name, status } = req.body;
   const { rows } = await pool.query(
-    `SELECT * FROM channels WHERE id=$1 AND organization_id=$2`,
-    [req.params.id, req.user.organizationId]
+    `UPDATE channels SET display_name=COALESCE($1,display_name), status=COALESCE($2,status)
+      WHERE id=$3 AND organization_id=$4 RETURNING *`,
+    [display_name, status, req.params.id, req.user.organizationId]
   );
-  res.json(rows[0] || {});
+  if (!rows.length) return res.status(404).json({ error: 'not found' });
+  res.json(rows[0]);
 });
 
-app.put('/channels/:id', async (req, res) => {
-  const { type, display_name, status } = req.body;
+// --- CRM connection management ---
+
+app.post('/crm/connections', async (req, res) => {
+  try {
+    const { workspace_id, provider, config, active } = req.body;
+    const { rows } = await pool.query(
+      `INSERT INTO crm_connections (id, workspace_id, provider, config, active, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) RETURNING *`,
+      [crypto.randomUUID(), workspace_id, provider, JSON.stringify(config || {}), active !== false]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/crm/connections/:workspaceId', async (req, res) => {
   const { rows } = await pool.query(
-    `UPDATE channels SET type=COALESCE($1,type), display_name=COALESCE($2,display_name),
-            status=COALESCE($3,status)
-      WHERE id=$4 AND organization_id=$5 RETURNING *`,
-    [type, display_name, status, req.params.id, req.user.organizationId]
+    `SELECT id, provider, config, active, created_at FROM crm_connections
+     WHERE workspace_id = $1 ORDER BY created_at DESC`,
+    [req.params.workspaceId]
   );
-  res.json(rows[0] || {});
+  res.json(rows);
 });
 
-app.delete('/channels/:id', async (req, res) => {
-  await pool.query(`DELETE FROM channels WHERE id=$1 AND organization_id=$2`,
-    [req.params.id, req.user.organizationId]);
-  res.json({ ok: true });
+app.delete('/crm/connections/:id', async (req, res) => {
+  await pool.query(`DELETE FROM crm_connections WHERE id = $1`, [req.params.id]);
+  res.json({ deleted: true });
 });
 
-const PORT = process.env.INTEGRATION_PORT || 4009;
-app.listen(PORT, () => console.log(`integration-service on :${PORT}`));
+// --- Outbound sync (internal -> CRM) ---
+
+app.post('/crm/sync/outbound', async (req, res) => {
+  try {
+    const { workspace_id, connection_id, entity_type, entity_id, payload } = req.body;
+    if (!workspace_id || !entity_type) {
+      return res.status(400).json({ error: 'workspace_id and entity_type required' });
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO crm_sync_jobs (id, workspace_id, connection_id, direction, entity_type, entity_id, payload, status, created_at, updated_at)
+       VALUES ($1, $2, $3, 'outbound', $4, $5, $6, 'pending', NOW(), NOW()) RETURNING *`,
+      [crypto.randomUUID(), workspace_id, connection_id || null, entity_type, entity_id || null, JSON.stringify(payload || {})]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/crm/sync-jobs/:workspaceId', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT * FROM crm_sync_jobs WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 100`,
+    [req.params.workspaceId]
+  );
+  res.json(rows);
+});
+
+// --- Inbound sync (CRM -> internal) ---
+
+app.post('/crm/webhook/inbound', async (req, res) => {
+  try {
+    const { workspace_id, email, phone, instagram_id, updates } = req.body;
+    if (!workspace_id || !(email || phone || instagram_id)) {
+      return res.status(400).json({ error: 'workspace_id and at least one identifier required' });
+    }
+
+    await pool.query(
+      `UPDATE ai_contacts
+       SET name = COALESCE($1, name),
+           email = COALESCE($2, email),
+           phone = COALESCE($3, phone),
+           instagram_id = COALESCE($4, instagram_id),
+           lead_score = COALESCE($5, lead_score),
+           status = COALESCE($6, status),
+           tags = CASE WHEN $7::text[] IS NULL THEN tags ELSE $7::text[] END,
+           updated_at = NOW()
+       WHERE workspace_id = $8
+         AND (email = $2 OR phone = $3 OR instagram_id = $4)`,
+      [
+        updates?.name || null,
+        email || null,
+        phone || null,
+        instagram_id || null,
+        updates?.lead_score || null,
+        updates?.status || null,
+        updates?.tags || null,
+        workspace_id,
+      ]
+    );
+
+    res.json({ synced: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Background sync worker ---
+
+async function processJobs() {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM crm_sync_jobs
+       WHERE status = 'pending' AND attempts < 5
+       ORDER BY created_at ASC
+       LIMIT 10`
+    );
+
+    for (const job of rows) {
+      await pool.query(
+        `UPDATE crm_sync_jobs SET status = 'processing', attempts = attempts + 1, updated_at = NOW() WHERE id = $1`,
+        [job.id]
+      );
+
+      try {
+        // Here you would call the real CRM provider API.
+        // For this scaffold, we simulate a successful push.
+        await new Promise((r) => setTimeout(r, 200));
+        console.log(`Synced ${job.entity_type} ${job.entity_id} to CRM`);
+
+        await pool.query(
+          `UPDATE crm_sync_jobs SET status = 'completed', updated_at = NOW() WHERE id = $1`,
+          [job.id]
+        );
+      } catch (e) {
+        await pool.query(
+          `UPDATE crm_sync_jobs SET status = 'failed', error = $1, updated_at = NOW() WHERE id = $2`,
+          [e.message, job.id]
+        );
+      }
+    }
+  } catch (e) {
+    console.error('Sync worker error:', e.message);
+  }
+}
+
+setInterval(processJobs, 30000);
+
+const PORT = process.env.PORT || 4008;
+app.listen(PORT, () => console.log(`Integration service on ${PORT}`));

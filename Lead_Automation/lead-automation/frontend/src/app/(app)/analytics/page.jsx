@@ -4,12 +4,14 @@ import {
   BarChart3, TrendingUp, TrendingDown, MessageSquareText, CheckCircle2,
   AlertTriangle, IndianRupee, MessageCircle, Instagram, MessageSquare,
   Smartphone, Globe, Phone, Mail, Clock, ArrowUpRight,
+  Bot, Megaphone, Headphones, Sparkles, Activity,
 } from 'lucide-react';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell,
+  XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { useApi } from '@/lib/useApi';
+import { useAgentAnalytics, useAgentStatus } from '@/lib/queries/aiAgents';
 import Link from 'next/link';
 
 const inr = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
@@ -35,6 +37,12 @@ const STAGE_META = {
   won: { label: 'Won', color: '#059669' },
   lost: { label: 'Lost', color: '#cbd5e1' },
 };
+
+const RANGES = [
+  { key: '24h', label: '24h' },
+  { key: '7d',  label: '7d'  },
+  { key: '30d', label: '30d' },
+];
 
 // ---------- small utilities ----------
 
@@ -183,6 +191,46 @@ function CustomTooltip({ active, payload, label, formatter }) {
       {payload.map((p, i) => (
         <p key={i} className="font-semibold">{formatter ? formatter(p.value) : p.value}</p>
       ))}
+    </div>
+  );
+}
+
+// Named-series tooltip for the multi-bar AI Agent Performance chart, where a
+// plain value-only tooltip (CustomTooltip above) can't distinguish which bar
+// (marketing/sales/support) a value belongs to.
+function AgentTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl shadow-card px-4 py-3 text-xs">
+      <p className="font-semibold text-slate-600 mb-2">{label}</p>
+      {payload.map((p) => (
+        <div key={p.dataKey} className="flex items-center gap-2 mb-1">
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: p.fill }} />
+          <span className="text-slate-500 capitalize">{p.dataKey}:</span>
+          <span className="font-semibold text-slate-800">{p.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Compact stat tile used only within the AI Agent Performance panel.
+function StatCard({ label, value, icon: Icon, tone = 'blue' }) {
+  const TONES = {
+    blue:    'from-blue-50 to-indigo-100 text-blue-600',
+    emerald: 'from-emerald-50 to-teal-100 text-emerald-600',
+    amber:   'from-amber-50 to-orange-100 text-amber-600',
+    violet:  'from-violet-50 to-purple-100 text-violet-600',
+  };
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5">
+      <div className="flex items-center gap-3 mb-2">
+        <div className={`p-2.5 rounded-xl bg-gradient-to-br ${TONES[tone]}`}>
+          <Icon size={15} />
+        </div>
+      </div>
+      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{label}</p>
+      <p className="text-2xl font-bold text-slate-800 mt-1 tabular-nums">{value ?? '—'}</p>
     </div>
   );
 }
@@ -556,6 +604,133 @@ function EmptyState({ label, height, action }) {
   );
 }
 
+// AI Agent Performance — run counts, per-agent trend, and live status for the
+// Marketing/Sales/Support agents. Kept as a self-contained section appended
+// below the core CRM analytics dashboard above.
+function AgentPerformance() {
+  const [range, setRange] = useState('7d');
+  const { data: agentAnalytics, isLoading: agentLoading } = useAgentAnalytics(range);
+  const { data: agentStatus } = useAgentStatus();
+
+  const agentChartData = useMemo(() => {
+    const series = agentAnalytics?.series || [];
+    const byDate = new Map();
+    for (const p of series) {
+      if (!byDate.has(p.date)) byDate.set(p.date, { date: p.date });
+      byDate.get(p.date)[p.agentType] = p.count;
+    }
+    return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [agentAnalytics]);
+
+  return (
+    <>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6">
+        <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-purple-100 text-violet-600">
+              <Bot size={16} />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800 text-sm">AI Agent Performance</h3>
+              <p className="text-[11px] text-slate-400">
+                Total runs: {agentAnalytics?.totals?.allRuns ?? '—'} ·
+                Escalations: {agentAnalytics?.totals?.supportEscalations ?? '—'}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+            {RANGES.map((r) => (
+              <button key={r.key} onClick={() => setRange(r.key)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150
+                  ${range === r.key
+                    ? 'bg-white shadow-sm text-slate-800 border border-slate-200/80'
+                    : 'text-slate-500 hover:text-slate-700'}`}>
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          {[
+            { label: 'Marketing Runs', value: agentAnalytics?.totals?.marketing ?? 0, icon: Megaphone,  tone: 'blue'    },
+            { label: 'Sales Runs',     value: agentAnalytics?.totals?.sales     ?? 0, icon: TrendingUp, tone: 'emerald' },
+            { label: 'Support Runs',   value: agentAnalytics?.totals?.support   ?? 0, icon: Headphones, tone: 'violet'  },
+          ].map(({ label, value, icon, tone }) => (
+            <StatCard key={label} label={label} value={value} icon={icon} tone={tone} />
+          ))}
+        </div>
+
+        {agentLoading ? (
+          <div className="h-48 skeleton rounded-2xl" />
+        ) : agentChartData.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="p-4 rounded-2xl bg-slate-50 mb-3">
+              <Sparkles size={24} className="text-slate-300" />
+            </div>
+            <p className="text-sm font-medium text-slate-400">No agent runs in this range yet</p>
+            <p className="text-xs text-slate-300 mt-1">Start using the AI Agents to see activity here</p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={agentChartData} barGap={4} barCategoryGap="28%">
+              <defs>
+                {[
+                  ['barMkt',  '#3b82f6', '#6366f1'],
+                  ['barSales','#10b981', '#0891b2'],
+                  ['barSup',  '#8b5cf6', '#a855f7'],
+                ].map(([id, c1, c2]) => (
+                  <linearGradient key={id} id={id} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor={c1} />
+                    <stop offset="100%" stopColor={c2} />
+                  </linearGradient>
+                ))}
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={28} />
+              <Tooltip content={<AgentTooltip />} cursor={{ fill: 'rgba(241,245,249,0.6)', radius: 6 }} />
+              <Legend wrapperStyle={{ fontSize: 12, paddingTop: 16 }} iconType="circle" iconSize={8} />
+              <Bar dataKey="marketing" name="Marketing" fill="url(#barMkt)"   radius={[5,5,0,0]} maxBarSize={28} />
+              <Bar dataKey="sales"     name="Sales"     fill="url(#barSales)" radius={[5,5,0,0]} maxBarSize={28} />
+              <Bar dataKey="support"   name="Support"   fill="url(#barSup)"   radius={[5,5,0,0]} maxBarSize={28} />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[
+          { type: 'marketing', label: 'Marketing Agent', icon: Megaphone,  gradient: 'from-blue-600 to-indigo-600',   sub: 'Campaigns · Segments · SEO'        },
+          { type: 'sales',     label: 'Sales Agent',     icon: TrendingUp, gradient: 'from-emerald-600 to-teal-600',  sub: 'Lead scoring · Follow-ups · Pipeline'},
+          { type: 'support',   label: 'Support Agent',   icon: Headphones, gradient: 'from-violet-600 to-purple-600', sub: 'Ticket replies · Escalations · CSAT' },
+        ].map(({ type, label, icon: Icon, gradient, sub }) => {
+          const agentEntry = agentStatus?.agents?.find((a) => a.type === type);
+          const isActive   = agentEntry?.status === 'active';
+          return (
+            <div key={type} className="bg-white rounded-2xl border border-slate-100 shadow-card p-4">
+              <div className={`h-1 w-full rounded-full bg-gradient-to-r ${gradient} mb-4`} />
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2.5">
+                  <Icon size={16} className={isActive ? 'text-emerald-600' : 'text-slate-400'} />
+                  <span className="text-sm font-bold text-slate-800">{label}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-300'}`} />
+                  <span className={`text-[10px] font-semibold ${isActive ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400">{sub}</p>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 // ---------- page ----------
 
 export default function AnalyticsPage() {
@@ -652,6 +827,9 @@ export default function AnalyticsPage() {
         <FadeIn delay={60}><TopCampaigns campaigns={campaigns} /></FadeIn>
         <FadeIn delay={120}><UpcomingFollowUps items={followUps} /></FadeIn>
       </div>
+
+      {/* AI Agent Performance */}
+      <AgentPerformance />
     </div>
   );
 }

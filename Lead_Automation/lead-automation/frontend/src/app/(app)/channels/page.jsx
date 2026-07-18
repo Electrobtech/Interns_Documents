@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  MessageCircle, Instagram, MessageSquare, Smartphone, Globe, Phone, Mail, Plug,
+  MessageCircle, Instagram, MessageSquare, Smartphone, Globe, Phone, Mail, Plug, Linkedin,
 } from 'lucide-react';
 import { useApi } from '@/lib/useApi';
 
@@ -10,6 +10,7 @@ const CHANNELS = [
   ['whatsapp', 'WhatsApp', MessageCircle],
   ['instagram', 'Instagram', Instagram],
   ['messenger', 'Messenger', MessageSquare],
+  ['linkedin', 'LinkedIn', Linkedin],
   ['sms', 'SMS / RCS', Smartphone],
   ['webchat', 'Web Chat', Globe],
   ['voice', 'Voice Call', Phone],

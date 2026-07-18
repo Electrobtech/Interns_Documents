@@ -6,14 +6,15 @@ const app = express();
 app.use(cors());
 
 const AUTH        = process.env.AUTH_SERVICE_URL        || 'http://localhost:4001';
-const INBOX       = process.env.INBOX_SERVICE_URL       || 'http://localhost:4002';
+const INBOX       = process.env.INBOX_SERVICE_URL       || 'http://localhost:4006';
 const CONTACT     = process.env.CONTACT_SERVICE_URL     || 'http://localhost:4003';
 const CAMPAIGN    = process.env.CAMPAIGN_SERVICE_URL    || 'http://localhost:4004';
 const AI          = process.env.AI_SERVICE_URL          || 'http://localhost:4005';
 const ECOMMERCE   = process.env.ECOMMERCE_SERVICE_URL   || 'http://localhost:4006';
 const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:4007';
-const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
-const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
+const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4007';
+const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4008';
+const LINKEDIN    = process.env.LINKEDIN_SERVICE_URL    || 'http://localhost:4009';
 const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
 const AUTOMATION   = process.env.AUTOMATION_SERVICE_URL  || 'http://localhost:4011';
 const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4012';
@@ -43,14 +44,27 @@ const routes = [
   { path: '/api-keys',        target: INTEGRATION },
   { path: '/webhooks',        target: INTEGRATION },
   { path: '/channels',        target: INTEGRATION },
+  { path: '/linkedin',        target: LINKEDIN },
   { path: '/users',           target: TEAM },
   { path: '/teams',           target: TEAM },
+  { path: '/audit-logs',      target: TEAM },
+  { path: '/roles',           target: TEAM },
+  { path: '/permissions',     target: TEAM },
+  // /notifications/click is a separate demo/toy click-tracking stub
+  // (notification-service — in-memory, no DB; see NotificationClickDemo.jsx),
+  // distinct from the real persistent notification bell below (team-service,
+  // Postgres-backed; see NotificationBell.jsx). Registered first so its more
+  // specific path isn't shadowed by the general /notifications route.
+  { path: '/notifications/click', target: NOTIFICATION },
+  { path: '/notifications',   target: TEAM },
   // Lead Automation module (WhatsApp > Automation): flow engine, its
   // simulate/reset helpers, and its own inbound webhook receiver — all
   // namespaced under /automation so they never collide with the CRM's own
   // /webhooks (subscription management, routed to INTEGRATION above).
   { path: '/automation',      target: AUTOMATION },
-  { path: '/notifications',   target: NOTIFICATION },
+  // Phase 2 Operations Layer routes
+  { path: '/inbox',          target: INBOX },
+  { path: '/workflows',      target: AUTOMATION },
 ];
 
 for (const r of routes) {
