@@ -1,6 +1,9 @@
 """get_llm_provider() — the ONLY place agent code gets an LLMProvider from.
-Selection is driven entirely by LLM_PROVIDER (env var) — swapping Groq <-> Ollama
-is a config change, never a code change."""
+Selection is driven entirely by LLM_PROVIDER (env var).
+
+Supported values: "groq" | "kimi" | "ollama"
+Swapping providers is a config change, never a code change.
+"""
 from __future__ import annotations
 
 from functools import lru_cache
@@ -9,16 +12,34 @@ from app.config.settings import Settings, get_settings
 from app.llm.base import LLMProvider
 from app.llm.providers.fallback_provider import FallbackLLMProvider
 from app.llm.providers.groq_provider import GroqProvider
+from app.llm.providers.kimi_provider import KimiProvider
 from app.llm.providers.ollama_provider import OllamaProvider
 
 
 def build_provider(name: str, settings: Settings | None = None) -> LLMProvider:
     settings = settings or get_settings()
     if name == "groq":
-        return GroqProvider(api_key=settings.GROQ_API_KEY, base_url=settings.GROQ_BASE_URL, model=settings.GROQ_MODEL)
+        return GroqProvider(
+            api_key=settings.GROQ_API_KEY,
+            base_url=settings.GROQ_BASE_URL,
+            model=settings.GROQ_MODEL,
+        )
+    if name == "kimi":
+        return KimiProvider(
+            api_key=settings.KIMI_API_KEY,
+            base_url=settings.KIMI_BASE_URL,
+            model=settings.KIMI_MODEL,
+        )
     if name == "ollama":
-        return OllamaProvider(host=settings.OLLAMA_HOST, model=settings.OLLAMA_MODEL, embedding_model=settings.EMBEDDING_MODEL)
-    raise ValueError(f"Unknown LLM_PROVIDER: {name!r}")
+        return OllamaProvider(
+            host=settings.OLLAMA_HOST,
+            model=settings.OLLAMA_MODEL,
+            embedding_model=settings.EMBEDDING_MODEL,
+        )
+    raise ValueError(
+        f"Unknown LLM_PROVIDER: {name!r}. "
+        f"Supported: 'groq', 'kimi', 'ollama'"
+    )
 
 
 @lru_cache

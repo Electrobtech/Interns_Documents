@@ -60,7 +60,7 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
-export default function AgentsOverview() {
+export default function AgentsOverview({ compact = false }) {
   const { data: status, isLoading } = useAgentStatus();
   const { data: runs } = useMarketingRuns();
   const [range, setRange] = useState('7d');
@@ -82,92 +82,96 @@ export default function AgentsOverview() {
   return (
     <div className="space-y-6 animate-fade-in">
 
-      {/* KPI row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="animate-slide-up delay-75">
-          <KpiCard icon={Bot} label="Active Agents" tone="brand" loading={isLoading}
-            value={activeCount} sublabel={`of ${agents.length} configured`} />
-        </div>
-        <div className="animate-slide-up delay-150">
-          <KpiCard icon={Database} label="Knowledge Chunks" tone="emerald" loading={isLoading}
-            value={status?.knowledge_base?.total_chunks ?? 0} />
-        </div>
-        <div className="animate-slide-up delay-225">
-          <KpiCard
-            icon={Activity} label="LLM Health"
-            tone={status?.provider?.healthy ? 'emerald' : 'amber'} loading={isLoading}
-            value={status?.provider?.healthy ? 'Healthy' : 'Degraded'}
-          />
-        </div>
-        <div className="animate-slide-up delay-300">
-          <KpiCard icon={ShieldAlert} label="Support Escalations" tone="amber" loading={analyticsLoading}
-            value={analytics?.totals?.supportEscalations ?? 0} sublabel={`last ${range}`} />
-        </div>
-      </div>
-
-      {/* Agent status cards */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 animate-slide-up delay-150">
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600">
-              <Bot size={16} />
+      {!compact && (
+        <>
+          {/* KPI row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="animate-slide-up delay-75">
+              <KpiCard icon={Bot} label="Active Agents" tone="brand" loading={isLoading}
+                value={activeCount} sublabel={`of ${agents.length} configured`} />
             </div>
-            <div>
-              <h3 className="font-bold text-slate-800 text-sm">Agent Status</h3>
-              <p className="text-[11px] text-slate-400">
-                {activeCount} of {agents.length} agents active
-              </p>
+            <div className="animate-slide-up delay-150">
+              <KpiCard icon={Database} label="Knowledge Chunks" tone="emerald" loading={isLoading}
+                value={status?.knowledge_base?.total_chunks ?? 0} />
+            </div>
+            <div className="animate-slide-up delay-225">
+              <KpiCard
+                icon={Activity} label="LLM Health"
+                tone={status?.provider?.healthy ? 'emerald' : 'amber'} loading={isLoading}
+                value={status?.provider?.healthy ? 'Healthy' : 'Degraded'}
+              />
+            </div>
+            <div className="animate-slide-up delay-300">
+              <KpiCard icon={ShieldAlert} label="Support Escalations" tone="amber" loading={analyticsLoading}
+                value={analytics?.totals?.supportEscalations ?? 0} sublabel={`last ${range}`} />
             </div>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-100">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[11px] font-semibold text-emerald-700">Live</span>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {(agents.length ? agents : Object.keys(AGENT_CONFIG).map((type) => ({ type, status: 'unconfigured' }))).map((a) => {
-            const cfg = AGENT_CONFIG[a.type] || {};
-            const isActive = a.status === 'active';
-            return (
-              <div
-                key={a.type}
-                className={`
-                  relative rounded-xl border p-4 transition-all duration-200 overflow-hidden
-                  ${isActive
-                    ? 'border-slate-200 bg-gradient-to-br from-white to-slate-50/50 shadow-sm hover:shadow-card-hover hover:-translate-y-0.5'
-                    : 'border-slate-100 bg-slate-50/50'
-                  }
-                `}
-              >
-                {isActive && (
-                  <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${cfg.gradient}`} />
-                )}
-                <div className="flex items-start justify-between mb-3">
-                  <div className={`p-2 rounded-lg ${cfg.iconBg || 'bg-slate-100'} ${cfg.iconColor || 'text-slate-400'}`}>
-                    <Bot size={15} />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {isActive ? (
-                      <>
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        <span className="text-[10px] font-semibold text-emerald-600">Active</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                        <span className="text-[10px] font-medium text-slate-400">Not configured</span>
-                      </>
-                    )}
-                  </div>
+          {/* Agent status cards */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 animate-slide-up delay-150">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600">
+                  <Bot size={16} />
                 </div>
-                <p className="font-semibold text-slate-800 text-sm">{cfg.label || a.type}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">{cfg.description || ''}</p>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm">Agent Status</h3>
+                  <p className="text-[11px] text-slate-400">
+                    {activeCount} of {agents.length} agents active
+                  </p>
+                </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-100">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[11px] font-semibold text-emerald-700">Live</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {(agents.length ? agents : Object.keys(AGENT_CONFIG).map((type) => ({ type, status: 'unconfigured' }))).map((a) => {
+                const cfg = AGENT_CONFIG[a.type] || {};
+                const isActive = a.status === 'active';
+                return (
+                  <div
+                    key={a.type}
+                    className={`
+                      relative rounded-xl border p-4 transition-all duration-200 overflow-hidden
+                      ${isActive
+                        ? 'border-slate-200 bg-gradient-to-br from-white to-slate-50/50 shadow-sm hover:shadow-card-hover hover:-translate-y-0.5'
+                        : 'border-slate-100 bg-slate-50/50'
+                      }
+                    `}
+                  >
+                    {isActive && (
+                      <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${cfg.gradient}`} />
+                    )}
+                    <div className="flex items-start justify-between mb-3">
+                      <div className={`p-2 rounded-lg ${cfg.iconBg || 'bg-slate-100'} ${cfg.iconColor || 'text-slate-400'}`}>
+                        <Bot size={15} />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {isActive ? (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            <span className="text-[10px] font-semibold text-emerald-600">Active</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                            <span className="text-[10px] font-medium text-slate-400">Not configured</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <p className="font-semibold text-slate-800 text-sm">{cfg.label || a.type}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{cfg.description || ''}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Chart */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 animate-slide-up delay-225">

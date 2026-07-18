@@ -30,7 +30,20 @@ def upgrade() -> None:
     # ------------------------------------------------------------------
     # Extensions
     # ------------------------------------------------------------------
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    # pgvector isn't available on every Postgres install (e.g. a native
+    # Windows install without the extension compiled in, vs. the
+    # pgvector/pgvector Docker image used elsewhere). Detect it rather than
+    # hard-failing the whole migration — knowledge_chunks below falls back
+    # to a plain TEXT embedding column when it's missing, so the rest of
+    # the schema (and every non-RAG agent feature) still comes up.
+    has_pgvector = bool(op.get_bind().execute(
+        sa.text("SELECT 1 FROM pg_available_extensions WHERE name = 'vector'")
+    ).scalar())
+    if has_pgvector:
+        op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    else:
+        print("WARNING: pgvector extension not available — knowledge_chunks.embedding "
+              "will be a plain TEXT column and RAG similarity search will not work.")
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
 
     # ------------------------------------------------------------------
@@ -90,9 +103,10 @@ def upgrade() -> None:
             sa.Column("metadata", postgresql.JSONB, nullable=False, server_default="{}"),
             sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
         )
-        # Replace the TEXT placeholder with the actual vector column.
-        op.execute("ALTER TABLE knowledge_chunks DROP COLUMN embedding")
-        op.execute("ALTER TABLE knowledge_chunks ADD COLUMN embedding vector(768)")
+        if has_pgvector:
+            # Replace the TEXT placeholder with the actual vector column.
+            op.execute("ALTER TABLE knowledge_chunks DROP COLUMN embedding")
+            op.execute("ALTER TABLE knowledge_chunks ADD COLUMN embedding vector(768)")
 
         # tsvector for keyword search (used by hybrid retrieval)
         op.execute("""
@@ -103,12 +117,13 @@ def upgrade() -> None:
         op.execute("CREATE INDEX ix_kc_org_agent ON knowledge_chunks (organization_id, agent_type)")
         op.execute("CREATE INDEX ix_kc_source ON knowledge_chunks (knowledge_source_id)")
         op.execute("CREATE INDEX ix_kc_content_tsv ON knowledge_chunks USING GIN (content_tsv)")
-        # HNSW index for fast approximate nearest-neighbour search
-        op.execute("""
-            CREATE INDEX ix_kc_embedding_hnsw
-            ON knowledge_chunks USING hnsw (embedding vector_cosine_ops)
-            WITH (m = 16, ef_construction = 64)
-        """)
+        if has_pgvector:
+            # HNSW index for fast approximate nearest-neighbour search
+            op.execute("""
+                CREATE INDEX ix_kc_embedding_hnsw
+                ON knowledge_chunks USING hnsw (embedding vector_cosine_ops)
+                WITH (m = 16, ef_construction = 64)
+            """)
 
     # ------------------------------------------------------------------
     # marketing_agent_runs
@@ -180,7 +195,7 @@ def upgrade() -> None:
             sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
             sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
             sa.Column("url", sa.Text, nullable=False),
-            sa.Column("events", postgresql.ARRAY(sa.String), nullable=False, server_default="""'{"run.completed"}'"""),
+            sa.Column("events", postgresql.ARRAY(sa.String), nullable=False, server_default=sa.text("'{run.completed}'")),
             sa.Column("active", sa.Boolean, nullable=False, server_default="true"),
             sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
         )

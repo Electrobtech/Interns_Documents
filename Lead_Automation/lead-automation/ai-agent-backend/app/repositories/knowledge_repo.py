@@ -9,8 +9,21 @@ from app.models.knowledge import KnowledgeChunk, KnowledgeSource
 
 
 class KnowledgeRepository:
+    # Cached process-wide once known — pgvector availability can't change
+    # mid-run, and checking on every search would add a round-trip to the
+    # hot path.
+    _has_vector_type: bool | None = None
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def _vector_available(self) -> bool:
+        if KnowledgeRepository._has_vector_type is None:
+            row = (await self._session.execute(
+                text("SELECT 1 FROM pg_type WHERE typname = 'vector'")
+            )).first()
+            KnowledgeRepository._has_vector_type = row is not None
+        return KnowledgeRepository._has_vector_type
 
     async def create_source(
         self, organization_id: uuid.UUID, agent_type: str, name: str, source_type: str, source_metadata: dict
@@ -68,6 +81,28 @@ class KnowledgeRepository:
         (keyword), combined with a weighted sum, then deduplicated by near-identical
         content. Returns richer candidate set than final top_k for the caller to rerank."""
         candidate_k = max(top_k * 3, 20)
+
+        if not await self._vector_available():
+            # pgvector isn't installed on this Postgres — embedding is a
+            # plain TEXT column (see the 0001 migration's fallback), so
+            # cosine similarity isn't possible. Fall back to keyword-only
+            # (ts_rank) search rather than crashing on an `::vector` cast
+            # against a type that doesn't exist in this database.
+            rows = (await self._session.execute(
+                text("""
+                    SELECT id, knowledge_source_id, content, metadata,
+                           0 AS vector_score,
+                           ts_rank(content_tsv, plainto_tsquery('english', :query_text)) AS keyword_score
+                      FROM knowledge_chunks
+                     WHERE organization_id = :org_id AND agent_type = :agent_type
+                     ORDER BY keyword_score DESC
+                     LIMIT :candidate_k
+                """),
+                {"org_id": str(organization_id), "agent_type": agent_type,
+                 "query_text": query_text, "candidate_k": candidate_k},
+            )).mappings().all()
+            return [dict(r) for r in rows]
+
         vector_literal = "[" + ",".join(str(x) for x in query_embedding) + "]"
 
         rows = (await self._session.execute(

@@ -51,6 +51,21 @@ export function useDeleteKnowledge(agentType) {
   });
 }
 
+// POST /ai-agents/knowledge/{id}/reindex — multipart: file. Re-chunks/
+// re-embeds an existing source and bumps its version.
+export function useReindexKnowledge(agentType) {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, file }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return call(`/ai-agents/knowledge/${id}/reindex`, { method: 'POST', body: formData });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ai-agents', 'knowledge', agentType] }),
+  });
+}
+
 // POST /ai-agents/marketing/run — body: { brief }.
 export function useRunMarketingAgent() {
   const { call } = useApi();

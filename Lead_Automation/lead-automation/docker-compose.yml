@@ -83,18 +83,21 @@ services:
     container_name: ai-agent-service
     env_file: .env
     environment:
-      DATABASE_URL:        postgresql+asyncpg://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
-      JWT_SECRET:          ${JWT_SECRET:-change-me-in-prod}
-      LLM_PROVIDER:        groq
-      LLM_FALLBACK_PROVIDER: ollama
-      GROQ_API_KEY:        ${GROQ_API_KEY}
-      GROQ_BASE_URL:       ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
-      GROQ_MODEL:          ${GROQ_MODEL:-llama-3.3-70b-versatile}
-      OLLAMA_HOST:         http://ollama:11434
-      OLLAMA_MODEL:        ${OLLAMA_MODEL:-qwen3:8b}
-      EMBEDDING_MODEL:     ${EMBEDDING_MODEL:-nomic-embed-text}
-      CONTACT_SERVICE_URL: http://contact-service:4003
-      CAMPAIGN_SERVICE_URL: http://campaign-service:4004
+      DATABASE_URL:          postgresql+asyncpg://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      JWT_SECRET:            ${JWT_SECRET:-change-me-in-prod}
+      LLM_PROVIDER:          ${LLM_PROVIDER:-kimi}
+      LLM_FALLBACK_PROVIDER: ${LLM_FALLBACK_PROVIDER:-groq}
+      KIMI_API_KEY:          ${KIMI_API_KEY}
+      KIMI_BASE_URL:         ${KIMI_BASE_URL:-https://api.moonshot.cn/v1}
+      KIMI_MODEL:            ${KIMI_MODEL:-moonshot-v1-32k}
+      GROQ_API_KEY:          ${GROQ_API_KEY}
+      GROQ_BASE_URL:         ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL:            ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      OLLAMA_HOST:           http://ollama:11434
+      OLLAMA_MODEL:          ${OLLAMA_MODEL:-qwen3:8b}
+      EMBEDDING_MODEL:       ${EMBEDDING_MODEL:-nomic-embed-text}
+      CONTACT_SERVICE_URL:   http://contact-service:4003
+      CAMPAIGN_SERVICE_URL:  http://campaign-service:4004
     depends_on:
       postgres: { condition: service_healthy }
       ollama:   { condition: service_started }
@@ -126,8 +129,10 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
-    # Host port 4107 — review-service already owns 4007 on the host.
-    ports: ["4107:4007"]
+    # Code listens on ANALYTICS_PORT||4008 (src/index.js) — the container's
+    # real internal port, not 4007. Host port 4107 to avoid clashing with
+    # review-service's 4007 on the host.
+    ports: ["4107:4008"]
 
   integration-service:
     build: { context: ., dockerfile: services/integration-service/Dockerfile }
@@ -185,12 +190,14 @@ services:
     container_name: inbox-service
     env_file: .env
     environment:
-      PORT: "4006"
+      INBOX_PORT: "4002"
       DATABASE_URL: postgres://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
-    # Host port 4106 — ecommerce-service owns 4006 on the host.
-    ports: ["4106:4006"]
+    # Code reads INBOX_PORT (src/index.js), not PORT — 4002 is the real
+    # internal port. Host port 4106 to avoid clashing with
+    # ecommerce-service's 4006 on the host.
+    ports: ["4106:4002"]
 
   # ─────────────────────────────────────────────
   # API Gateway
@@ -205,13 +212,13 @@ services:
       # equivalent block on main had drifted (stale ports, pre-rename
       # ai-service, missing linkedin-service) and is superseded by this one.
       AUTH_SERVICE_URL:        http://auth-service:4001
-      INBOX_SERVICE_URL:       http://inbox-service:4006
+      INBOX_SERVICE_URL:       http://inbox-service:4002
       CONTACT_SERVICE_URL:     http://contact-service:4003
       CAMPAIGN_SERVICE_URL:    http://campaign-service:4004
       AI_SERVICE_URL:          http://ai-agent-service:4005
       ECOMMERCE_SERVICE_URL:   http://ecommerce-service:4006
       REVIEW_SERVICE_URL:      http://review-service:4007
-      ANALYTICS_SERVICE_URL:   http://analytics-service:4007
+      ANALYTICS_SERVICE_URL:   http://analytics-service:4008
       INTEGRATION_SERVICE_URL: http://integration-service:4008
       LINKEDIN_SERVICE_URL:    http://linkedin-service:4009
       TEAM_SERVICE_URL:        http://team-service:4010

@@ -4,8 +4,8 @@ import {
   Megaphone, Plus, Search, X, Edit, Trash2, Calendar,
   Clock, CheckCircle2, Play, Pause, XCircle, Radio, Mail,
   Smartphone, MessageCircle, Instagram, MessageSquare,
-  Sparkles, TrendingUp, Send, Filter, MoreHorizontal,
-  BarChart3, Users, AlertTriangle, ChevronDown, ShieldCheck, Check,
+  Sparkles, TrendingUp, Send, MoreHorizontal,
+  BarChart3, AlertTriangle, ChevronDown, ShieldCheck, Check,
 } from 'lucide-react';
 import { useCampaigns, useUpdateCampaign, useCampaignDecision } from '@/lib/queries/crm';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -70,103 +70,84 @@ function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
-/* ─── CampaignCard ──────────────────────────────────────── */
-function CampaignCard({ c, onDelete, onSubmitForApproval, idx }) {
-  const ch  = CHANNEL_CFG[c.channel_type] || CHANNEL_CFG.default;
-  const st  = STATUS_CFG[c.status]        || STATUS_CFG.draft;
-  const ty  = TYPE_CFG[c.type]            || { label: c.type || '—', bg: 'bg-slate-100 text-slate-600' };
-  const { Icon: ChIcon } = ch;
-  const { Icon: StIcon } = st;
+/* ─── chip primitives (shared by table + approval queue) ─── */
+function ChannelChip({ channelType }) {
+  const ch = CHANNEL_CFG[channelType] || CHANNEL_CFG.default;
+  const { Icon } = ch;
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 rounded-full shrink-0 ${ch.bg} ${ch.text}`}>
+      <Icon size={11} /> {ch.label}
+    </span>
+  );
+}
+function TypeChip({ type }) {
+  const ty = TYPE_CFG[type] || { label: type || '—', bg: 'bg-slate-100 text-slate-600' };
+  return <span className={`text-[10px] font-semibold px-2 py-1 rounded-full shrink-0 ${ty.bg}`}>{ty.label}</span>;
+}
+function StatusChip({ status }) {
+  const st = STATUS_CFG[status] || STATUS_CFG.draft;
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full shrink-0 ${st.bg} ${st.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${st.pulse ? 'animate-pulse' : ''} ${st.text.replace('text-', 'bg-')}`} />
+      {st.label}
+    </span>
+  );
+}
+
+/* ─── unified campaign table row ────────────────────────── */
+function CampaignRow({ c, onDelete, onSubmitForApproval, idx }) {
   const [menu, setMenu] = useState(false);
 
   return (
-    <div
-      className="group bg-white rounded-2xl border border-slate-100 shadow-card hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-200 overflow-hidden animate-slide-up"
-      style={{ animationDelay: `${idx * 40}ms` }}
-    >
-      {/* coloured top bar */}
-      <div className={`h-0.5 w-full bg-gradient-to-r ${ch.accent}`} />
-
-      <div className="p-5">
-        {/* header row */}
-        <div className="flex items-start justify-between gap-2 mb-3">
-          <div className="flex items-start gap-3 min-w-0">
-            <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${ch.bg}`}>
-              <ChIcon size={15} className={ch.text} />
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-bold text-slate-800 text-sm truncate">{c.name}</h3>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ch.bg} ${ch.text}`}>
-                  {ch.label}
-                </span>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ty.bg}`}>
-                  {ty.label}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* status + menu */}
-          <div className="flex items-center gap-2 shrink-0">
-            <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full ${st.bg} ${st.text}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${ch.dot} ${st.pulse ? 'animate-pulse' : ''}`} />
-              {st.label}
-            </span>
-            <div className="relative">
-              <button
-                onClick={() => setMenu((p) => !p)}
-                className="p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-all"
-              >
-                <MoreHorizontal size={14} />
-              </button>
-              {menu && (
-                <div className="absolute right-0 top-8 z-20 bg-white rounded-xl shadow-card-lg border border-slate-200 py-1 w-44 animate-scale-in">
-                  <button className="flex items-center gap-2 w-full px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">
-                    <Edit size={12} /> Edit
-                  </button>
-                  {c.status === 'draft' && (
-                    <button
-                      onClick={() => { onSubmitForApproval(c.id); setMenu(false); }}
-                      className="flex items-center gap-2 w-full px-3 py-2 text-xs text-violet-600 hover:bg-violet-50"
-                    >
-                      <ShieldCheck size={12} /> Submit for Approval
-                    </button>
-                  )}
-                  <button
-                    onClick={() => { onDelete(c.id); setMenu(false); }}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-500 hover:bg-red-50"
-                  >
-                    <Trash2 size={12} /> Delete
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* message preview */}
-        {c.message_body && (
-          <p className="text-xs text-slate-500 line-clamp-2 mb-3 leading-relaxed bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
-            {c.message_body}
-          </p>
+    <tr className="border-b border-slate-50 hover:bg-blue-50/30 transition-colors animate-slide-up" style={{ animationDelay: `${idx * 30}ms` }}>
+      <td className="px-4 py-3 min-w-0 max-w-xs">
+        <p className="text-sm font-semibold text-slate-800 truncate">{c.name}</p>
+        {c.message_body && <p className="text-[11px] text-slate-400 truncate mt-0.5">{c.message_body}</p>}
+      </td>
+      <td className="px-4 py-3"><TypeChip type={c.type} /></td>
+      <td className="px-4 py-3"><ChannelChip channelType={c.channel_type} /></td>
+      <td className="px-4 py-3"><StatusChip status={c.status} /></td>
+      <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+        {c.scheduled_at ? (
+          <span className="flex items-center gap-1.5">
+            <Calendar size={11} className="text-blue-400" /> {fmtDate(c.scheduled_at)} {fmtTime(c.scheduled_at)}
+          </span>
+        ) : (
+          <span className="text-slate-400">Not scheduled</span>
         )}
-
-        {/* footer row */}
-        <div className="flex items-center gap-3 text-[11px] text-slate-400">
-          {c.scheduled_at ? (
-            <span className="flex items-center gap-1.5">
-              <Calendar size={11} className="text-blue-400" />
-              {fmtDate(c.scheduled_at)} {fmtTime(c.scheduled_at)}
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5">
-              <Clock size={11} /> Not scheduled
-            </span>
+      </td>
+      <td className="px-4 py-3 text-right">
+        <div className="relative inline-block">
+          <button
+            onClick={() => setMenu((p) => !p)}
+            className="p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-all"
+          >
+            <MoreHorizontal size={14} />
+          </button>
+          {menu && (
+            <div className="absolute right-0 top-8 z-20 bg-white rounded-xl shadow-card-lg border border-slate-200 py-1 w-44 animate-scale-in text-left">
+              <button className="flex items-center gap-2 w-full px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">
+                <Edit size={12} /> Edit
+              </button>
+              {c.status === 'draft' && (
+                <button
+                  onClick={() => { onSubmitForApproval(c.id); setMenu(false); }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-xs text-violet-600 hover:bg-violet-50"
+                >
+                  <ShieldCheck size={12} /> Submit for Approval
+                </button>
+              )}
+              <button
+                onClick={() => { onDelete(c.id); setMenu(false); }}
+                className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-500 hover:bg-red-50"
+              >
+                <Trash2 size={12} /> Delete
+              </button>
+            </div>
           )}
         </div>
-      </div>
-    </div>
+      </td>
+    </tr>
   );
 }
 
@@ -296,6 +277,8 @@ export default function CampaignsPage() {
   const [filterChannel,  setChannel]  = useState('all');
   const [filterStatus,   setStatus]   = useState('all');
   const [filterType,     setType]     = useState('all');
+  const [dateFrom,       setDateFrom] = useState('');
+  const [dateTo,         setDateTo]   = useState('');
 
   const campaigns = Array.isArray(data) ? data : [];
   const pendingApproval = useMemo(
@@ -330,8 +313,13 @@ export default function CampaignsPage() {
     if (filterStatus  !== 'all' && c.status       !== filterStatus)  return false;
     if (filterType    !== 'all' && c.type         !== filterType)    return false;
     if (search.trim() && !c.name?.toLowerCase().includes(search.toLowerCase())) return false;
+    const refDate = c.scheduled_at || c.created_at;
+    if (dateFrom && (!refDate || new Date(refDate) < new Date(dateFrom))) return false;
+    if (dateTo   && (!refDate || new Date(refDate) > new Date(`${dateTo}T23:59:59`))) return false;
     return true;
-  }), [campaigns, filterChannel, filterStatus, filterType, search]);
+  }), [campaigns, filterChannel, filterStatus, filterType, search, dateFrom, dateTo]);
+
+  const hasFilters = filterChannel !== 'all' || filterStatus !== 'all' || filterType !== 'all' || search || dateFrom || dateTo;
 
   const handleCreate = async (payload) => {
     await create.mutateAsync(payload);
@@ -399,10 +387,10 @@ export default function CampaignsPage() {
         ))}
       </div>
 
-      {/* ── content area: channel breakdown + campaign grid ── */}
+      {/* ── content area: channel breakdown + campaign table ── */}
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
 
-        {/* LEFT: channel breakdown sidebar */}
+        {/* LEFT: approval queue + channel breakdown sidebar */}
         <div className="xl:col-span-1 space-y-4">
 
           {/* Approval Queue — human-approved execution: nothing sends without a decision here */}
@@ -426,35 +414,39 @@ export default function CampaignsPage() {
             {pendingApproval.length === 0 ? (
               <p className="text-xs text-slate-400 text-center py-4">Nothing waiting on review.</p>
             ) : (
-              <div className="space-y-3">
-                {pendingApproval.map((c) => {
-                  const ch = CHANNEL_CFG[c.channel_type] || CHANNEL_CFG.default;
-                  return (
-                    <div key={c.id} className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
-                      <p className="text-xs font-semibold text-slate-700 truncate">{c.name}</p>
-                      <p className={`text-[10px] font-semibold mt-1 ${ch.text}`}>{ch.label}</p>
-                      {c.message_body && (
-                        <p className="text-[11px] text-slate-500 mt-1.5 line-clamp-2">{c.message_body}</p>
-                      )}
-                      <div className="flex items-center gap-2 mt-2.5">
-                        <button
-                          onClick={() => handleDecision(c.id, 'approved')}
-                          disabled={decide.isPending}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-60"
-                        >
-                          <Check size={11} /> Approve
-                        </button>
-                        <button
-                          onClick={() => handleDecision(c.id, 'rejected')}
-                          disabled={decide.isPending}
-                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-red-600 border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-60"
-                        >
-                          <X size={11} /> Reject
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="overflow-x-auto -mx-1">
+                <table className="w-full text-left">
+                  <tbody>
+                    {pendingApproval.map((c) => (
+                      <tr key={c.id} className="border-b border-slate-50 last:border-0 align-top">
+                        <td className="py-2.5 px-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{c.name}</p>
+                          <div className="mt-1"><ChannelChip channelType={c.channel_type} /></div>
+                        </td>
+                        <td className="py-2.5 px-1 text-right whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 justify-end">
+                            <button
+                              onClick={() => handleDecision(c.id, 'approved')}
+                              disabled={decide.isPending}
+                              title="Approve"
+                              className="p-1.5 rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 transition-colors disabled:opacity-60"
+                            >
+                              <Check size={12} />
+                            </button>
+                            <button
+                              onClick={() => handleDecision(c.id, 'rejected')}
+                              disabled={decide.isPending}
+                              title="Reject"
+                              className="p-1.5 rounded-lg text-red-600 border border-red-200 hover:bg-red-50 transition-colors disabled:opacity-60"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -518,7 +510,7 @@ export default function CampaignsPage() {
           </div>
         </div>
 
-        {/* RIGHT: toolbar + cards grid */}
+        {/* RIGHT: toolbar + unified table */}
         <div className="xl:col-span-3 space-y-4">
 
           {/* toolbar */}
@@ -557,9 +549,18 @@ export default function CampaignsPage() {
               </div>
             ))}
 
-            {(filterChannel !== 'all' || filterStatus !== 'all' || filterType !== 'all' || search) && (
+            {/* date range */}
+            <div className="flex items-center gap-1.5">
+              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+                className="input-premium text-xs w-[130px]" title="From date" />
+              <span className="text-xs text-slate-400">–</span>
+              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+                className="input-premium text-xs w-[130px]" title="To date" />
+            </div>
+
+            {hasFilters && (
               <button
-                onClick={() => { setChannel('all'); setStatus('all'); setType('all'); setSearch(''); }}
+                onClick={() => { setChannel('all'); setStatus('all'); setType('all'); setSearch(''); setDateFrom(''); setDateTo(''); }}
                 className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-red-500 transition-colors px-2 py-2"
               >
                 <X size={13} /> Clear
@@ -574,16 +575,10 @@ export default function CampaignsPage() {
             </p>
           )}
 
-          {/* loading skeletons */}
+          {/* loading skeleton */}
           {isLoading && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="bg-white rounded-2xl border border-slate-100 p-5 space-y-3">
-                  <div className="h-4 w-32 skeleton rounded-lg" />
-                  <div className="h-3 w-24 skeleton rounded" />
-                  <div className="h-3 w-full skeleton rounded" />
-                </div>
-              ))}
+            <div className="bg-white rounded-2xl border border-slate-100 p-5 space-y-3">
+              {[0, 1, 2, 3].map((i) => <div key={i} className="h-10 w-full skeleton rounded-lg" />)}
             </div>
           )}
 
@@ -602,14 +597,10 @@ export default function CampaignsPage() {
                 <Megaphone size={28} className="text-slate-300" />
               </div>
               <p className="text-sm font-semibold text-slate-400">
-                {search || filterChannel !== 'all' || filterStatus !== 'all' || filterType !== 'all'
-                  ? 'No campaigns match your filters'
-                  : 'No campaigns yet'}
+                {hasFilters ? 'No campaigns match your filters' : 'No campaigns yet'}
               </p>
               <p className="text-xs text-slate-300 mt-1">
-                {search || filterChannel !== 'all' || filterStatus !== 'all' || filterType !== 'all'
-                  ? 'Adjust your filters or create a new campaign'
-                  : 'Create your first campaign or generate one with the Marketing Agent'}
+                {hasFilters ? 'Adjust your filters or create a new campaign' : 'Create your first campaign or generate one with the Marketing Agent'}
               </p>
               {campaigns.length === 0 && (
                 <button onClick={() => setCreate(true)} className="btn-primary mt-5 btn-sm">
@@ -619,12 +610,26 @@ export default function CampaignsPage() {
             </div>
           )}
 
-          {/* campaign cards grid */}
+          {/* unified campaign table */}
           {!isLoading && filtered.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {filtered.map((c, i) => (
-                <CampaignCard key={c.id} c={c} onDelete={handleDelete} onSubmitForApproval={handleSubmitForApproval} idx={i} />
-              ))}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden">
+              <table className="table-premium w-full">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3">Name</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Channel</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Scheduled</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((c, i) => (
+                    <CampaignRow key={c.id} c={c} onDelete={handleDelete} onSubmitForApproval={handleSubmitForApproval} idx={i} />
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
