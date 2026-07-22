@@ -1,0 +1,59 @@
+# ── Node ─────────────────────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-error.log*
+.npm/
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Alembic runtime ───────────────────────────────────────────────────────────
+# (keep alembic/ source, ignore only runtime artefacts)
+alembic/__pycache__/
+
+# ── Next.js ───────────────────────────────────────────────────────────────────
+frontend/.next/
+frontend/out/
+
+# ── Secrets & local overrides ────────────────────────────────────────────────
+.env
+ai-agent-backend/.env
+**/.env.local
+**/.env.*.local
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+
+# ── OS noise ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor ───────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Uploads (runtime, not source) ────────────────────────────────────────────
+services/automation-service/public/uploads/
+
+# ── Test artefacts ───────────────────────────────────────────────────────────
+.coverage
+htmlcov/
+coverage/
+test-results/

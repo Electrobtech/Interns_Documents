@@ -1,0 +1,119 @@
+const express = require('express');
+const cors = require('cors');
+const { createProxyMiddleware } = require('http-proxy-middleware');
+
+const app = express();
+app.use(cors());
+
+const AUTH        = process.env.AUTH_SERVICE_URL        || 'http://localhost:4001';
+const INBOX       = process.env.INBOX_SERVICE_URL       || 'http://localhost:4002';
+const CONTACT     = process.env.CONTACT_SERVICE_URL     || 'http://localhost:4003';
+const CAMPAIGN    = process.env.CAMPAIGN_SERVICE_URL    || 'http://localhost:4004';
+const AI          = process.env.AI_SERVICE_URL          || 'http://localhost:4005';
+const ECOMMERCE   = process.env.ECOMMERCE_SERVICE_URL   || 'http://localhost:4006';
+const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:4007';
+const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
+const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
+const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
+
+app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
+
+// Required by Meta before an app can go Live (App Settings -> Basic ->
+// Privacy Policy URL). Meta crawls this URL to confirm it resolves and
+// contains real content, so it must be reachable from the public internet
+// (works via the Cloudflare tunnel pointed at this gateway).
+app.get('/privacy-policy', (_req, res) => {
+  res.type('html').send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Privacy Policy - Electrobtech Innovations</title>
+  <style>
+    body { font-family: -apple-system, Arial, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; line-height: 1.6; color: #222; }
+    h1 { font-size: 1.6em; }
+    h2 { font-size: 1.2em; margin-top: 1.5em; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy</h1>
+  <p>Last updated: ${new Date().toISOString().slice(0, 10)}</p>
+
+  <p>Electrobtech Innovations ("we", "us") provides tools to manage customer
+  conversations across Facebook Messenger, Instagram Direct, and WhatsApp.
+  This page explains what data we collect and how it is used.</p>
+
+  <h2>What we collect</h2>
+  <p>When you message our connected Facebook Page, Instagram account, or
+  WhatsApp number, we receive and store your message content, your
+  platform-provided sender ID, and timestamps, in order to respond to you
+  and maintain a record of the conversation.</p>
+
+  <h2>How we use it</h2>
+  <p>Message data is used solely to respond to inbound messages (including
+  automated replies), maintain conversation history, and improve our
+  customer communication. We do not sell this data to third parties.</p>
+
+  <h2>Data retention and deletion</h2>
+  <p>You may request deletion of your data at any time by contacting us.
+  Facebook/Instagram users can also trigger deletion via Meta's standard
+  data deletion request flow.</p>
+
+  <h2>Contact</h2>
+  <p>For privacy questions or deletion requests, contact us through the
+  same channel you messaged us on.</p>
+</body>
+</html>`);
+});
+
+// Route table — the single public entry point for the frontend.
+//
+// NOTE: integration-service mounts its own OAuth sub-routes under /auth
+// (see services/integration-service/src/routes/auth.js: /auth/connect-url,
+// /auth/facebook, /auth/facebook/callback, /auth/refresh-tokens,
+// /auth/deauthorize, /auth/data-deletion*) — distinct from auth-service's
+// /auth/login and /auth/register. Express matches app.use() middleware in
+// registration order and the first match wins, so these more specific
+// /auth/* entries MUST be listed before the generic '/auth' -> AUTH entry
+// below, or they'd be swallowed by it and 404 against auth-service instead.
+const routes = [
+  { path: '/auth/connect-url',    target: INTEGRATION },
+  { path: '/auth/facebook',       target: INTEGRATION }, // covers /auth/facebook and /auth/facebook/callback
+  { path: '/auth/refresh-tokens', target: INTEGRATION },
+  { path: '/auth/deauthorize',    target: INTEGRATION },
+  { path: '/auth/data-deletion',  target: INTEGRATION }, // covers /auth/data-deletion and /auth/data-deletion-status
+  { path: '/auth/unlock',         target: INTEGRATION }, // admin-only: lifts the lock on the Instagram/Facebook connection
+  { path: '/instagram',       target: INTEGRATION },
+  { path: '/facebook',        target: INTEGRATION },
+  { path: '/whatsapp',        target: INTEGRATION },
+  { path: '/credentials',     target: INTEGRATION }, // manual API key / App ID / App Secret entry (routes/credentials.js)
+  { path: '/auth',            target: AUTH },
+  { path: '/conversations',   target: INBOX },
+  { path: '/contacts',        target: CONTACT },
+  { path: '/leads',           target: CONTACT },
+  { path: '/campaigns',       target: CAMPAIGN },
+  { path: '/ai-agents',       target: AI },
+  { path: '/orders',          target: ECOMMERCE },
+  { path: '/carts',           target: ECOMMERCE },
+  { path: '/recovery-flows',  target: ECOMMERCE },
+  { path: '/reviews',         target: REVIEW },
+  { path: '/social',          target: REVIEW },
+  { path: '/analytics',       target: ANALYTICS },
+  { path: '/integrations',    target: INTEGRATION },
+  { path: '/api-keys',        target: INTEGRATION },
+  { path: '/webhooks',        target: INTEGRATION },
+  { path: '/webhook',         target: INTEGRATION },   // Meta webhook callback (/webhook/meta)
+  { path: '/channels',        target: INTEGRATION },
+  { path: '/users',           target: TEAM },
+  { path: '/teams',           target: TEAM },
+];
+
+for (const r of routes) {
+  app.use(r.path, createProxyMiddleware({
+    target: r.target,
+    changeOrigin: true,
+    // keep the original path (e.g. /auth/login -> AUTH/auth/login)
+  }));
+}
+
+const PORT = process.env.GATEWAY_PORT || 8080;
+app.listen(PORT, () => console.log(`api-gateway on :${PORT}`));
