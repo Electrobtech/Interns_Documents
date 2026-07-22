@@ -1,0 +1,4 @@
+# Shell scripts must keep LF endings — a CRLF shebang line breaks
+# `exec ./entrypoint.sh` inside Linux containers (Windows checkouts
+# otherwise convert these to CRLF via core.autocrlf).
+*.sh text eol=lf

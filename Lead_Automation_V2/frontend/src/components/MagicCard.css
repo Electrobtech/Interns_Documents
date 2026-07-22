@@ -1,0 +1,77 @@
+/* MagicCard — light-theme adaptation of the React Bits MagicBento effect.
+   Applied on top of each dashboard card's own background/border/shadow
+   classes; only adds the glow/tilt/particle interaction layer. */
+
+.bento-section {
+  position: relative;
+  user-select: none;
+}
+
+.magic-bento-card {
+  position: relative;
+  overflow: hidden;
+  transform-style: preserve-3d;
+  will-change: transform;
+
+  --glow-x: 50%;
+  --glow-y: 50%;
+  --glow-intensity: 0;
+  --glow-radius: 200px;
+  --glow-color: 37, 99, 235;
+}
+
+/* Border-glow ring that follows the cursor / global spotlight */
+.magic-bento-card--border-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1.5px;
+  background: radial-gradient(
+    var(--glow-radius) circle at var(--glow-x) var(--glow-y),
+    rgba(var(--glow-color), calc(var(--glow-intensity) * 0.85)) 0%,
+    rgba(var(--glow-color), calc(var(--glow-intensity) * 0.35)) 35%,
+    transparent 65%
+  );
+  border-radius: inherit;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+  transition: opacity 0.3s ease;
+}
+
+.magic-bento-card--border-glow:hover {
+  box-shadow:
+    0 8px 24px rgba(15, 23, 42, 0.06),
+    0 0 24px rgba(var(--glow-color), 0.12);
+}
+
+.magic-particle::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: rgba(var(--glow-color, 37, 99, 235), 0.2);
+  border-radius: 50%;
+  z-index: -1;
+}
+
+.magic-global-spotlight {
+  will-change: transform, opacity;
+  z-index: 200 !important;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .magic-bento-card {
+    transform: none !important;
+  }
+}
