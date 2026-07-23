@@ -3,13 +3,153 @@
 @tailwind utilities;
 
 /* ─── Base ──────────────────────────────────────────────────────── */
+
+/* Font variables – Manrope headings, Inter body (optimized locally via next/font) */
 body {
-  background: #f1f5f9;
+  background: #f8fafc;
   color: #0f172a;
+  font-family: var(--font-body), system-ui, sans-serif;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading), system-ui, sans-serif;
+  letter-spacing: -0.025em;
+}
+
+/* ─── Landing page overrides ─────────────────────────────────── */
+.landing-root {
+  background: #020817;
+  color: #f8fafc;
+}
+
+/* Animated gradient border */
+@keyframes borderGlow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* Shimmer for dark surfaces */
+@keyframes shimmerDark {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Ticker scroll */
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Pulse ring */
+@keyframes pulseRing {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59,130,246,0.4); }
+  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(59,130,246,0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+}
+
+/* Float */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+
+/* Gradient shift */
+@keyframes gradientShiftFast {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Shimmer sweep across cards */
+@keyframes shimmerSweep {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Spinning conic gradient — glowing border effect */
+@keyframes spinGlow {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Morphing blob */
+@keyframes blobMorph {
+  0%, 100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
+  50% { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
+}
+
+/* Slide-in from left */
+@keyframes slideInLeft {
+  0% { opacity: 0; transform: translateX(-40px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* Slide-in from right */
+@keyframes slideInRight {
+  0% { opacity: 0; transform: translateX(40px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* Draw path (for SVG stroke-dashoffset animations) */
+@keyframes drawPath {
+  from { stroke-dashoffset: 1000; }
+  to { stroke-dashoffset: 0; }
+}
+
+/* Flowing dashed wire animation */
+@keyframes dashFlow {
+  0% { stroke-dashoffset: 36; }
+  100% { stroke-dashoffset: 0; }
+}
+
+/* Premium Light Lavender Integration Card */
+.integration-card-lavender {
+  background-color: #ffffff !important;
+  border: 1.5px solid rgba(226, 232, 240, 0.8) !important;
+  transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.01) !important;
+}
+
+.integration-card-lavender:hover {
+  transform: translateY(-6px) scale(1.02) !important;
+  background-color: #e0d4fc !important;
+  border-color: rgba(139, 92, 246, 0.45) !important;
+  box-shadow: 0 15px 35px -5px rgba(99, 102, 241, 0.18), 0 8px 16px -2px rgba(139, 92, 246, 0.12) !important;
+}
+
+/* Traveling pulse along a connector line — horizontal + vertical variants */
+@keyframes flowX {
+  0% { left: -8%; opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+@keyframes flowY {
+  0% { top: -8%; opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+.animate-flow-x { animation: flowX 1.9s linear infinite; }
+.animate-flow-y { animation: flowY 1.9s linear infinite; }
+
+/* Auto-advancing step progress bar fill (see StepFlow in page.jsx) */
+@keyframes fillBar {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+.animate-fill-bar { animation: fillBar linear forwards; }
+
+.animate-float { animation: float 4s ease-in-out infinite; }
+.animate-pulse-ring { animation: pulseRing 2s ease-out infinite; }
+.animate-ticker { animation: ticker 28s linear infinite; }
+.animate-blob { animation: blobMorph 8s ease-in-out infinite; }
+.animate-shimmer { animation: shimmerSweep 2.5s linear infinite; }
+.animate-spin-slow { animation: spinGlow 6s linear infinite; }
+.animate-slide-left { animation: slideInLeft 0.7s cubic-bezier(0.22,1,0.36,1) both; }
+.animate-slide-right { animation: slideInRight 0.7s cubic-bezier(0.22,1,0.36,1) both; }
 
 /* Used by the Company Registration wizard for animated step transitions
    (RegistrationWizard.jsx: animate-[fadeIn_0.25s_ease]). */

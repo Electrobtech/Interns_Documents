@@ -1,15 +1,14 @@
 'use client';
-import { Check, User, Building2, Phone, MapPin, ShieldCheck, FileCheck2, CreditCard, PartyPopper } from 'lucide-react';
+import { Check, User, Building2, Phone, MapPin, ShieldCheck, CreditCard, PartyPopper } from 'lucide-react';
 
 export const STEPS = [
-  { id: 1, title: 'GST Verification', icon: FileCheck2 },
-  { id: 2, title: 'Account Owner', icon: User },
-  { id: 3, title: 'Company Information', icon: Building2 },
-  { id: 4, title: 'Business Contact', icon: Phone },
-  { id: 5, title: 'Company Address', icon: MapPin },
-  { id: 6, title: 'Verification', icon: ShieldCheck },
-  { id: 7, title: 'Subscription', icon: CreditCard },
-  { id: 8, title: 'Finish', icon: PartyPopper },
+  { id: 1, title: 'Account Owner', icon: User },
+  { id: 2, title: 'Company Information', icon: Building2 },
+  { id: 3, title: 'Business Contact', icon: Phone },
+  { id: 4, title: 'Company Address', icon: MapPin },
+  { id: 5, title: 'Verification', icon: ShieldCheck },
+  { id: 6, title: 'Subscription', icon: CreditCard },
+  { id: 7, title: 'Finish', icon: PartyPopper },
 ];
 
 export default function StepSidebar({ step, furthestStep, onJump }) {
@@ -19,10 +18,10 @@ export default function StepSidebar({ step, furthestStep, onJump }) {
     <aside className="lg:w-64 shrink-0">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 lg:sticky lg:top-6">
         <div className="mb-5 hidden lg:block">
-          <h2 className="text-sm font-bold text-brand-dark">Create your company</h2>
+          <h2 className="text-sm font-bold text-slate-800">Create your company</h2>
           <p className="text-xs text-slate-400 mt-0.5">Step {step} of {STEPS.length}</p>
           <div className="h-1.5 bg-slate-100 rounded-full mt-3 overflow-hidden">
-            <div className="h-full bg-brand rounded-full transition-all duration-500" style={{ width: `${percent}%` }} />
+            <div className="h-full bg-violet-600 rounded-full transition-all duration-500" style={{ width: `${percent}%` }} />
           </div>
           <p className="text-[11px] text-slate-400 mt-1">{percent}% complete</p>
         </div>
@@ -40,10 +39,10 @@ export default function StepSidebar({ step, furthestStep, onJump }) {
                   disabled={!clickable}
                   onClick={() => clickable && onJump(s.id)}
                   className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors
-                    ${state === 'active' ? 'bg-brand-light text-brand-dark' : clickable ? 'hover:bg-slate-50 text-slate-600' : 'text-slate-300 cursor-not-allowed'}`}
+                    ${state === 'active' ? 'bg-violet-50 text-violet-700 font-bold' : clickable ? 'hover:bg-slate-50 text-slate-600' : 'text-slate-300 cursor-not-allowed'}`}
                 >
                   <span className={`w-7 h-7 rounded-full grid place-items-center shrink-0 text-xs font-semibold
-                    ${state === 'done' ? 'bg-emerald-500 text-white' : state === 'active' ? 'bg-brand text-white' : 'bg-slate-100 text-slate-400'}`}>
+                    ${state === 'done' ? 'bg-emerald-500 text-white' : state === 'active' ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
                     {state === 'done' ? <Check size={14} /> : <Icon size={14} />}
                   </span>
                   <span className="text-xs font-medium whitespace-nowrap lg:whitespace-normal">{s.title}</span>
