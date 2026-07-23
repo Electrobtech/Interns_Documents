@@ -194,9 +194,14 @@ CREATE TABLE IF NOT EXISTS conversations (
                                                              -- automatically when a Handoff node is reached
                                                              -- (see workflowEngine/webhookController), and
                                                              -- flippable either way from the inbox UI.
+  external_contact_id TEXT,                -- provider-side thread/sender id (wa_id / IGSID / Gmail threadId / ...),
+                                             -- used to find-or-create the right conversation for an inbound event
   last_message_at TIMESTAMPTZ DEFAULT now(),
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS ix_conversations_org_channel_external
+  ON conversations (organization_id, channel_type, external_contact_id);
 
 CREATE TABLE IF NOT EXISTS messages (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -207,6 +212,10 @@ CREATE TABLE IF NOT EXISTS messages (
   sender          TEXT,
   message_type    TEXT NOT NULL DEFAULT 'text', -- text | button_click | list_select | buttons | list | document | system
   metadata        JSONB NOT NULL DEFAULT '{}'::jsonb, -- raw interaction/template payload for richer rendering later
+  media_url       TEXT,                    -- WhatsApp/IG media, or an email attachment's download URL
+  media_type      TEXT,
+  external_id     TEXT,                    -- provider-side message id (wamid / Gmail message id / ...)
+  subject         TEXT,                    -- email-specific, NULL for every other channel
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -337,6 +346,85 @@ CREATE TABLE IF NOT EXISTS google_oauth_configs (
   updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (organization_id)
 );
+
+-- ---------- Email (Gmail) — see migrations/013_email_integration.sql and
+-- services/email-service. Full-fidelity mailbox data lives in these
+-- dedicated tables; a summarized copy is also written into the shared
+-- conversations/messages tables above (channel_type='email') so a
+-- connected mailbox shows up in the Unified Inbox like every other
+-- channel. ----------
+CREATE TABLE IF NOT EXISTS email_accounts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  provider          TEXT NOT NULL DEFAULT 'gmail',
+  email             TEXT NOT NULL,
+  access_token      TEXT,
+  refresh_token     TEXT,
+  token_expires_at  TIMESTAMPTZ,
+  scope             TEXT,
+  connected         BOOLEAN NOT NULL DEFAULT true,
+  connected_by      UUID REFERENCES users(id),
+  history_id        TEXT,
+  watch_expires_at  TIMESTAMPTZ,
+  last_synced_at    TIMESTAMPTZ,
+  last_sync_error   TEXT,
+  signature_html    TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, email)
+);
+
+CREATE TABLE IF NOT EXISTS email_threads (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  email_account_id   UUID REFERENCES email_accounts(id) ON DELETE CASCADE,
+  thread_id          TEXT NOT NULL,
+  conversation_id    UUID REFERENCES conversations(id) ON DELETE SET NULL,
+  subject            TEXT,
+  participants       TEXT[] DEFAULT '{}',
+  last_message_time  TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (email_account_id, thread_id)
+);
+
+CREATE TABLE IF NOT EXISTS email_messages (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  email_account_id  UUID REFERENCES email_accounts(id) ON DELETE CASCADE,
+  thread_id         UUID REFERENCES email_threads(id) ON DELETE CASCADE,
+  message_id        TEXT NOT NULL,
+  rfc822_message_id TEXT,
+  in_reply_to       TEXT,
+  from_email        TEXT,
+  to_email          TEXT[] DEFAULT '{}',
+  cc_email          TEXT[] DEFAULT '{}',
+  subject           TEXT,
+  body              TEXT,
+  html_body         TEXT,
+  snippet           TEXT,
+  direction         TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'received',
+  label_ids         TEXT[] DEFAULT '{}',
+  has_attachments   BOOLEAN NOT NULL DEFAULT false,
+  received_at       TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (email_account_id, message_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_email_messages_thread ON email_messages (thread_id, received_at);
+
+CREATE TABLE IF NOT EXISTS email_attachments (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  message_id          UUID REFERENCES email_messages(id) ON DELETE CASCADE,
+  filename            TEXT,
+  mime_type           TEXT,
+  size                INT,
+  gmail_attachment_id TEXT,
+  url                 TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_email_attachments_message ON email_attachments (message_id);
 
 -- ---------- Ecommerce & Revenue ----------
 CREATE TABLE IF NOT EXISTS ecommerce_orders (

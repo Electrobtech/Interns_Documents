@@ -15,7 +15,7 @@
 
 const express = require('express');
 const crypto = require('crypto');
-const { pool } = require('@lead/shared');
+const { pool, withSystemAccess } = require('@lead/shared');
 const { isEmail, isPhone } = require('../validators');
 
 const router = express.Router();
@@ -32,10 +32,15 @@ function generateCode() {
 
 async function sendCode(channel, target, res) {
   const code = generateCode();
-  await pool.query(
-    `INSERT INTO verification_codes (channel, target, code_hash, purpose, expires_at)
-     VALUES ($1, $2, $3, 'signup', now() + interval '${CODE_TTL_MINUTES} minutes')`,
-    [channel, target, hashCode(code)]
+  // verification_codes has no reliable organization_id at this point (this
+  // runs mid-wizard, before an org exists, keyed only on channel+target) —
+  // see docs/MULTI_TENANT_RLS.md's "deliberately NOT under RLS" note.
+  await withSystemAccess(() =>
+    pool.query(
+      `INSERT INTO verification_codes (channel, target, code_hash, purpose, expires_at)
+       VALUES ($1, $2, $3, 'signup', now() + interval '${CODE_TTL_MINUTES} minutes')`,
+      [channel, target, hashCode(code)]
+    )
   );
   // TODO: send via email/SMS provider (integration-service) instead of returning it.
   res.status(201).json({
@@ -48,21 +53,26 @@ async function sendCode(channel, target, res) {
 }
 
 async function confirmCode(channel, target, code, res) {
-  const { rows } = await pool.query(
-    `SELECT id FROM verification_codes
-      WHERE channel = $1 AND target = $2 AND code_hash = $3
-        AND consumed = false AND expires_at > now()
-      ORDER BY created_at DESC LIMIT 1`,
-    [channel, target, hashCode(String(code))]
-  );
-  if (!rows.length) return res.status(400).json({ verified: false, error: 'Invalid or expired code' });
+  // Cross-tenant by design: looked up by (channel, target) alone, and the
+  // users UPDATE below is keyed on email/mobile with no organization_id in
+  // scope yet — same rationale as sendCode() above.
+  return withSystemAccess(async () => {
+    const { rows } = await pool.query(
+      `SELECT id FROM verification_codes
+        WHERE channel = $1 AND target = $2 AND code_hash = $3
+          AND consumed = false AND expires_at > now()
+        ORDER BY created_at DESC LIMIT 1`,
+      [channel, target, hashCode(String(code))]
+    );
+    if (!rows.length) return res.status(400).json({ verified: false, error: 'Invalid or expired code' });
 
-  await pool.query(`UPDATE verification_codes SET consumed = true WHERE id = $1`, [rows[0].id]);
-  await pool.query(
-    `UPDATE users SET ${channel === 'email' ? 'is_email_verified' : 'is_phone_verified'} = true WHERE ${channel === 'email' ? 'email' : 'mobile'} = $1`,
-    [target]
-  );
-  res.json({ verified: true, channel, target });
+    await pool.query(`UPDATE verification_codes SET consumed = true WHERE id = $1`, [rows[0].id]);
+    await pool.query(
+      `UPDATE users SET ${channel === 'email' ? 'is_email_verified' : 'is_phone_verified'} = true WHERE ${channel === 'email' ? 'email' : 'mobile'} = $1`,
+      [target]
+    );
+    res.json({ verified: true, channel, target });
+  });
 }
 
 // POST /auth/verify/email  { email } -> send | { email, code } -> confirm

@@ -12,7 +12,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
-const { pool, sign, authenticate } = require('@lead/shared');
+const { pool, sign, authenticate, withSystemAccess } = require('@lead/shared');
 const {
   validateCompanyRegistration,
   ALLOWED_UPLOAD_MIME,
@@ -34,27 +34,43 @@ router.post('/auth/register/company', async (req, res) => {
   const { owner, company, contact, address, verification, subscription } = req.body;
   const slug = company.companyName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
-  const client = await pool.connect();
+  // Pre-tenant: creates the organizations row itself, and the duplicate
+  // checks below look across ALL orgs by design — so this whole handler
+  // runs with RLS bypassed rather than scoped to a (not-yet-existing)
+  // tenant. pool.query inside withSystemAccess transparently pins to the
+  // same bypass-tagged connection, so plain BEGIN/COMMIT/ROLLBACK below
+  // still form one real transaction. See docs/MULTI_TENANT_RLS.md §2.5.
   try {
-    await client.query('BEGIN');
+    await withSystemAccess(() =>
+      registerCompany(req, res, { owner, company, contact, address, verification, subscription, slug })
+    );
+  } catch (e) {
+    console.error(e);
+    if (!res.headersSent) res.status(500).json({ error: 'Company registration failed' });
+  }
+});
+
+async function registerCompany(req, res, { owner, company, contact, address, verification, subscription, slug }) {
+  try {
+    await pool.query('BEGIN');
 
     // Duplicate checks up front so we can return field-specific errors
     // instead of a generic 23505 constraint-violation message.
-    const dupCompany = await client.query(
+    const dupCompany = await pool.query(
       `SELECT id FROM organizations WHERE lower(name) = lower($1) OR slug = $2`,
       [company.companyName.trim(), slug]
     );
     if (dupCompany.rows.length) {
-      await client.query('ROLLBACK');
+      await pool.query('ROLLBACK');
       return res.status(409).json({ error: 'Validation failed', details: [{ field: 'company.companyName', message: 'A company with this name is already registered' }] });
     }
-    const dupEmail = await client.query(`SELECT id FROM users WHERE email = $1`, [owner.workEmail.trim().toLowerCase()]);
+    const dupEmail = await pool.query(`SELECT id FROM users WHERE email = $1`, [owner.workEmail.trim().toLowerCase()]);
     if (dupEmail.rows.length) {
-      await client.query('ROLLBACK');
+      await pool.query('ROLLBACK');
       return res.status(409).json({ error: 'Validation failed', details: [{ field: 'owner.workEmail', message: 'This email is already registered' }] });
     }
 
-    const org = await client.query(
+    const org = await pool.query(
       `INSERT INTO organizations (
          name, slug, legal_name, business_type, industry, website, logo_url,
          employee_count, description, company_email, company_phone,
@@ -89,9 +105,9 @@ router.post('/auth/register/company', async (req, res) => {
     );
     const organizationId = org.rows[0].id;
 
-    const roleRow = await client.query(`SELECT id FROM roles WHERE name = 'owner'`);
+    const roleRow = await pool.query(`SELECT id FROM roles WHERE name = 'owner'`);
     const hash = await bcrypt.hash(owner.password, 10);
-    const user = await client.query(
+    const user = await pool.query(
       `INSERT INTO users (
          organization_id, role_id, name, email, mobile, password_hash,
          two_factor_enabled, two_factor_method
@@ -104,24 +120,21 @@ router.post('/auth/register/company', async (req, res) => {
     );
     const userId = user.rows[0].id;
 
-    await client.query(
+    await pool.query(
       `INSERT INTO subscriptions (organization_id, plan, status) VALUES ($1, $2, 'active')`,
       [organizationId, subscription.plan]
     );
 
-    await client.query('COMMIT');
+    await pool.query('COMMIT');
 
     const token = sign({ userId, organizationId, role: 'owner' });
     res.status(201).json({ token, organizationId, userId });
   } catch (e) {
-    await client.query('ROLLBACK');
+    await pool.query('ROLLBACK');
     if (e.code === '23505') return res.status(409).json({ error: 'Company or email already registered' });
-    console.error(e);
-    res.status(500).json({ error: 'Company registration failed' });
-  } finally {
-    client.release();
+    throw e;
   }
-});
+}
 
 // ---------------------------------------------------------------------
 // GET /company/:id — tenant profile (protected + tenant-isolated: a user

@@ -1,0 +1,67 @@
+{
+  "_id": "pb_instagram_keyword_auto_reply",
+  "clientId": "client_882",
+  "name": "Instagram Keyword Auto-Reply",
+  "channels": ["instagram"],
+  "playbookType": "default",
+  "triggerKeywords": [],
+  "status": "active",
+  "version": 1,
+  "entryNodeId": "node_keyword_router",
+  "globalLimits": {
+    "maxConversationsTotal": null,
+    "maxConversationsPerDay": null,
+    "resetWindow": "all_time"
+  },
+  "nodes": [
+    {
+      "id": "node_keyword_router",
+      "type": "keyword_auto_reply",
+      "channel": "instagram",
+      "position": { "x": 0, "y": 0 },
+      "data": {
+        "categories": [
+          {
+            "id": "cat_pricing",
+            "name": "Pricing",
+            "keywords": ["price", "pricing", "cost", "charges", "quotation", "quote", "package", "fees"],
+            "response": "Our pricing starts from ₹999. Please contact our sales team for a customized quotation."
+          },
+          {
+            "id": "cat_services",
+            "name": "Services",
+            "keywords": ["service", "services", "product", "products", "offer", "offering"],
+            "response": "We provide Lead Automation, CRM Integration, AI Chatbots, Social Media Automation, Review Management, and Customer Support Automation."
+          },
+          {
+            "id": "cat_contact",
+            "name": "Contact",
+            "keywords": ["contact", "phone", "mobile", "email", "call", "support"],
+            "response": "You can contact us at +91-XXXXXXXXXX or email support@company.com."
+          },
+          {
+            "id": "cat_location",
+            "name": "Location",
+            "keywords": ["location", "address", "office", "where"],
+            "response": "Our office is located in Bangalore, Karnataka."
+          },
+          {
+            "id": "cat_working_hours",
+            "name": "Working Hours",
+            "keywords": ["timings", "working hours", "business hours", "open", "close"],
+            "response": "Our working hours are Monday to Friday, 9:00 AM to 6:00 PM."
+          }
+        ],
+        "defaultResponse": "Thank you for your message. We couldn't identify your request. Please describe your question in more detail or contact our support team.",
+        "combineSeparator": "\n\n",
+        "nextNodeId": "node_keyword_router"
+      },
+      "meta": {
+        "label": "Keyword Auto-Reply",
+        "notes": "Self-looping node — always ready to re-match the next inbound DM. No multi-step flow."
+      }
+    }
+  ],
+  "createdAt": "2026-07-22T00:00:00Z",
+  "updatedAt": "2026-07-22T00:00:00Z"
+}

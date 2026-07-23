@@ -2,6 +2,7 @@ const playbookRepository = require('../repositories/playbookRepository');
 const conversationSessionRepository = require('../repositories/conversationSessionRepository');
 const { evaluateConditionNode, evaluateAnswerBranchNode } = require('./conditionEvaluator');
 const { checkAndIncrement, buildScopeKey } = require('./throttleService');
+const { buildReply } = require('./keywordMatcher');
 
 /**
  * MAIN ENTRY POINT
@@ -182,6 +183,52 @@ async function walkForward({ nodeMap, startNodeId, context, session, playbookId,
     if (node.type === 'action') {
       await runAction(node.data, session); // fire-and-await side effect (tag, webhook, etc.)
       nextNodeId = node.data.nextNodeId;
+      continue;
+    }
+
+    if (node.type === 'keyword_auto_reply') {
+      // Stateless, self-looping keyword rule engine (see keywordMatcher.js
+      // and flow-schema.md §keyword_auto_reply). Every inbound free-text
+      // message is normalized and matched against this node's configured
+      // categories; every category that matches has its response combined
+      // (deduplicated) into ONE outbound message, or the node's
+      // defaultResponse is used when nothing matches. The node then loops
+      // back to itself so the very next inbound message is re-evaluated
+      // from scratch — there is no multi-step flow here, just an
+      // always-ready-to-reply keyword bot, matching the "combine matches,
+      // default otherwise, reply again next time" behavior an Instagram DM
+      // auto-reply system needs.
+      const rawText = context.lastMessage?.text || '';
+      const { replyText, matchedCategories } = buildReply({
+        rawText,
+        categories: node.data.categories || [],
+        defaultResponse: node.data.defaultResponse,
+        separator: node.data.combineSeparator,
+      });
+
+      if (matchedCategories.length) {
+        console.log(`[workflowEngine] keyword_auto_reply node ${node.id} matched categories: ${matchedCategories.join(', ')}`);
+      } else {
+        console.log(`[workflowEngine] keyword_auto_reply node ${node.id} matched no category — using default response`);
+      }
+
+      // Synthesize a plain-text message node reusing the SAME id as the
+      // keyword_auto_reply node itself (rather than minting a new one), so
+      // session.currentNodeId still points at a real node in nodeMap on the
+      // next turn — see resolveNextNodeIdFromInteraction's fallback branch
+      // below, which reads this node's own data.nextNodeId (self-referential
+      // by convention) to loop back here.
+      nodesToRender.push({
+        id: node.id,
+        type: 'message',
+        data: {
+          messageType: 'text',
+          body: replyText,
+          waitForReply: true,
+          nextNodeId: node.data.nextNodeId ?? node.id,
+        },
+      });
+      nextNodeId = null; // one reply per inbound message; pause here until the next one
       continue;
     }
 
