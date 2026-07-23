@@ -39,10 +39,22 @@ echo "Creating role 'lead' and database 'lead_automation' (ignore 'already exist
 "${ADMIN[@]}" -d postgres -c "CREATE ROLE lead WITH LOGIN PASSWORD 'leadpass' SUPERUSER;" 2>/dev/null || true
 "${ADMIN[@]}" -d postgres -c "CREATE DATABASE lead_automation OWNER lead;" 2>/dev/null || true
 
+# Non-superuser role every service actually connects as. RLS (loaded below)
+# is never enforced against a table's owner ('lead') or a superuser, so
+# this role is what makes the policies actually do anything — see
+# infra/db/rls.sql and docs/MULTI_TENANT_RLS.md.
+echo "Creating role 'app_user' (ignore 'already exists')…"
+"${ADMIN[@]}" -d postgres -c "CREATE ROLE app_user WITH LOGIN PASSWORD '${APP_DB_PASSWORD:-apppass}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;" 2>/dev/null || true
+"${ADMIN[@]}" -d postgres -c "GRANT CONNECT ON DATABASE lead_automation TO app_user;" 2>/dev/null || true
+
 echo "Loading schema…"
 "${ADMIN[@]}" -d lead_automation -v ON_ERROR_STOP=1 -f "$ROOT/infra/db/schema.sql"
 echo "Loading seed data…"
 "${ADMIN[@]}" -d lead_automation -v ON_ERROR_STOP=1 -f "$ROOT/infra/db/seed.sql"
+echo "Enabling row-level security…"
+"${ADMIN[@]}" -d lead_automation -v ON_ERROR_STOP=1 -f "$ROOT/infra/db/rls.sql"
 
 echo ""
 echo "✅ Database ready. Login: admin@electrobtech.com / Admin@123"
+echo "   Services should connect as app_user (see .env.example), not lead — RLS"
+echo "   is not enforced against 'lead' since it owns the tables."
