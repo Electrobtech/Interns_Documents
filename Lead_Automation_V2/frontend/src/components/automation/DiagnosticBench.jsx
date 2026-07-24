@@ -228,14 +228,14 @@ function TextMessage({ node, onDone, density, timestamp }) {
     onDone?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  return <BotBubble density={density} timestamp={timestamp}>{node.data.body}</BotBubble>;
+  return <BotBubble density={density} timestamp={timestamp}><div className="whitespace-pre-wrap">{node.data.body}</div></BotBubble>;
 }
 
 function ButtonsMessage({ node, answered, onSelect, density, timestamp }) {
   const compact = density === "compact";
   return (
     <BotBubble density={density} timestamp={timestamp}>
-      <div>{node.data.body}</div>
+      <div className="whitespace-pre-wrap">{node.data.body}</div>
       <div className={compact ? "mt-1 flex flex-col gap-1" : "mt-2 flex flex-col gap-1.5"}>
         {node.data.buttons.map((btn) => (
           <button
@@ -263,7 +263,7 @@ function ListMessage({ node, rows, buttonLabel, answered, onSelect, density, tim
 
   return (
     <BotBubble density={density} timestamp={timestamp}>
-      <div>{node.data.body}</div>
+      <div className="whitespace-pre-wrap">{node.data.body}</div>
       <button
         disabled={answered}
         onClick={() => setOpen((o) => !o)}
