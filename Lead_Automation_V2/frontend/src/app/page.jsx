@@ -692,7 +692,7 @@ export default function Landing() {
           {/* Nav Items */}
           <nav className="hidden items-center gap-8 md:flex">
             {[
-              { label: 'Live Playground', href: '#builder' },
+              { label: 'How It Works', href: '#builder' },
               { label: 'Integrations', href: '#integrations' },
               { label: 'AI Agents', href: '#agents' },
               { label: 'Analytics', href: '#analytics' },
@@ -1082,7 +1082,7 @@ export default function Landing() {
           {/* Section header */}
           <div className="gsap-reveal text-center max-w-3xl mx-auto mb-16 space-y-4">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-1.5 text-xs font-bold text-violet-300 backdrop-blur-sm">
-              <Workflow className="h-3.5 w-3.5" /> Interactive Playground
+              <Workflow className="h-3.5 w-3.5" /> See It In Action
             </span>
             <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
               One canvas. Zero code.{' '}
@@ -1970,11 +1970,11 @@ export default function Landing() {
 
             <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link href="/register" className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold px-8 py-4 text-sm shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all">
-                Build First Automation Flow
+                Register
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <Link href="mailto:sales@connectsphere.ai" className="inline-flex items-center gap-1.5 text-xs sm:text-sm text-slate-600 hover:text-slate-900 transition-colors font-bold">
-                Talk to our solution architect <ArrowRight className="h-3.5 w-3.5" />
+                Book live demo <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
 
@@ -2016,7 +2016,7 @@ export default function Landing() {
             <div className="space-y-3">
               <p className="text-sm font-extrabold text-slate-900 uppercase tracking-widest">Product</p>
               <div className="flex flex-col gap-2 text-xs font-medium text-slate-500">
-                <a href="#builder" className="hover:text-rose-600 transition-colors">Live Playground</a>
+                <a href="#builder" className="hover:text-rose-600 transition-colors">How It Works</a>
                 <a href="#integrations" className="hover:text-rose-600 transition-colors">7 Channels Grid</a>
                 <a href="#agents" className="hover:text-rose-600 transition-colors">Marketing Agent</a>
                 <a href="#agents" className="hover:text-rose-600 transition-colors">Sales AI Agent</a>
