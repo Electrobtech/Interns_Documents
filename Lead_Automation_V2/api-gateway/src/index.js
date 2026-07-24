@@ -106,6 +106,7 @@ const routes = [
   { path: '/webhook/gmail',   target: EMAIL },        // Gmail Pub/Sub push — must precede the generic '/webhook' entry below
   { path: '/webhook',         target: INTEGRATION },   // Meta webhook callback (/webhook/meta)
   { path: '/channels',        target: INTEGRATION },
+  { path: '/company',         target: AUTH },          // Registration wizard: /company/verify-gst, /company/upload, /company/:id
   { path: '/users',           target: TEAM },
   { path: '/teams',           target: TEAM },
   { path: '/automation',      target: AUTOMATION },
