@@ -3,77 +3,106 @@
 import { useEffect, useState } from 'react';
 import { Plug, Plus, Trash2, RefreshCw, Facebook } from 'lucide-react';
 import ConnectionsPanel from '@/components/ConnectionsPanel';
+import { useApi } from '@/lib/useApi';
 
-const API = process.env.NEXT_PUBLIC_INTEGRATION_SERVICE_URL || 'http://localhost:4008';
-
+// NOTE: There is currently no `/crm/*` backend anywhere in this codebase
+// (no gateway route, no service implements connections/sync-jobs/sync).
+// This section was calling endpoints that don't exist yet, so requests
+// below will fail. It's now wired up defensively (auth token attached like
+// every other page via useApi(), and every response is guarded to always
+// be an array) so a missing/failing endpoint shows an inline error instead
+// of crashing the whole page. Build the crm-sync backend service + gateway
+// route before this section will actually work end-to-end.
 export default function IntegrationsPage() {
+  const { call } = useApi();
   const [connections, setConnections] = useState([]);
   const [syncJobs, setSyncJobs] = useState([]);
+  const [crmError, setCrmError] = useState('');
   const [workspace, setWorkspace] = useState('00000000-0000-0000-0000-000000000000');
   const [showCreate, setShowCreate] = useState(false);
   const [newConnection, setNewConnection] = useState({ provider: '', config: '{}' });
 
+  async function loadConnections() {
+    try {
+      const data = await call(`/crm/connections/${workspace}`);
+      setConnections(Array.isArray(data) ? data : []);
+      setCrmError('');
+    } catch (e) {
+      console.error(e);
+      setConnections([]);
+      setCrmError('CRM integrations are not available yet.');
+    }
+  }
+
+  async function loadSyncJobs() {
+    try {
+      const data = await call(`/crm/sync-jobs/${workspace}`);
+      setSyncJobs(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error(e);
+      setSyncJobs([]);
+    }
+  }
+
   useEffect(() => {
-    fetch(`${API}/crm/connections/${workspace}`)
-      .then((r) => r.json())
-      .then(setConnections)
-      .catch(console.error);
-    fetch(`${API}/crm/sync-jobs/${workspace}`)
-      .then((r) => r.json())
-      .then(setSyncJobs)
-      .catch(console.error);
+    loadConnections();
+    loadSyncJobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace]);
 
   async function createConnection() {
     if (!newConnection.provider.trim()) return;
+    let config;
     try {
-      const res = await fetch(`${API}/crm/connections`, {
+      config = JSON.parse(newConnection.config || '{}');
+    } catch (e) {
+      alert('Invalid JSON config');
+      return;
+    }
+    try {
+      await call('/crm/connections', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           workspace_id: workspace,
           provider: newConnection.provider,
-          config: JSON.parse(newConnection.config || '{}'),
+          config,
           active: true,
-        }),
+        },
       });
-      if (res.ok) {
-        const connRes = await fetch(`${API}/crm/connections/${workspace}`);
-        setConnections(await connRes.json());
-        setNewConnection({ provider: '', config: '{}' });
-        setShowCreate(false);
-      }
+      await loadConnections();
+      setNewConnection({ provider: '', config: '{}' });
+      setShowCreate(false);
     } catch (e) {
       console.error(e);
-      alert('Invalid JSON config');
+      setCrmError('Could not save this connection — CRM integrations may not be available yet.');
     }
   }
 
   async function deleteConnection(id) {
     if (!confirm('Delete this connection?')) return;
     try {
-      await fetch(`${API}/crm/connections/${id}`, { method: 'DELETE' });
-      setConnections(connections.filter((c) => c.id !== id));
+      await call(`/crm/connections/${id}`, { method: 'DELETE' });
+      setConnections((prev) => prev.filter((c) => c.id !== id));
     } catch (e) {
       console.error(e);
+      setCrmError('Could not delete this connection.');
     }
   }
 
   async function triggerSync() {
     try {
-      await fetch(`${API}/crm/sync/outbound`, {
+      await call('/crm/sync/outbound', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           workspace_id: workspace,
           entity_type: 'contact',
           payload: {},
-        }),
+        },
       });
-      const jobsRes = await fetch(`${API}/crm/sync-jobs/${workspace}`);
-      setSyncJobs(await jobsRes.json());
+      await loadSyncJobs();
     } catch (e) {
       console.error(e);
+      setCrmError('Could not trigger sync — CRM integrations may not be available yet.');
     }
   }
 
@@ -108,6 +137,12 @@ export default function IntegrationsPage() {
         <div className="flex items-center gap-2 mb-4">
           <h2 className="text-lg font-bold">CRM Integrations</h2>
         </div>
+
+        {crmError && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-3 mb-4">
+            {crmError}
+          </div>
+        )}
 
         <div className="flex gap-4 mb-6">
           <input

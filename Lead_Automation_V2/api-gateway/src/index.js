@@ -13,9 +13,11 @@ const AI          = process.env.AI_SERVICE_URL          || 'http://localhost:400
 const ECOMMERCE   = process.env.ECOMMERCE_SERVICE_URL   || 'http://localhost:4006';
 const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:4007';
 const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
-const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
+const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4008';
+const LINKEDIN     = process.env.LINKEDIN_SERVICE_URL    || 'http://localhost:4009';
 const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
 const AUTOMATION  = process.env.AUTOMATION_SERVICE_URL  || 'http://localhost:4011';
+const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4012';
 const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4013';
 
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
@@ -88,6 +90,10 @@ const routes = [
   { path: '/facebook',        target: INTEGRATION },
   { path: '/whatsapp',        target: INTEGRATION },
   { path: '/credentials',     target: INTEGRATION }, // manual API key / App ID / App Secret entry (routes/credentials.js)
+  // linkedin-service mounts all of its routes under this single prefix
+  // (routes/connection.js, leads.js, campaigns.js, organization.js,
+  // approvals.js, logs.js, webhooks.js) — see services/linkedin-service/src/index.js
+  { path: '/api/v1/integrations/linkedin', target: LINKEDIN },
   { path: '/auth',            target: AUTH },
   { path: '/conversations',   target: INBOX },
   { path: '/contacts',        target: CONTACT },
@@ -99,6 +105,7 @@ const routes = [
   { path: '/recovery-flows',  target: ECOMMERCE },
   { path: '/reviews',         target: REVIEW },
   { path: '/social',          target: REVIEW },
+  { path: '/google',          target: REVIEW },  // useGoogleReviews.js: /google/status, /config, /accounts, /login, /disconnect, /sync, /reply — see services/review-service/src/google/routes.js
   { path: '/analytics',       target: ANALYTICS },
   { path: '/integrations',    target: INTEGRATION },
   { path: '/api-keys',        target: INTEGRATION },
@@ -109,6 +116,7 @@ const routes = [
   { path: '/users',           target: TEAM },
   { path: '/teams',           target: TEAM },
   { path: '/automation',      target: AUTOMATION },
+  { path: '/notifications',   target: NOTIFICATION },  // NotificationBell.jsx: GET /notifications, POST /notifications/click, /notifications/read-all
   { path: '/email',           target: EMAIL },         // Gmail integration (auth, accounts, threads, messages, attachments)
 ];
 

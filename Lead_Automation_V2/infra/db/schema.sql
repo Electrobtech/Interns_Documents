@@ -143,6 +143,12 @@ CREATE TABLE IF NOT EXISTS integrations (
   provider        TEXT NOT NULL,           -- shopify | stripe | google_sheets | zapier ...
   status          TEXT DEFAULT 'disconnected',
   credentials     JSONB DEFAULT '{}'::jsonb,
+  -- Connection-locking (services/integration-service/src/services/credentials.js:
+  -- getConnectionLockState / lockConnection / unlockConnection). Once a
+  -- Facebook/Instagram/WhatsApp connection is saved, it's auto-locked so it
+  -- can't be changed by accident; only an org admin can unlock it.
+  locked_at       TIMESTAMPTZ,
+  locked_by       UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

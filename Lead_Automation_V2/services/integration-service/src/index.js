@@ -1,11 +1,5 @@
 require('dotenv').config();
 
-
-
-
-
-
-
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
@@ -245,7 +239,7 @@ app.delete('/channels/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-const PORT = process.env.INTEGRATION_PORT || 4009;
+const PORT = process.env.INTEGRATION_PORT || 4008;
 app.listen(PORT, () => {
   console.log(`integration-service on :${PORT}`);
   startTokenRefreshScheduler();

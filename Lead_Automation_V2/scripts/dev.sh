@@ -35,6 +35,7 @@ start analytics   services/analytics-service/src/index.js
 start integration services/integration-service/src/index.js
 start team        services/team-service/src/index.js
 start automation  services/automation-service/src/index.js
+start notification services/notification-service/src/index.js
 start gateway     api-gateway/src/index.js
 
 wait
