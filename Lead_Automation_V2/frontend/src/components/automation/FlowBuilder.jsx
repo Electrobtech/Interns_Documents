@@ -176,7 +176,7 @@ function EditableText({ value, onChange, className, placeholder, multiline }) {
     <div
       onMouseDown={(e) => e.stopPropagation()}
       onClick={() => setEditing(true)}
-      className={`${className} cursor-text`}
+      className={`${className} cursor-text ${multiline ? "whitespace-pre-wrap" : ""}`}
       style={{ color: value ? tokens.text : tokens.muted }}
     >
       {value || placeholder}
