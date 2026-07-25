@@ -164,7 +164,7 @@ services:
     container_name: integration-service
     env_file: .env
     environment:
-      PORT: "4008"
+      INTEGRATION_PORT: "4008"
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }

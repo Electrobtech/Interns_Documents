@@ -12,7 +12,13 @@ export async function api(path, { method = 'GET', body, token } = {}) {
     },
     body: isFormData ? body : (body ? JSON.stringify(body) : undefined),
   });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const err = new Error(data.error || data.message || res.statusText);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
   return res.json();
 }
 
@@ -28,6 +34,12 @@ export async function apiUpload(path, formData, { token } = {}) {
     },
     body: formData,
   });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const err = new Error(data.error || data.message || res.statusText);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
   return res.json();
 }
