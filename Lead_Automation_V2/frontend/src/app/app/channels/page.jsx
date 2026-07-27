@@ -72,7 +72,7 @@ export default function ConnectChannelsPage() {
                   {busy === type ? '…' : connected ? 'Disconnect' : 'Connect'}
                 </button>
                 {connected && (
-                  <Link href={`/channels/${type}`} className="text-xs rounded-lg px-3 py-1.5 border border-slate-300 text-slate-600">Open</Link>
+                  <Link href={`/app/channels/${type}`} className="text-xs rounded-lg px-3 py-1.5 border border-slate-300 text-slate-600">Open</Link>
                 )}
               </div>
             </div>
