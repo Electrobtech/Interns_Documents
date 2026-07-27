@@ -9,18 +9,18 @@ import {
 } from 'lucide-react';
 
 const PLATFORM = [
-  { label: 'Dashboard',              icon: LayoutDashboard, href: '/app'                  },
-  { label: 'Unified Inbox',          icon: Inbox,           href: '/app/inbox'             },
-  { label: 'Contacts & Leads',       icon: Users,           href: '/app/contacts'          },
-  { label: 'AI Agents',              icon: Bot,             href: '/app/ai-agents'         },
-  { label: 'Campaigns & Broadcasts', icon: Megaphone,       href: '/app/campaigns'         },
-  { label: 'Ecommerce & Revenue',    icon: ShoppingCart,    href: '/app/ecommerce'         },
-  { label: 'Reviews & Social',       icon: Star,            href: '/app/reviews'           },
-  { label: 'Analytics & Insights',   icon: BarChart3,       href: '/app/analytics'         },
-  { label: 'Documents & Knowledge',  icon: FileText,        href: '/app/documents'         },
-  { label: 'Integrations & APIs',    icon: Plug,            href: '/app/integrations'      },
-  { label: 'Settings & Team',        icon: Settings,        href: '/app/settings'          },
-  { label: 'Click Notification Demo',icon: Bell,            href: '/app/notification-demo' },
+  { label: 'Dashboard',               icon: LayoutDashboard, href: '/app'                  },
+  { label: 'Unified Inbox',           icon: Inbox,           href: '/app/inbox'              },
+  { label: 'Contacts & Leads',        icon: Users,           href: '/app/contacts'           },
+  { label: 'AI Agents & Automation',  icon: Bot,             href: '/app/ai-agents'          },
+  { label: 'Campaigns & Broadcasts',  icon: Megaphone,       href: '/app/campaigns'          },
+  { label: 'Ecommerce & Revenue',    icon: ShoppingCart,    href: '/app/ecommerce'          },
+  { label: 'Reviews & Social',        icon: Star,            href: '/app/reviews'            },
+  { label: 'Analytics & Insights',    icon: BarChart3,       href: '/app/analytics'          },
+  { label: 'Documents & Knowledge',   icon: FileText,        href: '/app/documents'          },
+  { label: 'Integrations & APIs',     icon: Plug,            href: '/app/integrations'       },
+  { label: 'Settings & Team',         icon: Settings,        href: '/app/settings'           },
+  { label: 'Click Notification Demo', icon: Bell,            href: '/app/notification-demo' },
 ];
 
 // Channels that have a Playbook Studio ("Automation" tab) get `expandable:
@@ -31,7 +31,7 @@ const CHANNELS = [
   { label: 'Instagram', icon: Instagram,     href: '/app/channels/instagram', expandable: true  },
   { label: 'Messenger', icon: MessageSquare, href: '/app/channels/messenger', expandable: false },
   { label: 'LinkedIn',  icon: Linkedin,      href: '/app/channels/linkedin',  expandable: false },
-  { label: 'SMS / RCS', icon: Smartphone,    href: '/app/channels/sms',       expandable: false },
+  { label: 'SMS / RCS', icon: Smartphone,    href: '/app/channels/sms',       expandable: true  },
   { label: 'Web Chat',  icon: Globe,         href: '/app/channels/webchat',   expandable: false },
   { label: 'Voice Call',icon: Phone,         href: '/app/channels/voice',     expandable: false },
   { label: 'Email',     icon: Mail,          href: '/app/channels/email',     expandable: false },
