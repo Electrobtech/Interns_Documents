@@ -68,7 +68,7 @@ async function findOrCreateConversation(organizationId, channelType, externalCon
  */
 async function recordInboundMessage(organizationId, event) {
   const contactId = await findOrCreateContact(organizationId, {
-    phone: event.platform === 'whatsapp' ? event.senderId : null,
+    phone: ['whatsapp', 'sms'].includes(event.platform) ? event.senderId : null,
     source: event.platform,
   });
   const conversationId = await findOrCreateConversation(organizationId, event.platform, event.senderId, contactId);

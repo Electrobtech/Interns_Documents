@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { useApi } from '@/lib/useApi';
 import ConversationList from '@/components/ConversationList';
+import EmailPanel from '@/components/EmailPanel';
+import SmsPanel from '@/components/SmsPanel';
 
 const META = {
   whatsapp:  { label: 'WhatsApp', icon: MessageCircle },
@@ -24,6 +26,41 @@ export default function ChannelPage() {
   const meta = META[type] || { label: type, icon: Globe };
   const Icon = meta.icon;
 
+  // Email has its own connection model (one or more real Gmail mailboxes
+  // in email_accounts, connected via Google OAuth) rather than the single
+  // generic on/off toggle the other channels use — see EmailPanel.jsx.
+  if (type === 'email') {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center gap-2">
+          <Icon size={20} className="text-brand" />
+          <h2 className="text-lg font-bold">{meta.label}</h2>
+        </div>
+        <EmailPanel />
+      </div>
+    );
+  }
+
+  // SMS has its own connection model (one or more connected phones in
+  // sms_devices, each running a third-party forwarder app) rather than the
+  // single generic on/off toggle the other channels use — see SmsPanel.jsx.
+  if (type === 'sms') {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center gap-2">
+          <Icon size={20} className="text-brand" />
+          <h2 className="text-lg font-bold">{meta.label}</h2>
+        </div>
+        <SmsPanel />
+      </div>
+    );
+  }
+
+  return <GenericChannelPage type={type} meta={meta} call={call} />;
+}
+
+function GenericChannelPage({ type, meta, call }) {
+  const Icon = meta.icon;
   const [channel, setChannel] = useState(null);
   const [convos, setConvos] = useState([]);
   const [loading, setLoading] = useState(true);

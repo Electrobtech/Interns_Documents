@@ -111,7 +111,9 @@ const routes = [
   { path: '/api-keys',        target: INTEGRATION },
   { path: '/webhooks',        target: INTEGRATION },
   { path: '/webhook/gmail',   target: EMAIL },        // Gmail Pub/Sub push — must precede the generic '/webhook' entry below
+  { path: '/webhook/sms',     target: INTEGRATION },   // SMS-forwarder-app webhook — must precede the generic '/webhook' entry below
   { path: '/webhook',         target: INTEGRATION },   // Meta webhook callback (/webhook/meta)
+  { path: '/sms',             target: INTEGRATION },   // device management (list/add/remove connected phones) — routes/smsDevices.js
   { path: '/channels',        target: INTEGRATION },
   { path: '/company',         target: AUTH },          // Registration wizard: /company/verify-gst, /company/upload, /company/:id
   { path: '/users',           target: TEAM },
