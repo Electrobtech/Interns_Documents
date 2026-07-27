@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const conversationLinkRepository = require('../repositories/conversationLinkRepository');
 const messageRepository = require('../repositories/messageRepository');
+const complianceGuard = require('../services/complianceGuard');
 const { sendWhatsAppMessage } = require('../services/whatsappSender');
 const { sendInstagramMessage } = require('../services/instagramSender');
 
@@ -46,6 +47,30 @@ router.post('/automation/internal/campaign-send', async (req, res) => {
     const conversation = await conversationLinkRepository.resolveConversation({
       organizationId, channel, externalId,
     });
+
+    // Meta compliance: a campaign send is a proactive/marketing message —
+    // exactly what the opt-out and 24-hour-window rules exist to gate. A
+    // plain-text campaign body is never a real pre-approved template (see
+    // complianceGuard's TEMPLATE_TYPE note), so both checks apply here in
+    // full; nothing in this codebase sends real Meta templates yet, so an
+    // out-of-window contact currently can't be reached by a campaign at
+    // all — that's a real limitation (not a bug in this check) worth
+    // knowing about, see the compliance doc for the template-approval
+    // workaround.
+    const check = await complianceGuard.checkSendAllowed({
+      contactId: conversation.contact_id,
+      conversationId: conversation.id,
+      template: { type: 'text', text: { body } },
+    });
+    if (!check.allowed) {
+      await messageRepository.logSystem({
+        organizationId,
+        conversationId: conversation.id,
+        body: `Campaign message blocked: ${check.reason}`,
+        metadata: { code: check.code },
+      });
+      return res.status(422).json({ error: check.reason, code: check.code, conversationId: conversation.id });
+    }
 
     try {
       await sender(externalId, body);
