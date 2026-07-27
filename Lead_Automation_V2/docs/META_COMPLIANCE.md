@@ -78,7 +78,7 @@ opt-in flow, both count). Once someone opts out, you must stop.
   WhatsApp-specific opt-in.
 
 **In code:** `contacts.opted_out` / `opted_out_at` (see
-`infra/db/migrations/014_contact_opt_out.sql`) persist the opt-out.
+`infra/db/migrations/016_contact_opt_out.sql`) persist the opt-out.
 `resolvePlaybook()` already routes a STOP-style keyword to the
 `unsubscribe` playbook role for that turn's confirmation reply;
 `complianceGuard.recordOptOut()` then flips the flag right after that
@@ -204,7 +204,7 @@ response is to back off and retry, not to treat every failure as fatal.
 | Rule | Enforced in |
 |---|---|
 | 24-hour window | `services/automation-service/src/services/complianceGuard.js` → `checkSendAllowed()` |
-| Opt-out persistence | `contacts.opted_out` (`infra/db/migrations/014_contact_opt_out.sql`) |
+| Opt-out persistence | `contacts.opted_out` (`infra/db/migrations/016_contact_opt_out.sql`) |
 | Opt-out enforcement (playbook engine) | `webhookController.js` → `processInboundEvent()` |
 | Opt-out enforcement (campaigns) | `campaignSendController.js` |
 | Opt-out enforcement (generic auto-reply) | `integration-service/src/services/webhookWorker.js` |
