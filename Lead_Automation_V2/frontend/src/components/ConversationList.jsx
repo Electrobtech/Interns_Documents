@@ -1,8 +1,12 @@
 'use client';
+import Link from 'next/link';
 import { Bot, Headset } from 'lucide-react';
 
 // Renders a list of conversations using the dashboard's inbox-row style.
-export default function ConversationList({ items = [], loading }) {
+// When `basePath` is given (e.g. "/app/channels/whatsapp"), each row links
+// to `${basePath}/conversation/${id}` so opening a conversation stays
+// nested under Channels > WhatsApp instead of leaving the channel view.
+export default function ConversationList({ items = [], loading, basePath }) {
   if (loading) return <p className="text-sm text-slate-400 py-6 text-center">Loading…</p>;
   if (!items.length) return <p className="text-sm text-slate-400 py-6 text-center">No conversations on this channel yet.</p>;
 
@@ -10,8 +14,8 @@ export default function ConversationList({ items = [], loading }) {
     <div className="divide-y divide-slate-100">
       {items.map((c) => {
         const name = c.contact_name || 'Unknown';
-        return (
-          <div key={c.id} className="flex items-center gap-3 py-3">
+        const row = (
+          <div className="flex items-center gap-3 py-3">
             <div className="w-9 h-9 rounded-full bg-slate-200 grid place-items-center text-xs font-semibold text-slate-600">
               {name.split(' ').map((w) => w[0]).join('').slice(0, 2)}
             </div>
@@ -36,6 +40,14 @@ export default function ConversationList({ items = [], loading }) {
               : c.status === 'pending' ? 'bg-amber-50 text-amber-600'
               : 'bg-slate-100 text-slate-500'}`}>{c.status}</span>
           </div>
+        );
+
+        return basePath ? (
+          <Link key={c.id} href={`${basePath}/conversation/${c.id}`} className="block hover:bg-slate-50/60 -mx-1 px-1 rounded-lg transition-colors">
+            {row}
+          </Link>
+        ) : (
+          <div key={c.id}>{row}</div>
         );
       })}
     </div>
