@@ -10,6 +10,8 @@ const instagramRoutes = require("./routes/instagram");
 const facebookRoutes = require("./routes/facebook");
 const whatsappRoutes = require("./routes/whatsapp");
 const credentialsRoutes = require("./routes/credentials");
+const smsWebhookRoutes = require("./routes/smsWebhook");
+const smsDevicesRoutes = require("./routes/smsDevices");
 const { startTokenRefreshScheduler } = require('./services/tokenRefreshJob');
 const { startWebhookWorker } = require('./services/webhookWorker');
 const app = express();
@@ -24,6 +26,10 @@ app.use((req, res, next) => {
 });
 app.use(cors());
 // Webhook needs its own raw-body handling before any JSON parsing.
+// /webhook/sms must be registered BEFORE the generic /webhook below —
+// Express matches app.use() prefixes in registration order, and
+// '/webhook' would otherwise swallow every '/webhook/sms/:token' request.
+app.use('/webhook/sms', smsWebhookRoutes);
 app.use('/webhook', webhookRoutes);
 app.use(express.json());
 // /auth stays public at the router level — it protects its own sensitive
@@ -57,6 +63,7 @@ app.use('/instagram', instagramRoutes);
 app.use('/facebook', facebookRoutes);
 app.use('/whatsapp', whatsappRoutes);
 app.use('/credentials', credentialsRoutes);
+app.use('/sms/devices', smsDevicesRoutes);
 
 const asJson = (v) => (v == null || v === '' ? null : typeof v === 'string' ? v : JSON.stringify(v));
 
