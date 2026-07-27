@@ -22,6 +22,26 @@
 
 const { GRAPH_URL, getAppSecretProof } = require('./graphApi');
 
+// Meta rate-limits per phone number / per app; a burst of sends (e.g. a
+// campaign loop, or several webhook replies firing close together) can hit
+// this under normal use, not just abuse. These are the codes worth
+// retrying — everything else (bad recipient, invalid params, expired
+// token) is permanent and retrying just wastes attempts and delays the
+// real error reaching the caller.
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const RETRYABLE_ERROR_CODES = new Set([
+  4,      // "Application request limit reached"
+  80007,  // WhatsApp Business Account rate limit
+  130429, // "Rate limit hit" (Cloud API specific)
+  131048, // "Spam rate limit hit"
+]);
+const MAX_ATTEMPTS = 3;
+const BASE_DELAY_MS = 1000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Low-level POST helper. WhatsApp Cloud API takes JSON bodies (unlike the
  * form-encoded bodies used elsewhere in this service for the Page Graph
@@ -29,19 +49,43 @@ const { GRAPH_URL, getAppSecretProof } = require('./graphApi');
  * appsecret_proof is still appended as a query param — same rationale as
  * graphApi.withAuth: proves the call originates from a server holding the
  * App Secret, not just anyone holding a leaked token.
+ *
+ * Retries transient failures (rate limits, 5xx) with backoff honoring the
+ * API's own Retry-After header when present, otherwise exponential
+ * (1s, 2s, 4s) with jitter so concurrent sends retrying at the same
+ * instant don't all collide again. Permanent failures (bad params,
+ * template not found) are surfaced immediately via the `ok`/`data` return
+ * — callers already check `data.error`, so those still work unchanged.
  */
 async function graphPost(path, payload, accessToken) {
   const proof = getAppSecretProof(accessToken);
-  const resp = await fetch(`${GRAPH_URL}/${path}?appsecret_proof=${proof}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(payload),
-  });
-  const data = await resp.json();
-  return { ok: resp.ok, data };
+  const url = `${GRAPH_URL}/${path}?appsecret_proof=${proof}`;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (resp.ok) return { ok: true, data };
+
+    const errorCode = data?.error?.code;
+    const retryable = RETRYABLE_STATUS.has(resp.status) || RETRYABLE_ERROR_CODES.has(errorCode);
+    if (!retryable || attempt === MAX_ATTEMPTS) {
+      return { ok: false, data };
+    }
+
+    console.warn(`[whatsappService] retryable error (attempt ${attempt}/${MAX_ATTEMPTS}):`, data?.error || data);
+    const retryAfterHeader = Number(resp.headers.get('retry-after'));
+    const delay = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+      ? retryAfterHeader * 1000
+      : BASE_DELAY_MS * 2 ** (attempt - 1) + Math.random() * 250;
+    await sleep(delay);
+  }
 }
 
 /**

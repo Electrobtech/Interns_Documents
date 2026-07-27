@@ -5,6 +5,7 @@ import {
   MessageCircle, Instagram, MessageSquare, Smartphone, Globe, Phone, Mail, Linkedin,
 } from 'lucide-react';
 import { useApi } from '@/lib/useApi';
+import { useSocketEvent } from '@/lib/socket';
 import ConversationList from '@/components/ConversationList';
 import EmailPanel from '@/components/EmailPanel';
 import SmsPanel from '@/components/SmsPanel';
@@ -80,6 +81,14 @@ function GenericChannelPage({ type, meta, call }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Live updates — see services/inbox-service/src/realtime.js. Filters to
+  // this channel since 'conversation:updated' fires org-wide for every
+  // channel, not just WhatsApp.
+  useSocketEvent('conversation:updated', (payload) => {
+    if (payload.channel_type !== type) return;
+    load();
+  }, [type, load]);
+
   const connected = channel?.status === 'connected';
 
   async function toggle() {
@@ -134,7 +143,7 @@ function GenericChannelPage({ type, meta, call }) {
       {/* Conversations on this channel */}
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <p className="font-semibold text-sm mb-2">Conversations</p>
-        <ConversationList items={convos} loading={loading} />
+        <ConversationList items={convos} loading={loading} basePath={`/app/channels/${type}`} />
       </div>
     </div>
   );

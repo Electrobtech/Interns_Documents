@@ -13,12 +13,9 @@ const AI          = process.env.AI_SERVICE_URL          || 'http://localhost:400
 const ECOMMERCE   = process.env.ECOMMERCE_SERVICE_URL   || 'http://localhost:4006';
 const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:4007';
 const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
-const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4008';
-const LINKEDIN     = process.env.LINKEDIN_SERVICE_URL    || 'http://localhost:4009';
+const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
 const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
 const AUTOMATION  = process.env.AUTOMATION_SERVICE_URL  || 'http://localhost:4011';
-const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4012';
-const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4013';
 
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
 
@@ -90,12 +87,9 @@ const routes = [
   { path: '/facebook',        target: INTEGRATION },
   { path: '/whatsapp',        target: INTEGRATION },
   { path: '/credentials',     target: INTEGRATION }, // manual API key / App ID / App Secret entry (routes/credentials.js)
-  // linkedin-service mounts all of its routes under this single prefix
-  // (routes/connection.js, leads.js, campaigns.js, organization.js,
-  // approvals.js, logs.js, webhooks.js) — see services/linkedin-service/src/index.js
-  { path: '/api/v1/integrations/linkedin', target: LINKEDIN },
   { path: '/auth',            target: AUTH },
   { path: '/conversations',   target: INBOX },
+  { path: '/socket.io',       target: INBOX, ws: true }, // live message delivery — see services/inbox-service/src/realtime.js
   { path: '/contacts',        target: CONTACT },
   { path: '/leads',           target: CONTACT },
   { path: '/campaigns',       target: CAMPAIGN },
@@ -105,7 +99,6 @@ const routes = [
   { path: '/recovery-flows',  target: ECOMMERCE },
   { path: '/reviews',         target: REVIEW },
   { path: '/social',          target: REVIEW },
-  { path: '/google',          target: REVIEW },  // useGoogleReviews.js: /google/status, /config, /accounts, /login, /disconnect, /sync, /reply — see services/review-service/src/google/routes.js
   { path: '/analytics',       target: ANALYTICS },
   { path: '/integrations',    target: INTEGRATION },
   { path: '/api-keys',        target: INTEGRATION },
@@ -115,21 +108,31 @@ const routes = [
   { path: '/webhook',         target: INTEGRATION },   // Meta webhook callback (/webhook/meta)
   { path: '/sms',             target: INTEGRATION },   // device management (list/add/remove connected phones) — routes/smsDevices.js
   { path: '/channels',        target: INTEGRATION },
-  { path: '/company',         target: AUTH },          // Registration wizard: /company/verify-gst, /company/upload, /company/:id
   { path: '/users',           target: TEAM },
   { path: '/teams',           target: TEAM },
   { path: '/automation',      target: AUTOMATION },
-  { path: '/notifications',   target: NOTIFICATION },  // NotificationBell.jsx: GET /notifications, POST /notifications/click, /notifications/read-all
-  { path: '/email',           target: EMAIL },         // Gmail integration (auth, accounts, threads, messages, attachments)
 ];
 
+const wsProxies = [];
 for (const r of routes) {
-  app.use(r.path, createProxyMiddleware({
+  const proxy = createProxyMiddleware(r.path, {
     target: r.target,
     changeOrigin: true,
+    ws: r.ws || false,
     // keep the original path (e.g. /auth/login -> AUTH/auth/login)
-  }));
+  });
+  app.use(r.path, proxy);
+  if (r.ws) wsProxies.push(proxy);
 }
 
 const PORT = process.env.GATEWAY_PORT || 8080;
-app.listen(PORT, () => console.log(`api-gateway on :${PORT}`));
+const server = app.listen(PORT, () => console.log(`api-gateway on :${PORT}`));
+
+// http-proxy-middleware only forwards WebSocket upgrades if the raw HTTP
+// server's 'upgrade' event is wired to it directly — Express routing alone
+// (app.use above) only ever sees regular HTTP requests, so without this a
+// socket.io client's initial ws:// handshake through the gateway would just
+// hang. Each ws:true proxy in the routes table gets attached here.
+for (const proxy of wsProxies) {
+  server.on('upgrade', proxy.upgrade);
+}

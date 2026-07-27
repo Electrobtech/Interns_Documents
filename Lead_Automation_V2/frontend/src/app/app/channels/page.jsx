@@ -87,6 +87,13 @@ export default function ConnectChannelsPage() {
                       <Link href={`/channels/${type}`} className="text-xs rounded-lg px-3 py-1.5 border border-slate-300 text-slate-600">Open</Link>
                     )}
                   </>
+                <button onClick={() => toggle(type, label)} disabled={busy === type}
+                  className={`text-xs rounded-lg px-3 py-1.5 font-medium disabled:opacity-60 ${
+                    connected ? 'border border-slate-300 text-slate-600' : 'bg-brand text-white'}`}>
+                  {busy === type ? '…' : connected ? 'Disconnect' : 'Connect'}
+                </button>
+                {connected && (
+                  <Link href={`/app/channels/${type}`} className="text-xs rounded-lg px-3 py-1.5 border border-slate-300 text-slate-600">Open</Link>
                 )}
               </div>
             </div>
