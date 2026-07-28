@@ -14,6 +14,7 @@ const ECOMMERCE   = process.env.ECOMMERCE_SERVICE_URL   || 'http://localhost:400
 const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:4007';
 const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
 const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
+const LINKEDIN     = process.env.LINKEDIN_SERVICE_URL    || 'http://localhost:4009';
 const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
 const AUTOMATION  = process.env.AUTOMATION_SERVICE_URL  || 'http://localhost:4011';
 const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4013';
@@ -101,6 +102,10 @@ const routes = [
   { path: '/social',          target: REVIEW },
   { path: '/analytics',       target: ANALYTICS },
   { path: '/integrations',    target: INTEGRATION },
+  // linkedin-service mounts its own routes under this prefix (see
+  // services/linkedin-service/src/index.js) — was missing entirely, so every
+  // LinkedIn call from the frontend 404'd at the gateway before this.
+  { path: '/api/v1/integrations/linkedin', target: LINKEDIN },
   { path: '/api-keys',        target: INTEGRATION },
   { path: '/webhooks',        target: INTEGRATION },
   { path: '/webhook/gmail',   target: EMAIL },        // Gmail Pub/Sub push — must precede the generic '/webhook' entry below

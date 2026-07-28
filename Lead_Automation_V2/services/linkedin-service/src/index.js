@@ -8,6 +8,9 @@ import organizationRoutes from './routes/organization.js';
 import approvalRoutes from './routes/approvals.js';
 import logRoutes from './routes/logs.js';
 import webhookRoutes from './routes/webhooks.js';
+import postRoutes from './routes/posts.js';
+import interactionRoutes from './routes/interactions.js';
+import conversionRoutes from './routes/conversions.js';
 
 dotenv.config();
 
@@ -30,6 +33,9 @@ app.use('/api/v1/integrations/linkedin', organizationRoutes);
 app.use('/api/v1/integrations/linkedin', approvalRoutes);
 app.use('/api/v1/integrations/linkedin', logRoutes);
 app.use('/api/v1/integrations/linkedin', webhookRoutes);
+app.use('/api/v1/integrations/linkedin', postRoutes);
+app.use('/api/v1/integrations/linkedin', interactionRoutes);
+app.use('/api/v1/integrations/linkedin', conversionRoutes);
 
 app.listen(PORT, () => {
   console.log(`LinkedIn service running on port ${PORT}`);

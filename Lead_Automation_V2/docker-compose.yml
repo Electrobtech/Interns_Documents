@@ -182,6 +182,18 @@ services:
       LINKEDIN_CLIENT_SECRET:   ${LINKEDIN_CLIENT_SECRET:-}
       LINKEDIN_REDIRECT_URI:    ${LINKEDIN_REDIRECT_URI:-http://localhost:4009/api/v1/integrations/linkedin/callback}
       LINKEDIN_WEBHOOK_SECRET:  ${LINKEDIN_WEBHOOK_SECRET:-}
+      # Where the OAuth callback redirects the browser back to (the actual
+      # frontend page, not this service's own origin — see connection.js).
+      FRONTEND_URL:             ${FRONTEND_URL:-http://localhost:3000}
+      # Each LinkedIn Product is reviewed/approved independently — requesting
+      # a scope for a Product that isn't approved gets the WHOLE auth request
+      # rejected, so these are split rather than one all-or-nothing flag.
+      # Advertising API + Lead Sync API + Conversions API share this tier.
+      LINKEDIN_ADS_ACCESS:      ${LINKEDIN_ADS_ACCESS:-true}
+      # Community Management API (post/read/react as an ORGANIZATION page) —
+      # separate review from Ads; off until that Product is approved.
+      LINKEDIN_ORG_ACCESS:      ${LINKEDIN_ORG_ACCESS:-false}
+      LINKEDIN_API_VERSION:     ${LINKEDIN_API_VERSION:-202606}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4009:4009"]
