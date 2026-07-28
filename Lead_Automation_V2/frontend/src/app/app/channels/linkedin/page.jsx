@@ -660,6 +660,34 @@ export default function LinkedInIntegrationPage() {
           className="mb-5"
         >
           <div className="mb-4">
+            {/* Post as: Me / Company Page — org posting stays disabled until
+                Community Management API is approved (linkedin_org_urn null
+                until then; see connection.js's organizationAcls fetch). */}
+            <div className="flex items-center gap-1.5 mb-2.5">
+              <span className="text-[11px] font-medium mr-1" style={{ color: COLORS.textTertiary }}>Post as:</span>
+              <button
+                onClick={() => setPostAsOrg(false)}
+                disabled={!isConnected}
+                className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
+                style={!postAsOrg
+                  ? { background: COLORS.linkedinSoft, color: COLORS.linkedin }
+                  : { background: 'transparent', color: COLORS.textTertiary }}
+              >
+                {statusData?.display_name || 'Me'}
+              </button>
+              <button
+                onClick={() => statusData?.can_manage_organization && setPostAsOrg(true)}
+                disabled={!isConnected || !statusData?.can_manage_organization}
+                title={statusData?.can_manage_organization ? undefined : 'Needs Community Management API approval — see Permissions & access above'}
+                className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                style={postAsOrg
+                  ? { background: COLORS.linkedinSoft, color: COLORS.linkedin }
+                  : { background: 'transparent', color: COLORS.textTertiary }}
+              >
+                Company Page{!statusData?.can_manage_organization ? ' 🔒' : ''}
+              </button>
+            </div>
+
             <textarea
               value={postText}
               onChange={(e) => setPostText(e.target.value)}
