@@ -88,6 +88,7 @@ const routes = [
   { path: '/whatsapp',        target: INTEGRATION },
   { path: '/credentials',     target: INTEGRATION }, // manual API key / App ID / App Secret entry (routes/credentials.js)
   { path: '/auth',            target: AUTH },
+  { path: '/company',         target: AUTH }, // Company Registration wizard: companyController.js + gstController.js
   { path: '/conversations',   target: INBOX },
   { path: '/socket.io',       target: INBOX, ws: true }, // live message delivery — see services/inbox-service/src/realtime.js
   { path: '/contacts',        target: CONTACT },
