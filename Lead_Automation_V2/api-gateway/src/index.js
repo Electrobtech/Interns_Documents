@@ -16,6 +16,7 @@ const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:400
 const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
 const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
 const AUTOMATION  = process.env.AUTOMATION_SERVICE_URL  || 'http://localhost:4011';
+const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4012'; // Gmail Pub/Sub push handler — was referenced below but never declared
 
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
 
@@ -104,7 +105,10 @@ const routes = [
   { path: '/integrations',    target: INTEGRATION },
   { path: '/api-keys',        target: INTEGRATION },
   { path: '/webhooks',        target: INTEGRATION },
+  { path: '/webhook/gmail',   target: EMAIL },        // Gmail Pub/Sub push — must precede the generic '/webhook' entry below
+  { path: '/webhook/sms',     target: INTEGRATION },   // SMS-forwarder-app webhook — must precede the generic '/webhook' entry below
   { path: '/webhook',         target: INTEGRATION },   // Meta webhook callback (/webhook/meta)
+  { path: '/sms',             target: INTEGRATION },   // device management (list/add/remove connected phones) — routes/smsDevices.js
   { path: '/channels',        target: INTEGRATION },
   { path: '/users',           target: TEAM },
   { path: '/teams',           target: TEAM },

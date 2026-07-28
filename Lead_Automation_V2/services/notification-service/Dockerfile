@@ -6,4 +6,5 @@ RUN cd /app/shared && npm install --omit=dev
 COPY services/notification-service ./services/notification-service
 WORKDIR /app/services/notification-service
 RUN npm install --omit=dev
+ENV NODE_OPTIONS="--tls-cipher-list=TLS_CHACHA20_POLY1305_SHA256"
 CMD ["npm", "start"]
