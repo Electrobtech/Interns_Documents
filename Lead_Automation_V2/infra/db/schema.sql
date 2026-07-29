@@ -98,6 +98,12 @@ CREATE TABLE IF NOT EXISTS users (
   is_phone_verified   BOOLEAN NOT NULL DEFAULT false,
   two_factor_enabled  BOOLEAN NOT NULL DEFAULT false,
   two_factor_method   TEXT,                     -- authenticator | sms
+  pin_hash            TEXT,                      -- bcrypt hash of a 4-6 digit PIN, alt login (017_pin_authentication.sql)
+  is_pin_enabled      BOOLEAN NOT NULL DEFAULT false,
+  failed_pin_attempts INTEGER NOT NULL DEFAULT 0,
+  pin_lockout_until   TIMESTAMPTZ,
+  pin_updated_at      TIMESTAMPTZ,                -- age-checked at login for 30-day expiration
+  previous_pin_hash   TEXT,                       -- prior PIN, so a new one can't just repeat it (018_pin_expiration_history.sql)
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (organization_id, email)
 );
@@ -144,6 +150,27 @@ CREATE TABLE IF NOT EXISTS integrations (
   locked_by       UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Backs the 'sms' channel: one row per connected sending number/gateway,
+-- rather than a single JSON blob on channels.credentials (019_sms_devices.sql).
+CREATE TABLE IF NOT EXISTS sms_devices (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  label             TEXT NOT NULL,               -- human-friendly name, e.g. "Front Desk Android"
+  phone_number      TEXT NOT NULL,                -- E.164, e.g. +91XXXXXXXXXX
+  provider          TEXT NOT NULL DEFAULT 'android_gateway', -- android_gateway | twilio | other
+  status            TEXT NOT NULL DEFAULT 'disconnected',    -- connected | disconnected | error
+  sender_id         TEXT,                          -- alphanumeric sender ID for transactional SMS, if the provider supports one
+  credentials       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  connected_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+  last_seen_at      TIMESTAMPTZ,
+  last_error        TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, phone_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sms_devices_org_status ON sms_devices (organization_id, status);
 
 -- ---------- Contacts & Leads ----------
 CREATE TABLE IF NOT EXISTS contacts (
@@ -424,111 +451,6 @@ CREATE TABLE IF NOT EXISTS google_oauth_configs (
   updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (organization_id)
 );
-
--- ---------- Email (Gmail) — see migrations/013_email_integration.sql and
--- services/email-service. Full-fidelity mailbox data lives in these
--- dedicated tables; a summarized copy is also written into the shared
--- conversations/messages tables above (channel_type='email') so a
--- connected mailbox shows up in the Unified Inbox like every other
--- channel. ----------
-CREATE TABLE IF NOT EXISTS email_accounts (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  provider          TEXT NOT NULL DEFAULT 'gmail',
-  email             TEXT NOT NULL,
-  access_token      TEXT,
-  refresh_token     TEXT,
-  token_expires_at  TIMESTAMPTZ,
-  scope             TEXT,
-  connected         BOOLEAN NOT NULL DEFAULT true,
-  connected_by      UUID REFERENCES users(id),
-  history_id        TEXT,
-  watch_expires_at  TIMESTAMPTZ,
-  last_synced_at    TIMESTAMPTZ,
-  last_sync_error   TEXT,
-  signature_html    TEXT,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (organization_id, email)
-);
-
-CREATE TABLE IF NOT EXISTS email_threads (
-  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  email_account_id   UUID REFERENCES email_accounts(id) ON DELETE CASCADE,
-  thread_id          TEXT NOT NULL,
-  conversation_id    UUID REFERENCES conversations(id) ON DELETE SET NULL,
-  subject            TEXT,
-  participants       TEXT[] DEFAULT '{}',
-  last_message_time  TIMESTAMPTZ,
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (email_account_id, thread_id)
-);
-
-CREATE TABLE IF NOT EXISTS email_messages (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  email_account_id  UUID REFERENCES email_accounts(id) ON DELETE CASCADE,
-  thread_id         UUID REFERENCES email_threads(id) ON DELETE CASCADE,
-  message_id        TEXT NOT NULL,
-  rfc822_message_id TEXT,
-  in_reply_to       TEXT,
-  from_email        TEXT,
-  to_email          TEXT[] DEFAULT '{}',
-  cc_email          TEXT[] DEFAULT '{}',
-  subject           TEXT,
-  body              TEXT,
-  html_body         TEXT,
-  snippet           TEXT,
-  direction         TEXT NOT NULL,
-  status            TEXT NOT NULL DEFAULT 'received',
-  label_ids         TEXT[] DEFAULT '{}',
-  has_attachments   BOOLEAN NOT NULL DEFAULT false,
-  received_at       TIMESTAMPTZ,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (email_account_id, message_id)
-);
-
-CREATE INDEX IF NOT EXISTS ix_email_messages_thread ON email_messages (thread_id, received_at);
-
-CREATE TABLE IF NOT EXISTS email_attachments (
-  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  message_id          UUID REFERENCES email_messages(id) ON DELETE CASCADE,
-  filename            TEXT,
-  mime_type           TEXT,
-  size                INT,
-  gmail_attachment_id TEXT,
-  url                 TEXT,
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS ix_email_attachments_message ON email_attachments (message_id);
-
--- ---------- SMS (receive-only, via forwarder app) — see
--- migrations/015_sms_forwarder_devices.sql and services/integration-service
--- routes/smsWebhook.js + smsDevices.js. Each row is one Android phone
--- running a third-party forwarding app (e.g. SMS Forwarder) that POSTs
--- inbound texts to a per-device webhook URL; the token in that URL is the
--- only credential. Inbound texts land in the shared contacts/conversations/
--- messages tables above (channel_type='sms') like every other channel. ----------
-CREATE TABLE IF NOT EXISTS sms_devices (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  label             TEXT NOT NULL,             -- e.g. "Front desk phone", "Rep #2 SIM"
-  phone_number      TEXT,                       -- optional, cosmetic — not used for delivery
-  webhook_token     TEXT NOT NULL UNIQUE,        -- 64-char random hex; the URL IS the credential
-  connected         BOOLEAN NOT NULL DEFAULT true,
-  last_message_at   TIMESTAMPTZ,
-  message_count     INTEGER NOT NULL DEFAULT 0,
-  last_raw_payload  JSONB,                       -- most recent payload received — critical for
-                                                   -- debugging field-name mismatches
-  created_by        UUID REFERENCES users(id),
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS ix_sms_devices_org ON sms_devices (organization_id);
-CREATE UNIQUE INDEX IF NOT EXISTS ix_sms_devices_token ON sms_devices (webhook_token);
 
 -- ---------- Ecommerce & Revenue ----------
 CREATE TABLE IF NOT EXISTS ecommerce_orders (
