@@ -71,7 +71,7 @@ export default function ConnectChannelsPage() {
                   // mailboxes), not the generic fake on/off toggle every
                   // other channel here uses — send them to the dedicated
                   // page where that flow (and mailbox list) actually lives.
-                  <Link href="/channels/email"
+                  <Link href="/app/channels/email"
                     className={`text-xs rounded-lg px-3 py-1.5 font-medium ${
                       connected ? 'border border-slate-300 text-slate-600' : 'bg-brand text-white'}`}>
                     {connected ? 'Open' : 'Connect'}
@@ -84,16 +84,9 @@ export default function ConnectChannelsPage() {
                       {busy === type ? '…' : connected ? 'Disconnect' : 'Connect'}
                     </button>
                     {connected && (
-                      <Link href={`/channels/${type}`} className="text-xs rounded-lg px-3 py-1.5 border border-slate-300 text-slate-600">Open</Link>
+                      <Link href={`/app/channels/${type}`} className="text-xs rounded-lg px-3 py-1.5 border border-slate-300 text-slate-600">Open</Link>
                     )}
                   </>
-                <button onClick={() => toggle(type, label)} disabled={busy === type}
-                  className={`text-xs rounded-lg px-3 py-1.5 font-medium disabled:opacity-60 ${
-                    connected ? 'border border-slate-300 text-slate-600' : 'bg-brand text-white'}`}>
-                  {busy === type ? '…' : connected ? 'Disconnect' : 'Connect'}
-                </button>
-                {connected && (
-                  <Link href={`/app/channels/${type}`} className="text-xs rounded-lg px-3 py-1.5 border border-slate-300 text-slate-600">Open</Link>
                 )}
               </div>
             </div>
