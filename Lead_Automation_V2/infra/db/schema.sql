@@ -686,6 +686,52 @@ CREATE TABLE IF NOT EXISTS linkedin_campaign_metrics (
   UNIQUE (user_id, campaign_urn, date)
 );
 
+CREATE TABLE IF NOT EXISTS linkedin_conversion_config (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id               TEXT NOT NULL UNIQUE,
+  conversion_rule_urn   TEXT NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_conversion_events (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id               TEXT NOT NULL,
+  event_id              TEXT NOT NULL,
+  conversion_rule_urn   TEXT NOT NULL,
+  email_hash            TEXT NOT NULL,
+  value_cents           BIGINT,
+  currency_code         TEXT,
+  lead_id               UUID,
+  status                TEXT NOT NULL DEFAULT 'sent',
+  error_detail          TEXT,
+  sent_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_linkedin_conversion_events_user_sent ON linkedin_conversion_events (user_id, sent_at DESC);
+
+CREATE TABLE IF NOT EXISTS linkedin_posts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id           TEXT NOT NULL,
+  post_urn          TEXT NOT NULL,
+  author_urn        TEXT NOT NULL,
+  as_organization   BOOLEAN NOT NULL DEFAULT false,
+  text              TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'published',
+  media_urn         TEXT,
+  media_type        TEXT,
+  metrics           JSONB NOT NULL DEFAULT '{}',
+  comments_cache    JSONB NOT NULL DEFAULT '[]',
+  comments_synced_at TIMESTAMPTZ,
+  last_synced_at    TIMESTAMPTZ,
+  published_at      TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, post_urn)
+);
+
+CREATE INDEX IF NOT EXISTS idx_linkedin_posts_user_created ON linkedin_posts (user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS linkedin_organizations (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         TEXT NOT NULL,
