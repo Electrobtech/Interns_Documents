@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { pool, authenticate, requirePermission, logAudit } = require('@lead/shared');
+const { attachRealtime } = require('./realtime');
 
 const app = express();
 app.use(cors());
@@ -205,4 +206,5 @@ app.post('/conversations/:id/reset', canWrite, async (req, res) => {
 });
 
 const PORT = process.env.INBOX_PORT || 4002;
-app.listen(PORT, () => console.log(`inbox-service on :${PORT}`));
+const server = app.listen(PORT, () => console.log(`inbox-service on :${PORT}`));
+attachRealtime(server);

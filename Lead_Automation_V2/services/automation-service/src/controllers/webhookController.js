@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
+const { withTenantScope } = require('@lead/shared');
 const { evaluateWorkflowStep } = require('../services/workflowEngine');
 const playbookRepository = require('../repositories/playbookRepository');
 const conversationSessionRepository = require('../repositories/conversationSessionRepository');
 const conversationLinkRepository = require('../repositories/conversationLinkRepository');
 const messageRepository = require('../repositories/messageRepository');
+const complianceGuard = require('../services/complianceGuard');
 const { sendWhatsAppMessage } = require('../services/whatsappSender');
 const { sendInstagramMessage } = require('../services/instagramSender');
 
@@ -191,6 +193,16 @@ async function processInboundEvent({ clientId, channel, contactExternalId, inter
     return { status: 'human_handled', conversationId: conversation.id };
   }
 
+  // Meta compliance: once a contact has opted out (see the STOP-detection
+  // + complianceGuard.recordOptOut() call further down), the bot must not
+  // reply at all — not even via the unsubscribe playbook again, since
+  // they've already been confirmed unsubscribed once. The inbound message
+  // is still logged above so a human can see it if they message back for
+  // an unrelated reason.
+  if (await complianceGuard.isContactOptedOut(conversation.contact_id)) {
+    return { status: 'opted_out', conversationId: conversation.id };
+  }
+
   const playbook = await resolvePlaybook({ clientId, channel, contactExternalId, interaction });
   if (!playbook) {
     return { notFound: true, error: 'No active playbook for this client/channel' };
@@ -230,6 +242,30 @@ async function processInboundEvent({ clientId, channel, contactExternalId, inter
   const sender = SENDERS[channel];
   if (sender && !result.denied) {
     for (const template of sendableTemplates) {
+      // 24-hour customer service window check — see complianceGuard.js.
+      // In practice this is nearly always satisfied for a live webhook
+      // turn (the customer's own message that triggered this turn is
+      // itself the most recent inbound message, so the window just
+      // opened), but it's checked here too — rather than only in
+      // campaignSendController.js — so a future delayed/scheduled node
+      // (e.g. a "wait 2 days then follow up" step) can't silently attempt
+      // a free-form send Meta would reject anyway.
+      const check = await complianceGuard.checkSendAllowed({
+        contactId: conversation.contact_id,
+        conversationId: conversation.id,
+        template,
+      });
+      if (!check.allowed) {
+        console.warn(`[webhookController] blocked ${channel} send to ${contactExternalId}: ${check.reason}`);
+        messageRepository.logSystem({
+          organizationId: clientId,
+          conversationId: conversation.id,
+          body: `Automated reply blocked: ${check.reason}`,
+          metadata: { code: check.code, template },
+        });
+        continue;
+      }
+
       sender(contactExternalId, template).catch((err) => {
         console.error(`[webhookController] failed to deliver ${channel} message to ${contactExternalId}:`, err.message);
       });
@@ -257,6 +293,16 @@ async function processInboundEvent({ clientId, channel, contactExternalId, inter
       });
       if (awaitDelivery) await logPromise;
     }
+  }
+
+  // Meta compliance: persist the opt-out AFTER this turn's reply (the
+  // unsubscribe playbook's confirmation message) has already been allowed
+  // to send above — the contact is still owed that one confirmation.
+  // Everything from here on (the next inbound turn's short-circuit above,
+  // and every campaign broadcast — see campaignSendController.js) is
+  // blocked once this is set.
+  if (complianceGuard.isOptOutText(interaction?.text)) {
+    await complianceGuard.recordOptOut({ contactId: conversation.contact_id });
   }
 
   // A Handoff node ends the flow's turn AND ends the bot's ownership of
@@ -309,9 +355,15 @@ router.post('/automation/webhooks/:clientId/:channel', async (req, res) => {
     const parsed = normalizer(req.body);
     if (!parsed) return res.status(200).json({ ok: true }); // non-message webhook noise (delivery receipts etc.)
 
-    const result = await processInboundEvent({
+    // This route is deliberately unauthenticated (Meta can't send a CRM
+    // bearer token), so the `authenticate` middleware never runs and never
+    // sets app.current_org the way it does for every other route — without
+    // this, every write below fails RLS's WITH CHECK (see infra/db/rls.sql)
+    // since app_current_org() is NULL. clientId is already the org id
+    // straight from the verified webhook URL, so scope to it explicitly.
+    const result = await withTenantScope(clientId, () => processInboundEvent({
       clientId, channel, contactExternalId: parsed.contactExternalId, interaction: parsed.interaction
-    });
+    }));
 
     if (result.notFound) return res.status(404).json({ error: result.error });
 

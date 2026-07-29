@@ -1,6 +1,7 @@
 -- =====================================================================
 -- Lead Automation — Multi-tenant SaaS schema (PostgreSQL)
 -- Every table carries organization_id for org-wide data isolation.
+-- Unified Schema (Main Project + Custom Additions)
 -- =====================================================================
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -49,9 +50,7 @@ CREATE TABLE IF NOT EXISTS organizations (
 
 CREATE UNIQUE INDEX IF NOT EXISTS organizations_name_ci_idx ON organizations (lower(name));
 
--- GST verification cache (see services/auth-service/src/services/gstService.js).
--- Only the minimal, non-sensitive fields we return to the frontend — never
--- the raw provider payload or the RapidAPI key.
+-- GST verification cache
 CREATE TABLE IF NOT EXISTS gst_verifications (
   gst_number           TEXT PRIMARY KEY,
   verification_status  TEXT,
@@ -103,14 +102,12 @@ CREATE TABLE IF NOT EXISTS users (
   UNIQUE (organization_id, email)
 );
 
--- Verification codes used by the registration wizard (Step 1 2FA setup and
--- Step 5 email/mobile verification). organization_id is nullable because
--- verification can happen mid-wizard, before the tenant row exists yet.
+-- Verification codes used by registration wizard
 CREATE TABLE IF NOT EXISTS verification_codes (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
   channel         TEXT NOT NULL,           -- email | mobile
-  target          TEXT NOT NULL,           -- the email address or phone number
+  target          TEXT NOT NULL,           -- email address or phone number
   code_hash       TEXT NOT NULL,
   purpose         TEXT NOT NULL DEFAULT 'signup',
   consumed        BOOLEAN NOT NULL DEFAULT false,
@@ -143,6 +140,8 @@ CREATE TABLE IF NOT EXISTS integrations (
   provider        TEXT NOT NULL,           -- shopify | stripe | google_sheets | zapier ...
   status          TEXT DEFAULT 'disconnected',
   credentials     JSONB DEFAULT '{}'::jsonb,
+  locked_at       TIMESTAMPTZ,
+  locked_by       UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -154,18 +153,14 @@ CREATE TABLE IF NOT EXISTS contacts (
   email           TEXT,
   phone           TEXT,
   source          TEXT,                    -- lead source / origin channel
-  external_id     TEXT,                    -- raw channel identity (WhatsApp phone / IG-scoped user id / etc),
-                                            -- set when a contact is first resolved from an inbound automation
-                                            -- webhook rather than created manually in the CRM. NULL for
-                                            -- contacts that only ever originated in-app.
+  external_id     TEXT,                    -- raw channel identity (WhatsApp phone / IG-scoped user id / etc)
   tags            TEXT[] DEFAULT '{}',
   notes           TEXT,
+  opted_out       BOOLEAN NOT NULL DEFAULT false, -- True once contact sends STOP/UNSUBSCRIBE
+  opted_out_at    TIMESTAMPTZ,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- One contact per (org, channel, external id) — lets webhookController
--- find-or-create idempotently across retries/repeated messages instead of
--- spawning a duplicate contact per inbound event.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_contacts_org_source_external
   ON contacts (organization_id, source, external_id)
   WHERE external_id IS NOT NULL;
@@ -182,22 +177,17 @@ CREATE TABLE IF NOT EXISTS leads (
 
 -- ---------- Conversations & Messages ----------
 CREATE TABLE IF NOT EXISTS conversations (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  contact_id      UUID REFERENCES contacts(id),
-  channel_type    TEXT NOT NULL,
-  assigned_to     UUID REFERENCES users(id),
-  status          TEXT DEFAULT 'open',     -- open | pending | missed | campaign | closed
-  handled_by      TEXT NOT NULL DEFAULT 'bot'
-                    CHECK (handled_by IN ('bot','human')),  -- who currently owns replying: the automation
-                                                             -- flow, or a human agent. Flipped to 'human'
-                                                             -- automatically when a Handoff node is reached
-                                                             -- (see workflowEngine/webhookController), and
-                                                             -- flippable either way from the inbox UI.
-  external_contact_id TEXT,                -- provider-side thread/sender id (wa_id / IGSID / Gmail threadId / ...),
-                                             -- used to find-or-create the right conversation for an inbound event
-  last_message_at TIMESTAMPTZ DEFAULT now(),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  contact_id          UUID REFERENCES contacts(id),
+  channel_type        TEXT NOT NULL,
+  assigned_to         UUID REFERENCES users(id),
+  status              TEXT DEFAULT 'open',     -- open | pending | missed | campaign | closed
+  handled_by          TEXT NOT NULL DEFAULT 'bot'
+                        CHECK (handled_by IN ('bot','human')),
+  external_contact_id TEXT,                    -- provider-side thread/sender id
+  last_message_at     TIMESTAMPTZ DEFAULT now(),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS ix_conversations_org_channel_external
@@ -211,13 +201,107 @@ CREATE TABLE IF NOT EXISTS messages (
   body            TEXT,
   sender          TEXT,
   message_type    TEXT NOT NULL DEFAULT 'text', -- text | button_click | list_select | buttons | list | document | system
-  metadata        JSONB NOT NULL DEFAULT '{}'::jsonb, -- raw interaction/template payload for richer rendering later
-  media_url       TEXT,                    -- WhatsApp/IG media, or an email attachment's download URL
+  metadata        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  media_url       TEXT,                    -- WhatsApp/IG media or email attachment download URL
   media_type      TEXT,
-  external_id     TEXT,                    -- provider-side message id (wamid / Gmail message id / ...)
-  subject         TEXT,                    -- email-specific, NULL for every other channel
+  external_id     TEXT,                    -- provider-side message id (wamid / Gmail message id)
+  subject         TEXT,                    -- email-specific subject line
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ---------- Realtime message fan-out ----------
+CREATE OR REPLACE FUNCTION notify_new_message() RETURNS TRIGGER AS $$
+BEGIN
+  PERFORM pg_notify(
+    'messages_channel',
+    json_build_object(
+      'id', NEW.id,
+      'conversation_id', NEW.conversation_id,
+      'organization_id', NEW.organization_id
+    )::text
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS messages_notify_trigger ON messages;
+CREATE TRIGGER messages_notify_trigger
+  AFTER INSERT ON messages
+  FOR EACH ROW EXECUTE FUNCTION notify_new_message();
+
+-- ---------- Email (Gmail) ----------
+CREATE TABLE IF NOT EXISTS email_accounts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  provider          TEXT NOT NULL DEFAULT 'gmail',
+  email             TEXT NOT NULL,
+  access_token      TEXT,
+  refresh_token     TEXT,
+  token_expires_at  TIMESTAMPTZ,
+  scope             TEXT,
+  connected         BOOLEAN NOT NULL DEFAULT true,
+  connected_by      UUID REFERENCES users(id),
+  history_id        TEXT,
+  watch_expires_at  TIMESTAMPTZ,
+  last_synced_at    TIMESTAMPTZ,
+  last_sync_error   TEXT,
+  signature_html    TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, email)
+);
+
+CREATE TABLE IF NOT EXISTS email_threads (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  email_account_id  UUID REFERENCES email_accounts(id) ON DELETE CASCADE,
+  thread_id         TEXT NOT NULL,
+  conversation_id   UUID REFERENCES conversations(id) ON DELETE SET NULL,
+  subject           TEXT,
+  participants      TEXT[] DEFAULT '{}',
+  last_message_time TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (email_account_id, thread_id)
+);
+
+CREATE TABLE IF NOT EXISTS email_messages (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  email_account_id  UUID REFERENCES email_accounts(id) ON DELETE CASCADE,
+  thread_id         UUID REFERENCES email_threads(id) ON DELETE CASCADE,
+  message_id        TEXT NOT NULL,
+  rfc822_message_id TEXT,
+  in_reply_to       TEXT,
+  from_email        TEXT,
+  to_email          TEXT[] DEFAULT '{}',
+  cc_email          TEXT[] DEFAULT '{}',
+  subject           TEXT,
+  body              TEXT,
+  html_body         TEXT,
+  snippet           TEXT,
+  direction         TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'received',
+  label_ids         TEXT[] DEFAULT '{}',
+  has_attachments   BOOLEAN NOT NULL DEFAULT false,
+  received_at       TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (email_account_id, message_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_email_messages_thread ON email_messages (thread_id, received_at);
+
+CREATE TABLE IF NOT EXISTS email_attachments (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  message_id          UUID REFERENCES email_messages(id) ON DELETE CASCADE,
+  filename            TEXT,
+  mime_type           TEXT,
+  size                INT,
+  gmail_attachment_id TEXT,
+  url                 TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_email_attachments_message ON email_attachments (message_id);
 
 -- ---------- Campaigns ----------
 CREATE TABLE IF NOT EXISTS campaigns (
@@ -269,10 +353,7 @@ CREATE TABLE IF NOT EXISTS social_comments (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ---------- Google Business Profile Reviews (see migrations/004_google_reviews.sql) ----------
--- One connected Google account per organization. refresh_token is stored
--- encrypted (AES-256-GCM) when GOOGLE_TOKEN_ENC_KEY is set — see
--- services/review-service/src/google/crypto.js.
+-- ---------- Google Business Profile Reviews ----------
 CREATE TABLE IF NOT EXISTS google_tokens (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
@@ -292,7 +373,7 @@ CREATE TABLE IF NOT EXISTS google_tokens (
 CREATE TABLE IF NOT EXISTS google_accounts (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  account_id        TEXT NOT NULL,        -- Google resource name suffix, e.g. "accounts/123"
+  account_id        TEXT NOT NULL,
   account_name      TEXT,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (organization_id, account_id)
@@ -302,7 +383,7 @@ CREATE TABLE IF NOT EXISTS google_locations (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
   account_id        TEXT NOT NULL,
-  location_id       TEXT NOT NULL,        -- Google resource name suffix, e.g. "locations/456"
+  location_id       TEXT NOT NULL,
   location_name     TEXT,
   address           TEXT,
   phone             TEXT,
@@ -315,16 +396,16 @@ CREATE TABLE IF NOT EXISTS google_reviews (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
   location_id         TEXT NOT NULL,
-  review_id           TEXT NOT NULL,       -- Google review resource name suffix
+  review_id           TEXT NOT NULL,
   reviewer_name       TEXT,
   reviewer_photo_url  TEXT,
   star_rating         INT,
-  comment              TEXT,
-  create_time          TIMESTAMPTZ,
-  update_time          TIMESTAMPTZ,
-  reply_comment         TEXT,
-  reply_update_time     TIMESTAMPTZ,
-  synced_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  comment             TEXT,
+  create_time         TIMESTAMPTZ,
+  update_time         TIMESTAMPTZ,
+  reply_comment       TEXT,
+  reply_update_time   TIMESTAMPTZ,
+  synced_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (organization_id, review_id)
 );
 
@@ -334,9 +415,6 @@ CREATE INDEX IF NOT EXISTS idx_google_reviews_org_location
 CREATE INDEX IF NOT EXISTS idx_google_reviews_org_created
   ON google_reviews (organization_id, create_time DESC);
 
--- Per-tenant Google OAuth client configuration (see migrations/005_google_oauth_config.sql).
--- Lets each organization use its own Google Cloud OAuth client instead of
--- the single global GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET env pair.
 CREATE TABLE IF NOT EXISTS google_oauth_configs (
   id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id         UUID REFERENCES organizations(id) ON DELETE CASCADE,
@@ -425,6 +503,32 @@ CREATE TABLE IF NOT EXISTS email_attachments (
 );
 
 CREATE INDEX IF NOT EXISTS ix_email_attachments_message ON email_attachments (message_id);
+
+-- ---------- SMS (receive-only, via forwarder app) — see
+-- migrations/015_sms_forwarder_devices.sql and services/integration-service
+-- routes/smsWebhook.js + smsDevices.js. Each row is one Android phone
+-- running a third-party forwarding app (e.g. SMS Forwarder) that POSTs
+-- inbound texts to a per-device webhook URL; the token in that URL is the
+-- only credential. Inbound texts land in the shared contacts/conversations/
+-- messages tables above (channel_type='sms') like every other channel. ----------
+CREATE TABLE IF NOT EXISTS sms_devices (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  label             TEXT NOT NULL,             -- e.g. "Front desk phone", "Rep #2 SIM"
+  phone_number      TEXT,                       -- optional, cosmetic — not used for delivery
+  webhook_token     TEXT NOT NULL UNIQUE,        -- 64-char random hex; the URL IS the credential
+  connected         BOOLEAN NOT NULL DEFAULT true,
+  last_message_at   TIMESTAMPTZ,
+  message_count     INTEGER NOT NULL DEFAULT 0,
+  last_raw_payload  JSONB,                       -- most recent payload received — critical for
+                                                   -- debugging field-name mismatches
+  created_by        UUID REFERENCES users(id),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_sms_devices_org ON sms_devices (organization_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_sms_devices_token ON sms_devices (webhook_token);
 
 -- ---------- Ecommerce & Revenue ----------
 CREATE TABLE IF NOT EXISTS ecommerce_orders (
@@ -517,38 +621,13 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Helpful indexes for multi-tenant queries
 CREATE INDEX IF NOT EXISTS idx_conv_org ON conversations(organization_id, status);
 CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(conversation_id, message_type);
 CREATE INDEX IF NOT EXISTS idx_contacts_org ON contacts(organization_id);
 
--- =====================================================================
--- Lead Automation module (WhatsApp/Instagram/Messenger playbook engine)
--- Migrated from a standalone MongoDB store — see
--- infra/db/migrations/001_automation_service_postgres.sql for the
--- standalone/incremental version of this same DDL, for databases created
--- before this migration.
---
--- Design note: a playbook's node graph (nodes[], branches, buttons, etc.)
--- is kept as a single JSONB document per playbook rather than normalized
--- into separate node/edge tables. The engine (workflowEngine.js) always
--- loads the *entire* graph into memory and walks it as a Map — no code
--- path ever queries a single node or edge in isolation — so normalizing
--- would add joins and migration overhead with no real query benefit.
--- This mirrors the schema-less "nodes" array the flow builder already
--- produces (see src/schemas/flow-schema.md) and keeps a flow document
--- atomic and easy to version as a whole. Everything that IS a real
--- relational key elsewhere (organization_id, session ids) is a normal
--- typed/PK'd/FK'd column.
--- =====================================================================
-
+-- ---------- Lead Automation Module (Playbook Engine) ----------
 CREATE TABLE IF NOT EXISTS playbooks (
-  -- Explicit, app/seed-assigned id (e.g. "pb_project_details") rather than
-  -- an auto-generated UUID: the flow builder UI and its bundled demo/seed
-  -- flows already reference playbooks by a stable human-chosen string id,
-  -- and preserving that lets existing seed files and the frontend's
-  -- offline-mock fallback ids keep resolving unchanged.
   id                TEXT PRIMARY KEY,
   organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   name              TEXT NOT NULL,
@@ -566,8 +645,6 @@ CREATE TABLE IF NOT EXISTS playbooks (
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Fast lookup: every incoming webhook resolves (organization_id, status=active),
--- optionally narrowed by playbook_type. GIN lets "channel = ANY(channels)" use an index.
 CREATE INDEX IF NOT EXISTS idx_playbooks_org_status ON playbooks(organization_id, status);
 CREATE INDEX IF NOT EXISTS idx_playbooks_org_type_status ON playbooks(organization_id, playbook_type, status);
 CREATE INDEX IF NOT EXISTS idx_playbooks_channels_gin ON playbooks USING GIN (channels);
@@ -591,42 +668,29 @@ CREATE TABLE IF NOT EXISTS conversation_sessions (
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- One active session per contact per playbook — prevents duplicate/racing
--- sessions on rapid double-webhook delivery (a common WhatsApp/Meta retry
--- scenario). Direct equivalent of the old Mongo partialFilterExpression
--- unique index, natively supported by Postgres partial indexes.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_conversation_sessions_active
   ON conversation_sessions (playbook_id, contact_external_id)
   WHERE status = 'active';
 
--- Resolves "does this contact already have an active session on this channel"
--- during inbound-webhook playbook resolution.
 CREATE INDEX IF NOT EXISTS idx_conversation_sessions_lookup
   ON conversation_sessions (organization_id, channel, contact_external_id, status);
 CREATE INDEX IF NOT EXISTS idx_conversation_sessions_last_interaction
   ON conversation_sessions (last_interaction_at);
 
 CREATE TABLE IF NOT EXISTS throttle_counters (
-  -- A separate, tiny, hot-write table dedicated to counting — kept apart
-  -- from conversation_sessions so high-frequency limit-check increments
-  -- never contend with the larger session row (path_history/variables
-  -- updates), same reasoning as the original Mongo design.
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  scope_key         TEXT NOT NULL,   -- flow: playbook_id | node: "playbook_id:node_id" | client: "client:organization_id"
-  bucket            TEXT NOT NULL,   -- time-window bucket, see bucketUtils.js (e.g. "2026-07-08", "all")
+  scope_key         TEXT NOT NULL,
+  bucket            TEXT NOT NULL,
   limit_type        TEXT NOT NULL
                       CHECK (limit_type IN ('conversation_count','message_count','unique_contact_count')),
   count             INT NOT NULL DEFAULT 0,
-  seen_contact_ids  TEXT[] NOT NULL DEFAULT '{}', -- only populated for limit_type = unique_contact_count
+  seen_contact_ids  TEXT[] NOT NULL DEFAULT '{}',
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (scope_key, bucket, limit_type)
 );
 
--- ---------- LinkedIn integration (services/linkedin-service) ----------
--- Single-connection model for now (user_id defaults to 'default_user' in
--- the service, not yet organization-scoped like the rest of the schema).
-
+-- ---------- LinkedIn Integration ----------
 CREATE TABLE IF NOT EXISTS oauth_states (
   state       TEXT PRIMARY KEY,
   used        BOOLEAN NOT NULL DEFAULT false,

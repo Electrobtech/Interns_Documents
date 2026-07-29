@@ -84,6 +84,7 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
       });
       setSyncStatus('saved');
       setDeployState('deployed');
+      setPlaybookStatus(saved?.status || 'active');
       setTimeout(() => setDeployState('idle'), 2500);
       return saved;
     } catch (err) {
@@ -92,6 +93,35 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
       setTimeout(() => setDeployState('idle'), 3000);
     }
   }, [call, playbookId, channel]);
+
+  // ---- Pause / Resume — stops the bot from auto-replying to every ------
+  // number without touching the saved flow itself. Flips status between
+  // 'active' and 'paused'; resolvePlaybook() in automation-service's
+  // webhookController.js only ever matches status = 'active', so a
+  // 'paused' playbook is invisible to the engine — inbound messages still
+  // land in the transcript (that write happens before playbook lookup),
+  // there's just no automated reply. Toggling back to 'active' resumes it
+  // exactly where it left off; nothing about the flow itself changes.
+  const [playbookStatus, setPlaybookStatus] = useState('draft'); // draft | active | paused | archived
+  const [pauseState, setPauseState] = useState('idle'); // idle | working | error
+
+  const handleTogglePause = useCallback(async () => {
+    const nextStatus = playbookStatus === 'active' ? 'paused' : 'active';
+    setPauseState('working');
+    try {
+      const exported = exportFlowJson(graph, title);
+      const saved = await call(`/automation/playbooks/${playbookId}`, {
+        method: 'PUT',
+        body: { ...exported, channels: [channel], status: nextStatus },
+      });
+      setPlaybookStatus(saved?.status || nextStatus);
+      setPauseState('idle');
+    } catch (err) {
+      console.warn('Pause/resume failed:', err.message);
+      setPauseState('error');
+      setTimeout(() => setPauseState('idle'), 3000);
+    }
+  }, [call, playbookId, channel, graph, title, playbookStatus]);
 
   // Guards the autosave effect from firing while we're still hydrating (or
   // re-hydrating after a channel/playbookId change) — otherwise the very
@@ -139,6 +169,7 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
         if (cancelled) return;
         setGraphState(importFlowJson(playbook));
         setTitleState(playbook.name || 'WEB — Ecommerce Customer Support');
+        setPlaybookStatus(playbook.status || 'draft');
         setSyncStatus('saved');
       } catch (err) {
         if (cancelled) return;
@@ -231,6 +262,9 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
               onTestBot={() => setTab('simulate')}
               onDeploy={handleDeploy}
               deployState={deployState}
+              playbookStatus={playbookStatus}
+              onTogglePause={handleTogglePause}
+              pauseState={pauseState}
             />
           )
         ) : (

@@ -11,6 +11,72 @@
 
 const GRAPH_API_VERSION = 'v20.0';
 
+// Meta rate-limits per phone number / per app; a burst of sends (e.g. a
+// campaign broadcast loop) can hit this even under normal use, not just
+// abuse. These are the codes worth retrying — everything else (bad
+// recipient, template not found, expired token) is permanent and retrying
+// just wastes the attempts and delays the real error reaching the caller.
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const RETRYABLE_ERROR_CODES = new Set([
+  4,      // "Application request limit reached"
+  80007,  // WhatsApp Business Account rate limit
+  130429, // "Rate limit hit" (Cloud API specific)
+  131048, // "Spam rate limit hit"
+]);
+const MAX_ATTEMPTS = 3;
+const BASE_DELAY_MS = 1000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * POSTs to the Cloud API with retry-on-rate-limit/transient-error. Honors
+ * the API's own Retry-After header when present, otherwise backs off
+ * exponentially (1s, 2s, 4s) with a little jitter so a burst of sends
+ * retrying at the same instant don't all collide again.
+ */
+async function postWithRetry(url, payload, accessToken) {
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (networkErr) {
+      lastErr = new Error(`[whatsappSender] network error calling Cloud API: ${networkErr.message}`);
+      if (attempt === MAX_ATTEMPTS) throw lastErr;
+      await sleep(BASE_DELAY_MS * 2 ** (attempt - 1) + Math.random() * 250);
+      continue;
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) return data;
+
+    const errorCode = data?.error?.code;
+    const retryable = RETRYABLE_STATUS.has(response.status) || RETRYABLE_ERROR_CODES.has(errorCode);
+    const apiError = data?.error?.message || `HTTP ${response.status}`;
+    console.error(`[whatsappSender] Cloud API rejected message (attempt ${attempt}/${MAX_ATTEMPTS}):`, data?.error || data);
+
+    if (!retryable || attempt === MAX_ATTEMPTS) {
+      throw new Error(`[whatsappSender] send failed: ${apiError}`);
+    }
+
+    const retryAfterHeader = Number(response.headers.get('retry-after'));
+    const delay = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+      ? retryAfterHeader * 1000
+      : BASE_DELAY_MS * 2 ** (attempt - 1) + Math.random() * 250;
+    await sleep(delay);
+  }
+  throw lastErr;
+}
+
 /**
  * Sends a message to a WhatsApp user via the Cloud API.
  *
@@ -43,29 +109,7 @@ async function sendWhatsAppMessage(phoneNumber, template) {
 
   const url = `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`;
 
-  let response;
-  try {
-    response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(payload),
-    });
-  } catch (networkErr) {
-    throw new Error(`[whatsappSender] network error calling Cloud API: ${networkErr.message}`);
-  }
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const apiError = data?.error?.message || `HTTP ${response.status}`;
-    console.error('[whatsappSender] Cloud API rejected message:', data?.error || data);
-    throw new Error(`[whatsappSender] send failed for ${phoneNumber}: ${apiError}`);
-  }
-
-  return data;
+  return postWithRetry(url, payload, accessToken);
 }
 
 /**

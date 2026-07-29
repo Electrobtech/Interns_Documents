@@ -5,8 +5,10 @@ import {
   Inbox, Headphones, Sparkles, MessageSquare, Clock, User,
   AlertTriangle, ShieldAlert, Filter, Search, X, ChevronRight,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useConversations } from '@/lib/queries/crm';
 import { useRunSupportAgent, useSupportRuns } from '@/lib/queries/aiAgents';
+import { useSocketEvent } from '@/lib/socket';
 
 /* ── helpers ─────────────────────────── */
 function timeAgo(iso) {
@@ -170,8 +172,16 @@ function SupportAgentPanel() {
 /* ── conversation list ───────────────── */
 function ConversationList() {
   const { data, isLoading } = useConversations();
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusF, setStatusF] = useState('');
+
+  // Live updates — see services/inbox-service/src/realtime.js. Unlike the
+  // per-channel page (which only cares about one channel_type), the
+  // Unified Inbox shows every channel, so any update refetches.
+  useSocketEvent('conversation:updated', () => {
+    qc.invalidateQueries({ queryKey: ['conversations', 'list'] });
+  }, [qc]);
 
   const all = Array.isArray(data) ? data : [];
   const filtered = all.filter((c) => {

@@ -19,13 +19,13 @@ export default function WhatsAppAutomationPage() {
 
         <div className="flex items-center gap-4 text-sm border-b border-slate-200 mt-3">
           <Link
-            href="/channels/whatsapp"
+            href="/app/channels/whatsapp"
             className="px-1 pb-2 -mb-px text-slate-500 hover:text-slate-700"
           >
             Conversations
           </Link>
           <Link
-            href="/channels/whatsapp/automation"
+            href="/app/channels/whatsapp/automation"
             className="px-1 pb-2 -mb-px border-b-2 border-brand text-brand font-medium flex items-center gap-1.5"
           >
             <Bot size={14} /> Automation

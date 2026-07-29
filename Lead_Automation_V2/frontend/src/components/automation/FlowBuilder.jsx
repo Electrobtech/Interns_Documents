@@ -3,7 +3,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import {
   ChevronLeft, Check, Plus, Trash2, ZoomIn, ZoomOut, Maximize2,
   Undo2, Redo2, Search, MessageSquare, GitBranch, Headset, FileText, X, Copy,
-  Loader2, AlertCircle, Download, CloudOff, Play,
+  Loader2, AlertCircle, Download, CloudOff, Play, Pause,
 } from "lucide-react";
 import { apiUpload } from "@/lib/api";
 import { getToken } from "@/lib/auth";
@@ -176,7 +176,7 @@ function EditableText({ value, onChange, className, placeholder, multiline }) {
     <div
       onMouseDown={(e) => e.stopPropagation()}
       onClick={() => setEditing(true)}
-      className={`${className} cursor-text`}
+      className={`${className} cursor-text ${multiline ? "whitespace-pre-wrap" : ""}`}
       style={{ color: value ? tokens.text : tokens.muted }}
     >
       {value || placeholder}
@@ -648,7 +648,7 @@ export function importFlowJson(playbook) {
 /* ------------------------------------------------------------------ */
 /* Root component                                                      */
 /* ------------------------------------------------------------------ */
-export default function FlowBuilder({ initialGraph, initialTitle, syncStatus = "saved", onGraphChange, onTitleChange, onTestBot, onDeploy, deployState = "idle" }) {
+export default function FlowBuilder({ initialGraph, initialTitle, syncStatus = "saved", onGraphChange, onTitleChange, onTestBot, onDeploy, deployState = "idle", playbookStatus = "draft", onTogglePause, pauseState = "idle" }) {
   const [graph, setGraph] = useState(initialGraph || seedGraph);
   const [title, setTitleState] = useState(initialTitle || "WEB — Ecommerce Customer Support");
   const [viewport, setViewport] = useState({ x: -200, y: -10, zoom: 0.85 });
@@ -965,6 +965,35 @@ export default function FlowBuilder({ initialGraph, initialTitle, syncStatus = "
         >
           Test bot
         </button>
+        {(playbookStatus === "active" || playbookStatus === "paused") && (
+          <button
+            onClick={() => onTogglePause?.()}
+            disabled={pauseState === "working" || !onTogglePause}
+            title={
+              playbookStatus === "active"
+                ? "Stop this bot from auto-replying to every number, without deleting the flow"
+                : "Let this bot start auto-replying again"
+            }
+            className="flex items-center gap-1.5 text-xs font-semibold rounded-lg px-3.5 py-1.5 border"
+            style={{
+              borderColor: playbookStatus === "active" ? "#D97706" : tokens.cardBorder,
+              color: playbookStatus === "active" ? "#D97706" : "#15803D",
+              opacity: pauseState === "working" ? 0.6 : 1,
+            }}
+          >
+            {pauseState === "working" ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : playbookStatus === "active" ? (
+              <Pause size={13} />
+            ) : (
+              <Play size={13} />
+            )}
+            {playbookStatus === "active" ? "Pause" : "Resume"}
+          </button>
+        )}
+        {pauseState === "error" && (
+          <span className="text-[11px] text-red-600">Couldn't update — try again.</span>
+        )}
         <button
           onClick={() => setShowExport(true)}
           className="text-xs font-semibold rounded-lg px-3.5 py-1.5"

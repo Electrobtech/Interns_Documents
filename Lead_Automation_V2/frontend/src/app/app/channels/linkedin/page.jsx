@@ -36,7 +36,9 @@ const COLORS = {
 
 const fontMono = "ui-monospace, SFMono-Regular, 'Roboto Mono', Menlo, Consolas, monospace";
 
-const API = process.env.NEXT_PUBLIC_LINKEDIN_SERVICE_URL || 'http://localhost:4009';
+// Goes through the API gateway, which now proxies
+// /api/v1/integrations/linkedin/* to linkedin-service (see api-gateway/src/index.js).
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 function Badge({ tone, icon: Icon, children }) {
   const map = {
