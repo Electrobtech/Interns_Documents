@@ -571,7 +571,10 @@ export default function LinkedInIntegrationPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {connection === "disconnected" && (
+            {/* Fallback, not just the 'disconnected' case: if /status fails the
+                state is unknown, and a card with NO action at all is the worst
+                outcome — offering Connect is always the safe default. */}
+            {!isConnected && connection !== "connecting" && connection !== "expiring" && connection !== "error" && (
               <button
                 onClick={connect}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white"
