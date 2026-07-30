@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { withTenantScope } = require('@lead/shared');
 const { evaluateWorkflowStep } = require('../services/workflowEngine');
 const playbookRepository = require('../repositories/playbookRepository');
 const conversationSessionRepository = require('../repositories/conversationSessionRepository');
@@ -354,9 +355,15 @@ router.post('/automation/webhooks/:clientId/:channel', async (req, res) => {
     const parsed = normalizer(req.body);
     if (!parsed) return res.status(200).json({ ok: true }); // non-message webhook noise (delivery receipts etc.)
 
-    const result = await processInboundEvent({
+    // This route is deliberately unauthenticated (Meta can't send a CRM
+    // bearer token), so the `authenticate` middleware never runs and never
+    // sets app.current_org the way it does for every other route — without
+    // this, every write below fails RLS's WITH CHECK (see infra/db/rls.sql)
+    // since app_current_org() is NULL. clientId is already the org id
+    // straight from the verified webhook URL, so scope to it explicitly.
+    const result = await withTenantScope(clientId, () => processInboundEvent({
       clientId, channel, contactExternalId: parsed.contactExternalId, interaction: parsed.interaction
-    });
+    }));
 
     if (result.notFound) return res.status(404).json({ error: result.error });
 

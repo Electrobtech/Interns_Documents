@@ -14,10 +14,12 @@ const ECOMMERCE   = process.env.ECOMMERCE_SERVICE_URL   || 'http://localhost:400
 const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:4007';
 const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
 const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
+const LINKEDIN     = process.env.LINKEDIN_SERVICE_URL    || 'http://localhost:4009';
 const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
 const AUTOMATION  = process.env.AUTOMATION_SERVICE_URL  || 'http://localhost:4011';
 const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4012';
 const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4013';
+const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4012'; // Gmail Pub/Sub push handler — was referenced below but never declared
 
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
 
@@ -118,6 +120,44 @@ const routes = [
 { path: '/notifications',       target: NOTIFICATION },
 { path: '/email',               target: EMAIL },
 { path: '/calendar',            target: CALENDAR },
+  { path: '/auth/facebook',       target: INTEGRATION }, // covers /auth/facebook and /auth/facebook/callback
+  { path: '/auth/refresh-tokens', target: INTEGRATION },
+  { path: '/auth/deauthorize',    target: INTEGRATION },
+  { path: '/auth/data-deletion',  target: INTEGRATION }, // covers /auth/data-deletion and /auth/data-deletion-status
+  { path: '/auth/unlock',         target: INTEGRATION }, // admin-only: lifts the lock on the Instagram/Facebook connection
+  { path: '/instagram',       target: INTEGRATION },
+  { path: '/facebook',        target: INTEGRATION },
+  { path: '/whatsapp',        target: INTEGRATION },
+  { path: '/credentials',     target: INTEGRATION }, // manual API key / App ID / App Secret entry (routes/credentials.js)
+  { path: '/auth',            target: AUTH },
+  { path: '/company',         target: AUTH }, // Company Registration wizard: companyController.js + gstController.js
+  { path: '/conversations',   target: INBOX },
+  { path: '/socket.io',       target: INBOX, ws: true }, // live message delivery — see services/inbox-service/src/realtime.js
+  { path: '/contacts',        target: CONTACT },
+  { path: '/leads',           target: CONTACT },
+  { path: '/campaigns',       target: CAMPAIGN },
+  { path: '/ai-agents',       target: AI },
+  { path: '/orders',          target: ECOMMERCE },
+  { path: '/carts',           target: ECOMMERCE },
+  { path: '/recovery-flows',  target: ECOMMERCE },
+  { path: '/reviews',         target: REVIEW },
+  { path: '/social',          target: REVIEW },
+  { path: '/analytics',       target: ANALYTICS },
+  { path: '/integrations',    target: INTEGRATION },
+  // linkedin-service mounts its own routes under this prefix (see
+  // services/linkedin-service/src/index.js) — was missing entirely, so every
+  // LinkedIn call from the frontend 404'd at the gateway before this.
+  { path: '/api/v1/integrations/linkedin', target: LINKEDIN },
+  { path: '/api-keys',        target: INTEGRATION },
+  { path: '/webhooks',        target: INTEGRATION },
+  { path: '/webhook/gmail',   target: EMAIL },        // Gmail Pub/Sub push — must precede the generic '/webhook' entry below
+  { path: '/webhook/sms',     target: INTEGRATION },   // SMS-forwarder-app webhook — must precede the generic '/webhook' entry below
+  { path: '/webhook',         target: INTEGRATION },   // Meta webhook callback (/webhook/meta)
+  { path: '/sms',             target: INTEGRATION },   // device management (list/add/remove connected phones) — routes/smsDevices.js
+  { path: '/channels',        target: INTEGRATION },
+  { path: '/users',           target: TEAM },
+  { path: '/teams',           target: TEAM },
+  { path: '/automation',      target: AUTOMATION },
 ];
 
 const wsProxies = [];

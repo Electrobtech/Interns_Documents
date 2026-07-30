@@ -98,6 +98,12 @@ CREATE TABLE IF NOT EXISTS users (
   is_phone_verified   BOOLEAN NOT NULL DEFAULT false,
   two_factor_enabled  BOOLEAN NOT NULL DEFAULT false,
   two_factor_method   TEXT,                     -- authenticator | sms
+  pin_hash            TEXT,                      -- bcrypt hash of a 4-6 digit PIN, alt login (017_pin_authentication.sql)
+  is_pin_enabled      BOOLEAN NOT NULL DEFAULT false,
+  failed_pin_attempts INTEGER NOT NULL DEFAULT 0,
+  pin_lockout_until   TIMESTAMPTZ,
+  pin_updated_at      TIMESTAMPTZ,                -- age-checked at login for 30-day expiration
+  previous_pin_hash   TEXT,                       -- prior PIN, so a new one can't just repeat it (018_pin_expiration_history.sql)
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (organization_id, email)
 );
@@ -144,6 +150,27 @@ CREATE TABLE IF NOT EXISTS integrations (
   locked_by       UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Backs the 'sms' channel: one row per connected sending number/gateway,
+-- rather than a single JSON blob on channels.credentials (019_sms_devices.sql).
+CREATE TABLE IF NOT EXISTS sms_devices (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  label             TEXT NOT NULL,               -- human-friendly name, e.g. "Front Desk Android"
+  phone_number      TEXT NOT NULL,                -- E.164, e.g. +91XXXXXXXXXX
+  provider          TEXT NOT NULL DEFAULT 'android_gateway', -- android_gateway | twilio | other
+  status            TEXT NOT NULL DEFAULT 'disconnected',    -- connected | disconnected | error
+  sender_id         TEXT,                          -- alphanumeric sender ID for transactional SMS, if the provider supports one
+  credentials       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  connected_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+  last_seen_at      TIMESTAMPTZ,
+  last_error        TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, phone_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sms_devices_org_status ON sms_devices (organization_id, status);
 
 -- ---------- Contacts & Leads ----------
 CREATE TABLE IF NOT EXISTS contacts (
@@ -808,6 +835,52 @@ CREATE TABLE IF NOT EXISTS linkedin_campaign_metrics (
   leads           INT NOT NULL DEFAULT 0,
   UNIQUE (user_id, campaign_urn, date)
 );
+
+CREATE TABLE IF NOT EXISTS linkedin_conversion_config (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id               TEXT NOT NULL UNIQUE,
+  conversion_rule_urn   TEXT NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_conversion_events (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id               TEXT NOT NULL,
+  event_id              TEXT NOT NULL,
+  conversion_rule_urn   TEXT NOT NULL,
+  email_hash            TEXT NOT NULL,
+  value_cents           BIGINT,
+  currency_code         TEXT,
+  lead_id               UUID,
+  status                TEXT NOT NULL DEFAULT 'sent',
+  error_detail          TEXT,
+  sent_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_linkedin_conversion_events_user_sent ON linkedin_conversion_events (user_id, sent_at DESC);
+
+CREATE TABLE IF NOT EXISTS linkedin_posts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id           TEXT NOT NULL,
+  post_urn          TEXT NOT NULL,
+  author_urn        TEXT NOT NULL,
+  as_organization   BOOLEAN NOT NULL DEFAULT false,
+  text              TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'published',
+  media_urn         TEXT,
+  media_type        TEXT,
+  metrics           JSONB NOT NULL DEFAULT '{}',
+  comments_cache    JSONB NOT NULL DEFAULT '[]',
+  comments_synced_at TIMESTAMPTZ,
+  last_synced_at    TIMESTAMPTZ,
+  published_at      TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, post_urn)
+);
+
+CREATE INDEX IF NOT EXISTS idx_linkedin_posts_user_created ON linkedin_posts (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS linkedin_organizations (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
