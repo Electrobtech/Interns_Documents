@@ -10,7 +10,7 @@ import {
   Globe, Mail, Smartphone, Phone, Video, Plug, HelpCircle, ChevronDown, 
   Shield, Cpu, BarChart3, AlertTriangle, Lock, UserCheck, 
   ScanSearch, Route, RefreshCw, LineChart, Linkedin, FileText, Upload, 
-  Check, PlayCircle, Plus, Eye, Share2, Layers, Database
+  Check, PlayCircle, Plus, Eye, Share2, Layers, Database, Sparkles, Radar
 } from 'lucide-react';
 import ChatAssistant from '../components/landing/ChatAssistant';
 
@@ -1525,8 +1525,24 @@ export default function Landing() {
               <h3 className="mt-6 text-xl font-bold text-slate-900">Marketing AI Agent</h3>
               <p className="mt-1 font-mono text-[10px] text-rose-600 uppercase font-extrabold tracking-wide">Attracts &amp; Nurtures</p>
               <p className="mt-3 text-sm text-slate-500 leading-relaxed font-semibold">
-                Monitors campaigns, answers incoming queries from social channels using approved product guidelines, and triggers drip schedules to revive inactive cold leads.
+                Generates campaigns, optimises them for search and AI answer engines, benchmarks rivals, and revives cold leads on a drip — all from your approved product guidelines.
               </p>
+
+              {/* Capability chips — mirrors the panels shipped in the Marketing workspace */}
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {[
+                  { label: 'Campaign Generator', Icon: Sparkles },
+                  { label: 'SEO + AEO', Icon: ScanSearch },
+                  { label: 'Competitor Analysis', Icon: Radar },
+                ].map(({ label, Icon }) => (
+                  <span
+                    key={label}
+                    className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700"
+                  >
+                    <Icon className="h-2.5 w-2.5" /> {label}
+                  </span>
+                ))}
+              </div>
 
               {/* Marketing Mock Widget inside bento */}
               <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-4">
@@ -1550,9 +1566,10 @@ export default function Landing() {
               <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-2.5">
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Active Automations</p>
                 {[
+                  { label: 'Campaign Generator', meta: '4 drafts ready to review', dot: 'bg-emerald-500' },
+                  { label: 'SEO / AEO Optimiser', meta: '18 pages scored today', dot: 'bg-emerald-500' },
+                  { label: 'Competitor Watch', meta: '3 rivals · 2 price moves', dot: 'bg-amber-500' },
                   { label: 'Cold Lead Drip Sequence', meta: '3-step · 14 leads queued', dot: 'bg-emerald-500' },
-                  { label: 'Story Reply Auto-Responder', meta: 'Instagram · replying live', dot: 'bg-emerald-500' },
-                  { label: 'Comment-to-DM Capture', meta: 'Facebook · 6 new today', dot: 'bg-amber-500' },
                 ].map((row) => (
                   <div key={row.label} className="flex items-start gap-2">
                     <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${row.dot}`} />

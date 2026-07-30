@@ -81,13 +81,7 @@ export default function ConnectChannelsPage() {
                   // than the generic fake on/off toggle every other
                   // channel here uses — send them to the dedicated page
                   // where that flow (and device list) actually lives.
-                  <Link href={`/channels/${type}`}
-                {type === 'email' ? (
-                  // Email connects via real Gmail OAuth (one or more actual
-                  // mailboxes), not the generic fake on/off toggle every
-                  // other channel here uses — send them to the dedicated
-                  // page where that flow (and mailbox list) actually lives.
-                  <Link href="/app/channels/email"
+                  <Link href={`/app/channels/${type}`}
                     className={`text-xs rounded-lg px-3 py-1.5 font-medium ${
                       connected ? 'border border-slate-300 text-slate-600' : 'bg-brand text-white'}`}>
                     {connected ? 'Open' : 'Connect'}
