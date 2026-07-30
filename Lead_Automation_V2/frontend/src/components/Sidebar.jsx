@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Inbox, Users, Bot, Megaphone, ShoppingCart,
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
   MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown, Bell,
-  FileText, Linkedin, PanelLeftClose, PanelLeftOpen, Workflow,
+  FileText, Linkedin, PanelLeftClose, PanelLeftOpen, Workflow, CalendarDays,
 } from 'lucide-react';
 
 const PLATFORM = [
@@ -26,6 +26,7 @@ const PLATFORM = [
   },
   { label: 'Workflow Builder',       icon: Workflow,        href: '/app/builder'           },
   { label: 'Campaigns & Broadcasts', icon: Megaphone,       href: '/app/campaigns'         },
+  { label: 'Calendar',               icon: CalendarDays,    href: '/app/calendar'          },
   { label: 'Ecommerce & Revenue',    icon: ShoppingCart,    href: '/app/ecommerce'         },
   { label: 'Reviews & Social',       icon: Star,            href: '/app/reviews'           },
   { label: 'Analytics & Insights',   icon: BarChart3,       href: '/app/analytics'         },

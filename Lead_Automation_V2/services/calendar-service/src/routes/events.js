@@ -34,6 +34,23 @@ function requireConnected(err, res) {
 }
 
 /**
+ * Google Calendar is an OPTIONAL enhancement, not a prerequisite for keeping
+ * a calendar. Connecting it adds real invites and reminders; without it the
+ * org still gets a working internal calendar backed by calendar_events.
+ * Returns a token when connected, or null when the org has not connected
+ * (or its grant expired) so callers can degrade to local-only instead of
+ * failing the whole write.
+ */
+async function optionalAccessToken(organizationId) {
+  try {
+    return await tokenStore.getValidAccessToken(organizationId);
+  } catch (err) {
+    if (err.status === 404 || err.status === 401) return null;
+    throw err;
+  }
+}
+
+/**
  * GET /calendar/events/freebusy?start=ISO&end=ISO
  * Returns Google's busy[] intervals for the org's primary calendar in the
  * given window, so the UI can grey out taken slots before the user picks
@@ -88,15 +105,20 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'title, startISO, and endISO are required.' });
   }
   try {
-    const accessToken = await tokenStore.getValidAccessToken(req.user.organizationId);
-    const gEvent = await calendarApi.createEvent(accessToken, {
-      summary: title,
-      description,
-      startISO,
-      endISO,
-      attendeeEmails,
-      location,
-    });
+    // Push to Google when connected so invites/reminders actually fire;
+    // otherwise create the event locally only.
+    const accessToken = await optionalAccessToken(req.user.organizationId);
+    let gEvent = { id: null, htmlLink: null };
+    if (accessToken) {
+      gEvent = await calendarApi.createEvent(accessToken, {
+        summary: title,
+        description,
+        startISO,
+        endISO,
+        attendeeEmails,
+        location,
+      });
+    }
 
     const { rows } = await pool.query(
       `INSERT INTO calendar_events
@@ -125,17 +147,20 @@ router.patch('/:id', async (req, res) => {
     const local = rows[0];
     if (!local) return res.status(404).json({ error: 'Event not found.' });
 
-    const accessToken = await tokenStore.getValidAccessToken(req.user.organizationId);
     const { title, description, startISO, endISO, attendeeEmails, location } = req.body;
-    await calendarApi.updateEvent(accessToken, {
-      eventId: local.google_event_id,
-      summary: title,
-      description,
-      startISO,
-      endISO,
-      attendeeEmails,
-      location,
-    });
+    // Only mirror the edit to Google for events that actually exist there.
+    const accessToken = await optionalAccessToken(req.user.organizationId);
+    if (accessToken && local.google_event_id) {
+      await calendarApi.updateEvent(accessToken, {
+        eventId: local.google_event_id,
+        summary: title,
+        description,
+        startISO,
+        endISO,
+        attendeeEmails,
+        location,
+      });
+    }
 
     const { rows: updated } = await pool.query(
       `UPDATE calendar_events SET
@@ -160,12 +185,14 @@ router.delete('/:id', async (req, res) => {
     const local = rows[0];
     if (!local) return res.status(404).json({ error: 'Event not found.' });
 
-    const accessToken = await tokenStore.getValidAccessToken(req.user.organizationId);
-    await calendarApi.deleteEvent(accessToken, { eventId: local.google_event_id }).catch((e) => {
-      // A 410/404 from Google just means it was already deleted there
-      // (e.g. removed by the attendee) — still fine to cancel our copy.
-      if (e.status !== 502) throw e;
-    });
+    const accessToken = await optionalAccessToken(req.user.organizationId);
+    if (accessToken && local.google_event_id) {
+      await calendarApi.deleteEvent(accessToken, { eventId: local.google_event_id }).catch((e) => {
+        // A 410/404 from Google just means it was already deleted there
+        // (e.g. removed by the attendee) — still fine to cancel our copy.
+        if (e.status !== 502) throw e;
+      });
+    }
 
     await pool.query(`UPDATE calendar_events SET status='cancelled', updated_at=now() WHERE id=$1`, [req.params.id]);
     res.json({ ok: true });

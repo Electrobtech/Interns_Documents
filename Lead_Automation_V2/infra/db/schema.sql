@@ -555,7 +555,10 @@ CREATE TABLE IF NOT EXISTS calendar_accounts (
 CREATE TABLE IF NOT EXISTS calendar_events (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  google_event_id     TEXT NOT NULL,
+  -- NULL for events created while Google Calendar is not connected. Google is
+  -- an optional enhancement (real invites/reminders); the internal calendar
+  -- works without it, so this cannot be NOT NULL.
+  google_event_id     TEXT,
   title               TEXT NOT NULL,
   description         TEXT,
   starts_at           TIMESTAMPTZ NOT NULL,
