@@ -85,15 +85,32 @@ export function useCreateLead() {
   });
 }
 
+// GET /conversations/:id — conversation + messages + the contact/lead columns
+// the Unified Inbox context rail needs (see services/inbox-service).
+export function useConversation(conversationId) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['conversations', 'detail', conversationId],
+    queryFn: () => call(`/conversations/${conversationId}`),
+    enabled: !!conversationId,
+    refetchInterval: 15_000,
+  });
+}
+
 // POST /conversations/:id/reply — { content } — used by "Send via Unified
 // Inbox" actions on AI-drafted follow-ups/replies.
 export function useSendReply() {
   const { call } = useApi();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ conversationId, content }) =>
-      call(`/conversations/${conversationId}/reply`, { method: 'POST', body: { content } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations', 'list'] }),
+    // inbox-service reads req.body.body — sending { content } inserted a NULL
+    // message body. Accepts either name from callers and normalises here.
+    mutationFn: ({ conversationId, body, content }) =>
+      call(`/conversations/${conversationId}/reply`, { method: 'POST', body: { body: body ?? content } }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['conversations', 'list'] });
+      qc.invalidateQueries({ queryKey: ['conversations', 'detail', vars.conversationId] });
+    },
   });
 }
 

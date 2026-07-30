@@ -1,16 +1,39 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  Inbox, Headphones, Sparkles, MessageSquare, Clock, User,
-  AlertTriangle, ShieldAlert, Filter, Search, X, ChevronRight,
+  Inbox, Search, X, Send, User, Loader2, AlertTriangle, Bot, UserCheck,
+  Mail, Phone, Tag, Clock, Globe, MessageCircle, Instagram, MessageSquare,
+  Smartphone, Linkedin, ExternalLink, Sparkles, Activity, ChevronRight,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useConversations } from '@/lib/queries/crm';
-import { useRunSupportAgent, useSupportRuns } from '@/lib/queries/aiAgents';
+import { useConversations, useConversation, useSendReply } from '@/lib/queries/crm';
 import { useSocketEvent } from '@/lib/socket';
+import SuggestedReplyCard from '@/components/ai-agents/inbox/SuggestedReplyCard';
 
-/* ── helpers ─────────────────────────── */
+/* ── channel presentation, keyed on conversations.channel_type ── */
+const CHANNELS = {
+  whatsapp:  { label: 'WhatsApp',  Icon: MessageCircle,  tone: 'text-emerald-600 bg-emerald-50' },
+  instagram: { label: 'Instagram', Icon: Instagram,      tone: 'text-pink-600 bg-pink-50'       },
+  messenger: { label: 'Messenger', Icon: MessageSquare,  tone: 'text-blue-600 bg-blue-50'       },
+  email:     { label: 'Email',     Icon: Mail,           tone: 'text-violet-600 bg-violet-50'   },
+  sms:       { label: 'SMS',       Icon: Smartphone,     tone: 'text-amber-600 bg-amber-50'     },
+  webchat:   { label: 'Web chat',  Icon: Globe,          tone: 'text-sky-600 bg-sky-50'         },
+  linkedin:  { label: 'LinkedIn',  Icon: Linkedin,       tone: 'text-blue-700 bg-blue-50'       },
+  voice:     { label: 'Voice',     Icon: Phone,          tone: 'text-rose-600 bg-rose-50'       },
+};
+const channelCfg = (t) => CHANNELS[t] || { label: t || 'Unknown', Icon: MessageSquare, tone: 'text-slate-500 bg-slate-100' };
+
+const STATUS_CFG = {
+  open:     'bg-emerald-50 text-emerald-700 border-emerald-200',
+  pending:  'bg-amber-50 text-amber-700 border-amber-200',
+  missed:   'bg-red-50 text-red-700 border-red-200',
+  handoff:  'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',
+  campaign: 'bg-violet-50 text-violet-700 border-violet-200',
+  resolved: 'bg-slate-100 text-slate-500 border-slate-200',
+  closed:   'bg-slate-100 text-slate-400 border-slate-200',
+};
+
 function timeAgo(iso) {
   if (!iso) return '—';
   const m = Math.round((Date.now() - new Date(iso)) / 60000);
@@ -20,291 +43,522 @@ function timeAgo(iso) {
   return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
 }
 
-const STATUS_CFG = {
-  open:     'bg-emerald-50 text-emerald-700',
-  pending:  'bg-amber-50 text-amber-700',
-  handoff:  'bg-fuchsia-50 text-fuchsia-700',
-  resolved: 'bg-slate-100 text-slate-500',
-  closed:   'bg-slate-100 text-slate-400',
-};
-const PRIORITY_CFG = {
-  urgent: 'bg-red-100 text-red-700',
-  high:   'bg-red-50 text-red-600',
-  medium: 'bg-amber-50 text-amber-700',
-  low:    'bg-slate-100 text-slate-500',
-};
+const initials = (name) => (name || '?')
+  .split(' ').filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
 
-/* ── Support Agent panel ─────────────── */
-function SupportAgentPanel() {
-  const run = useRunSupportAgent();
-  const { data: runsData } = useSupportRuns();
-  const [query, setQuery]     = useState('');
-  const [cname, setCname]     = useState('');
-  const runs = Array.isArray(runsData) ? runsData : [];
-  const out  = run.data;
-
-  const submit = (e) => {
-    e.preventDefault();
-    if (!query.trim()) return;
-    run.mutate({ brief: query.trim(), customer_name: cname.trim() || null });
-  };
-
-  return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      {/* form */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6">
-        <div className="flex items-center gap-2.5 mb-1">
-          <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-purple-100 text-violet-600">
-            <Sparkles size={15} />
-          </div>
-          <div>
-            <h4 className="font-bold text-slate-800 text-sm">Support Agent Assistant</h4>
-            <p className="text-[11px] text-slate-400">Paste a customer message — AI drafts a reply from your knowledge base</p>
-          </div>
-        </div>
-        <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent my-4" />
-        <form onSubmit={submit} className="space-y-3.5">
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Customer Name</label>
-            <input value={cname} onChange={(e) => setCname(e.target.value)}
-              placeholder="Optional" className="input-premium" />
-          </div>
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Customer Message *</label>
-            <textarea required rows={5} value={query} onChange={(e) => setQuery(e.target.value)}
-              placeholder="e.g. I paid the deposit but never received a confirmation email…"
-              className="input-premium resize-none" />
-          </div>
-          {run.isError && (
-            <div className="flex items-center gap-2 px-3 py-2.5 bg-red-50 border border-red-100 rounded-xl">
-              <AlertTriangle size={13} className="text-red-500 shrink-0" />
-              <p className="text-xs text-red-600">{run.error?.message}</p>
-            </div>
-          )}
-          <button disabled={run.isPending || !query.trim()} className="btn-violet w-full">
-            <Sparkles size={14} />
-            {run.isPending ? 'Analysing…' : 'Get AI Reply'}
-          </button>
-        </form>
-      </div>
-
-      {/* result */}
-      <div className="space-y-4">
-        {run.isPending && (
-          <div className="bg-white rounded-2xl border border-violet-100 shadow-card p-8 text-center animate-scale-in">
-            <div className="relative inline-block mb-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-50 to-purple-100 flex items-center justify-center">
-                <Sparkles size={22} className="text-violet-500 animate-pulse" />
-              </div>
-              <div className="absolute inset-0 rounded-2xl animate-ping opacity-20 bg-violet-400" />
-            </div>
-            <p className="text-sm font-semibold text-slate-700">Searching knowledge base…</p>
-            <div className="flex justify-center gap-1.5 mt-3">
-              {[0,1,2].map((i) => (
-                <div key={i} className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
-                  style={{ animationDelay: `${i * 150}ms` }} />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {out && (
-          <div className="space-y-3 animate-slide-up">
-            {out.escalation_needed && (
-              <div className="flex items-start gap-3 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl">
-                <ShieldAlert size={15} className="text-red-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-bold text-red-800">Escalation Recommended</p>
-                  <p className="text-xs text-red-600 mt-0.5">{out.human_handoff_note}</p>
-                </div>
-              </div>
-            )}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-4">
-              <div className="flex flex-wrap gap-2 mb-3">
-                {out.ticket_category && <span className="badge-violet capitalize">{out.ticket_category}</span>}
-                {out.priority_level  && (
-                  <span className={`badge border capitalize ${PRIORITY_CFG[out.priority_level] || 'bg-slate-100 text-slate-500'}`}>
-                    {out.priority_level} priority
-                  </span>
-                )}
-              </div>
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Issue Summary</p>
-              <p className="text-sm text-slate-700 leading-relaxed">{out.issue_summary}</p>
-            </div>
-            {out.suggested_reply && (
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-4">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Suggested Reply</p>
-                <div className="bg-slate-50 rounded-xl p-3 text-sm text-slate-700 whitespace-pre-line leading-relaxed border border-slate-100">
-                  {out.suggested_reply}
-                </div>
-                <p className="text-[10px] text-slate-400 mt-2">AI-generated — review before sending.</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* recent runs */}
-        {runs.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-4">
-            <p className="font-bold text-slate-800 text-xs mb-3">Recent AI Replies ({runs.length})</p>
-            <div className="space-y-1.5">
-              {runs.slice(0, 4).map((r) => (
-                <div key={r.id} className="flex items-center gap-2 p-2 rounded-xl hover:bg-slate-50 transition-colors">
-                  <div className="p-1 rounded-md bg-violet-50 shrink-0">
-                    <Sparkles size={10} className="text-violet-500" />
-                  </div>
-                  <p className="text-xs text-slate-600 truncate flex-1">{r.brief}</p>
-                  {r.output?.ticket_category && (
-                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 shrink-0 capitalize">
-                      {r.output.ticket_category}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ── conversation list ───────────────── */
-function ConversationList() {
-  const { data, isLoading } = useConversations();
+/* ── page: three panes ── */
+export default function InboxPage() {
   const qc = useQueryClient();
+  const { data, isLoading } = useConversations();
+  const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState('');
-  const [statusF, setStatusF] = useState('');
+  const [channelF, setChannelF] = useState('');
 
-  // Live updates — see services/inbox-service/src/realtime.js. Unlike the
-  // per-channel page (which only cares about one channel_type), the
-  // Unified Inbox shows every channel, so any update refetches.
+  // Live updates — services/inbox-service/src/realtime.js. Refresh both the
+  // list and the open thread so an inbound message lands without a reload.
   useSocketEvent('conversation:updated', () => {
-    qc.invalidateQueries({ queryKey: ['conversations', 'list'] });
+    qc.invalidateQueries({ queryKey: ['conversations'] });
   }, [qc]);
 
   const all = Array.isArray(data) ? data : [];
-  const filtered = all.filter((c) => {
-    if (statusF && c.status !== statusF) return false;
-    if (search.trim() && !(c.contact_name || '').toLowerCase().includes(search.toLowerCase())) return false;
+
+  // Only offer channel chips that actually occur in this org's data.
+  const presentChannels = useMemo(() => {
+    const seen = [];
+    for (const c of all) if (c.channel_type && !seen.includes(c.channel_type)) seen.push(c.channel_type);
+    return seen;
+  }, [all]);
+
+  const filtered = useMemo(() => all.filter((c) => {
+    if (channelF && c.channel_type !== channelF) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const hay = `${c.contact_name || ''} ${c.last_message_preview || ''} ${c.contact_email || ''} ${c.contact_phone || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
-  });
+  }), [all, channelF, search]);
+
+  // Keep a conversation selected as the list loads/filters change.
+  useEffect(() => {
+    if (!filtered.length) { setSelectedId(null); return; }
+    if (!filtered.some((c) => c.id === selectedId)) setSelectedId(filtered[0].id);
+  }, [filtered, selectedId]);
 
   return (
-    <div className="space-y-4">
-      {/* toolbar */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-40">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search conversations…" className="input-premium pl-8 text-xs" />
-          {search && (
-            <button onClick={() => setSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
-              <X size={13} />
-            </button>
-          )}
+    <div className="flex h-[calc(100vh-4rem)] flex-col">
+      {/* Header */}
+      <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-5 py-3">
+        <div className="rounded-xl bg-gradient-to-br from-violet-50 to-rose-100 p-2 text-violet-600">
+          <Inbox size={18} />
         </div>
-        <select value={statusF} onChange={(e) => setStatusF(e.target.value)} className="input-premium text-xs w-36">
-          <option value="">All statuses</option>
-          {['open','pending','handoff','resolved','closed'].map((s) => (
-            <option key={s} value={s} className="capitalize">{s}</option>
-          ))}
-        </select>
-      </div>
-
-      {isLoading && (
-        <div className="space-y-2">
-          {[0,1,2].map((i) => <div key={i} className="h-16 skeleton rounded-2xl" />)}
-        </div>
-      )}
-
-      {!isLoading && filtered.length === 0 && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-card flex flex-col items-center justify-center py-16 text-center">
-          <div className="p-4 rounded-2xl bg-slate-50 mb-3">
-            <Inbox size={24} className="text-slate-300" />
-          </div>
-          <p className="text-sm font-medium text-slate-400">
-            {search || statusF ? 'No conversations match your filters' : 'No conversations yet'}
+        <div>
+          <h1 className="text-base font-bold leading-tight text-slate-900">Unified Inbox</h1>
+          <p className="text-[11px] text-slate-400">
+            {all.length} conversation{all.length === 1 ? '' : 's'} across every connected channel
           </p>
         </div>
-      )}
+      </div>
 
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden">
-        {filtered.map((c, i) => (
-          <Link key={c.id} href={`/app/inbox/${c.id}`}
-            className={`flex items-center gap-4 px-5 py-4 hover:bg-slate-50/60 transition-colors cursor-pointer
-              ${i < filtered.length - 1 ? 'border-b border-slate-50' : ''}`}
-          >
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center shrink-0">
-              <User size={15} className="text-slate-500" />
+      <div className="flex min-h-0 flex-1">
+        {/* ── pane 1: conversation list ── */}
+        <aside className="flex w-[300px] shrink-0 flex-col border-r border-slate-200 bg-white">
+          <div className="shrink-0 space-y-2 border-b border-slate-100 p-3">
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search conversations…"
+                className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-8 pr-7 text-xs outline-none transition-all focus:border-violet-400 focus:ring focus:ring-violet-100"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
+                  <X size={13} />
+                </button>
+              )}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-sm font-semibold text-slate-800">{c.contact_name || 'Unknown'}</span>
-                <span className="text-[10px] text-slate-400 capitalize bg-slate-100 px-1.5 py-0.5 rounded-md">{c.channel_type}</span>
+
+            {/* channel filter chips */}
+            <div className="flex flex-wrap gap-1">
+              <FilterChip active={!channelF} onClick={() => setChannelF('')} label="All" count={all.length} />
+              {presentChannels.map((t) => {
+                const cfg = channelCfg(t);
+                return (
+                  <FilterChip
+                    key={t}
+                    active={channelF === t}
+                    onClick={() => setChannelF(channelF === t ? '' : t)}
+                    label={cfg.label}
+                    Icon={cfg.Icon}
+                    count={all.filter((c) => c.channel_type === t).length}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {isLoading && (
+              <div className="space-y-2 p-3">
+                {[0, 1, 2, 3].map((i) => <div key={i} className="h-16 animate-pulse rounded-xl bg-slate-100" />)}
               </div>
-              <p className="text-xs text-slate-500 truncate">{c.last_message_preview || 'No messages'}</p>
-            </div>
-            <div className="text-right shrink-0 space-y-1">
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold capitalize block
-                ${STATUS_CFG[c.status] || 'bg-slate-100 text-slate-500'}`}>
-                {c.status}
-              </span>
-              <p className="text-[10px] text-slate-400 flex items-center gap-1 justify-end">
-                <Clock size={10} /> {timeAgo(c.last_message_at)}
-              </p>
-            </div>
-          </Link>
-        ))}
+            )}
+
+            {!isLoading && !filtered.length && (
+              <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+                <div className="mb-3 rounded-2xl bg-slate-50 p-4">
+                  <Inbox size={22} className="text-slate-300" />
+                </div>
+                <p className="text-xs font-medium text-slate-400">
+                  {search || channelF ? 'No conversations match' : 'No conversations yet'}
+                </p>
+              </div>
+            )}
+
+            {filtered.map((c) => {
+              const cfg = channelCfg(c.channel_type);
+              const active = c.id === selectedId;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setSelectedId(c.id)}
+                  className={`flex w-full items-start gap-2.5 border-b border-slate-50 px-3 py-2.5 text-left transition-colors ${
+                    active ? 'border-l-2 border-l-violet-500 bg-violet-50/60' : 'hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-violet-100 to-rose-100 text-[11px] font-bold text-violet-700">
+                    {initials(c.contact_name)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-[13px] font-bold text-slate-800">{c.contact_name || 'Unknown'}</span>
+                      <span className="shrink-0 text-[10px] text-slate-400">{timeAgo(c.last_message_at)}</span>
+                    </span>
+                    <span className="mt-0.5 block truncate text-[11px] text-slate-500">
+                      {c.last_message_preview || 'No messages yet'}
+                    </span>
+                    <span className="mt-1 flex items-center gap-1.5">
+                      <span className={`inline-flex items-center gap-1 rounded px-1 py-px text-[9px] font-bold ${cfg.tone}`}>
+                        <cfg.Icon className="h-2.5 w-2.5" /> {cfg.label}
+                      </span>
+                      <span className={`rounded border px-1 py-px text-[9px] font-bold capitalize ${STATUS_CFG[c.status] || STATUS_CFG.closed}`}>
+                        {c.status}
+                      </span>
+                      {c.inbound_count > 0 && (
+                        <span className="ml-auto grid h-4 min-w-4 place-items-center rounded-full bg-violet-600 px-1 text-[9px] font-bold text-white">
+                          {c.inbound_count}
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* ── panes 2 + 3 ── */}
+        {selectedId ? (
+          <ConversationPanes conversationId={selectedId} />
+        ) : (
+          <div className="flex flex-1 items-center justify-center bg-slate-50/60">
+            <p className="text-sm text-slate-400">Select a conversation to view it.</p>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* ── page ────────────────────────────── */
-export default function InboxPage() {
+function FilterChip({ active, onClick, label, Icon, count }) {
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-0 animate-fade-in">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="p-2.5 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 text-slate-600 shadow-sm">
-          <Inbox size={20} />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">Unified Inbox</h1>
-          <p className="text-xs text-slate-400 mt-0.5">All conversations + AI support assistant</p>
-        </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold transition-all ${
+        active
+          ? 'border-violet-300 bg-violet-100 text-violet-700'
+          : 'border-slate-200 bg-white text-slate-500 hover:border-violet-200 hover:bg-violet-50'
+      }`}
+    >
+      {Icon && <Icon className="h-2.5 w-2.5" />}
+      {label}
+      <span className="text-slate-400">{count}</span>
+    </button>
+  );
+}
+
+/* ── pane 2 (thread) + pane 3 (context rail) ── */
+function ConversationPanes({ conversationId }) {
+  const { data: conv, isLoading, isError, error } = useConversation(conversationId);
+  const send = useSendReply();
+  const [draft, setDraft] = useState('');
+  const scrollRef = useRef(null);
+
+  const messages = conv?.messages ?? [];
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages.length, conversationId]);
+
+  useEffect(() => { setDraft(''); }, [conversationId]);
+
+  // The last unanswered inbound message is what the AI suggests a reply to.
+  const lastInboundBrief = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].direction === 'inbound') return messages[i].body || '';
+      if (messages[i].direction === 'outbound') return '';
+    }
+    return '';
+  }, [messages]);
+
+  async function submit(e) {
+    e?.preventDefault();
+    const text = draft.trim();
+    if (!text) return;
+    await send.mutateAsync({ conversationId, body: text }).catch(() => null);
+    setDraft('');
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-slate-50/60">
+        <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
       </div>
+    );
+  }
+  if (isError) {
+    return (
+      <div className="flex flex-1 items-center justify-center gap-2 bg-slate-50/60">
+        <AlertTriangle className="h-4 w-4 text-red-500" />
+        <p className="text-sm text-red-600">{error.message}</p>
+      </div>
+    );
+  }
 
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6 items-start">
-        {/* conversation list — 3 cols */}
-        <div className="xl:col-span-3">
-          <ConversationList />
-        </div>
+  const cfg = channelCfg(conv.channel_type);
 
-        {/* support agent — 2 cols */}
-        <div className="xl:col-span-2">
-          <div className="sticky top-24">
-            <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-violet-600 to-purple-700 p-5 mb-4">
-              <div className="absolute inset-0 opacity-10"
-                style={{ backgroundImage: 'radial-gradient(circle at 70% 30%, white 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
-              <div className="relative flex items-center gap-3">
-                <div className="p-2.5 rounded-2xl bg-white/20 border border-white/30">
-                  <Headphones size={18} className="text-white" />
-                </div>
-                <div>
-                  <p className="font-bold text-white">Support Agent</p>
-                  <p className="text-violet-200 text-xs mt-0.5">Replies grounded in your knowledge base</p>
-                </div>
-                <div className="ml-auto flex items-center gap-1.5 bg-white/10 rounded-xl px-2.5 py-1 border border-white/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
-                  <span className="text-white text-[10px] font-medium">Online</span>
-                </div>
-              </div>
-            </div>
-            <SupportAgentPanel />
+  return (
+    <>
+      {/* pane 2 — thread */}
+      <section className="flex min-w-0 flex-1 flex-col bg-slate-50/60">
+        {/* thread header */}
+        <div className="flex shrink-0 items-center gap-2.5 border-b border-slate-200 bg-white px-4 py-2.5">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-violet-100 to-rose-100 text-xs font-bold text-violet-700">
+            {initials(conv.contact_name)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-slate-900">{conv.contact_name || 'Unknown contact'}</p>
+            <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <span className={`inline-flex items-center gap-1 rounded px-1 py-px font-bold ${cfg.tone}`}>
+                <cfg.Icon className="h-2.5 w-2.5" /> {cfg.label}
+              </span>
+              · handled by
+              <span className="inline-flex items-center gap-1 font-semibold text-slate-600">
+                {conv.handled_by === 'bot' ? <Bot className="h-3 w-3" /> : <UserCheck className="h-3 w-3" />}
+                {conv.handled_by}
+              </span>
+            </p>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold capitalize ${STATUS_CFG[conv.status] || STATUS_CFG.closed}`}>
+              {conv.status}
+            </span>
+            <Link
+              href={`/app/inbox/${conversationId}`}
+              title="Open full conversation view"
+              className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Link>
           </div>
         </div>
+
+        {/* messages */}
+        <div ref={scrollRef} className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-4 py-4">
+          {!messages.length && (
+            <p className="py-10 text-center text-xs text-slate-400">No messages in this conversation yet.</p>
+          )}
+          {messages.map((m) => {
+            const out = m.direction === 'outbound';
+            return (
+              <div key={m.id} className={`flex ${out ? 'justify-end' : 'justify-start'}`}>
+                {!out && (
+                  <span className="mr-2 mt-auto grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white text-[9px] font-bold text-slate-500 ring-1 ring-slate-200">
+                    {initials(conv.contact_name)}
+                  </span>
+                )}
+                <div className={`max-w-[68%] rounded-2xl px-3.5 py-2 text-[13px] leading-relaxed shadow-sm ${
+                  out
+                    ? 'rounded-br-md bg-gradient-to-br from-violet-600 to-violet-700 text-white'
+                    : 'rounded-bl-md border border-slate-200 bg-white text-slate-700'
+                }`}>
+                  {m.subject && <p className={`mb-1 text-[11px] font-bold ${out ? 'text-violet-100' : 'text-slate-500'}`}>{m.subject}</p>}
+                  <p className="whitespace-pre-line">{m.body || <em className="opacity-60">(no text)</em>}</p>
+                  <p className={`mt-1 text-[10px] ${out ? 'text-violet-200' : 'text-slate-400'}`}>
+                    {new Date(m.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* AI suggestion — unchanged trust layer, never auto-sends */}
+        {lastInboundBrief && (
+          <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-2.5">
+            <SuggestedReplyCard
+              brief={lastInboundBrief}
+              customerName={conv.contact_name}
+              channel={conv.channel_type}
+              sessionId={conversationId}
+              onUse={(text) => setDraft(text)}
+            />
+          </div>
+        )}
+
+        {/* composer */}
+        <form onSubmit={submit} className="shrink-0 border-t border-slate-200 bg-white px-4 py-3">
+          {send.error && (
+            <p className="mb-2 flex items-center gap-1.5 text-[11px] text-red-600">
+              <AlertTriangle className="h-3 w-3" /> {send.error.message}
+            </p>
+          )}
+          <div className="flex items-end gap-2">
+            <textarea
+              rows={1}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+              }}
+              placeholder="Type a message…  (Enter to send, Shift+Enter for a new line)"
+              className="max-h-32 min-h-[40px] flex-1 resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition-all focus:border-violet-400 focus:ring focus:ring-violet-100"
+            />
+            <button
+              type="submit"
+              disabled={!draft.trim() || send.isPending}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-r from-rose-600 to-violet-600 text-white shadow-md shadow-violet-500/25 transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
+              aria-label="Send reply"
+            >
+              {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {/* pane 3 — context rail */}
+      <ContextRail conv={conv} />
+    </>
+  );
+}
+
+function ContextRail({ conv }) {
+  const score = conv.lead_score;
+  const hasScore = typeof score === 'number';
+
+  return (
+    <aside className="hidden w-[260px] shrink-0 flex-col overflow-y-auto border-l border-slate-200 bg-white xl:flex">
+      <div className="border-b border-slate-100 px-4 py-4 text-center">
+        <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-violet-100 to-rose-100 text-lg font-black text-violet-700">
+          {initials(conv.contact_name)}
+        </span>
+        <p className="mt-2 text-sm font-bold text-slate-900">{conv.contact_name || 'Unknown contact'}</p>
+        {conv.contact_source && (
+          <p className="text-[11px] text-slate-400">via {conv.contact_source}</p>
+        )}
+        <div className="mt-2 flex items-center justify-center gap-1.5">
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold capitalize ${STATUS_CFG[conv.status] || STATUS_CFG.closed}`}>
+            {conv.status}
+          </span>
+          {conv.lead_stage && (
+            <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold capitalize text-violet-700">
+              {conv.lead_stage}
+            </span>
+          )}
+        </div>
       </div>
+
+      <RailSection title="Contact details">
+        <RailRow Icon={Mail} value={conv.contact_email} href={conv.contact_email ? `mailto:${conv.contact_email}` : null} />
+        <RailRow Icon={Phone} value={conv.contact_phone} href={conv.contact_phone ? `tel:${conv.contact_phone}` : null} />
+        <RailRow Icon={Clock} value={conv.contact_created_at ? `Added ${new Date(conv.contact_created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : null} />
+        {!conv.contact_email && !conv.contact_phone && (
+          <p className="text-[11px] text-slate-400">No email or phone on this contact.</p>
+        )}
+      </RailSection>
+
+      {hasScore && (
+        <RailSection title="AI lead score">
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-black tabular-nums text-slate-900">{score}</span>
+            <span className="text-[11px] font-bold text-slate-400">/ 100</span>
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-sky-400 via-violet-500 to-rose-500 transition-all duration-700"
+              style={{ width: `${Math.max(0, Math.min(100, score))}%` }}
+            />
+          </div>
+          <div className="mt-1 flex justify-between text-[10px] font-bold text-slate-400">
+            <span>Cold</span><span>Hot</span>
+          </div>
+          {conv.lead_priority && (
+            <p className="mt-2 text-[11px] text-slate-500">
+              Priority <span className="font-bold capitalize text-slate-700">{conv.lead_priority}</span>
+            </p>
+          )}
+        </RailSection>
+      )}
+
+      <RailSection title="Assignment">
+        <RailRow Icon={UserCheck} value={conv.assigned_to_name || 'Unassigned'} />
+        <RailRow Icon={conv.handled_by === 'bot' ? Bot : User} value={`Handled by ${conv.handled_by}`} />
+      </RailSection>
+
+      {conv.contact_tags?.length ? (
+        <RailSection title="Tags">
+          <div className="flex flex-wrap gap-1">
+            {conv.contact_tags.map((t) => (
+              <span key={t} className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                <Tag className="h-2.5 w-2.5" /> {t}
+              </span>
+            ))}
+          </div>
+        </RailSection>
+      ) : null}
+
+      <RailSection title="Activity">
+        <Timeline conv={conv} />
+      </RailSection>
+
+      {conv.contact_notes && (
+        <RailSection title="Notes">
+          <p className="whitespace-pre-line break-words text-[11px] leading-relaxed text-slate-600">
+            {conv.contact_notes.length > 400 ? `${conv.contact_notes.slice(0, 400)}…` : conv.contact_notes}
+          </p>
+        </RailSection>
+      )}
+
+      <div className="mt-auto border-t border-slate-100 p-3">
+        <Link
+          href="/app/contacts"
+          className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-[11px] font-bold text-slate-600 transition-colors hover:border-violet-300 hover:bg-violet-50 hover:text-violet-700"
+        >
+          Open in Contacts <ChevronRight className="h-3 w-3" />
+        </Link>
+      </div>
+    </aside>
+  );
+}
+
+function RailSection({ title, children }) {
+  return (
+    <div className="border-b border-slate-100 px-4 py-3">
+      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">{title}</p>
+      <div className="space-y-1.5">{children}</div>
+    </div>
+  );
+}
+
+function RailRow({ Icon, value, href }) {
+  if (!value) return null;
+  const body = (
+    <span className="flex items-start gap-2 text-[11px] text-slate-600">
+      <Icon className="mt-px h-3 w-3 shrink-0 text-slate-400" />
+      <span className="min-w-0 break-words">{value}</span>
+    </span>
+  );
+  return href ? <a href={href} className="block hover:text-violet-700">{body}</a> : body;
+}
+
+/**
+ * Timeline built only from events this conversation actually recorded —
+ * message directions and their timestamps — rather than a scripted history.
+ */
+function Timeline({ conv }) {
+  const msgs = conv.messages ?? [];
+  const events = [];
+
+  if (conv.created_at) {
+    events.push({ at: conv.created_at, label: `Conversation opened on ${channelCfg(conv.channel_type).label}`, tone: 'bg-violet-500' });
+  }
+  const firstInbound = msgs.find((m) => m.direction === 'inbound');
+  if (firstInbound) events.push({ at: firstInbound.created_at, label: 'First message received', tone: 'bg-emerald-500' });
+
+  const firstOutbound = msgs.find((m) => m.direction === 'outbound');
+  if (firstOutbound) events.push({ at: firstOutbound.created_at, label: 'First reply sent', tone: 'bg-sky-500' });
+
+  if (typeof conv.lead_score === 'number') {
+    events.push({ at: conv.contact_created_at, label: `Lead scored ${conv.lead_score}/100`, tone: 'bg-rose-500' });
+  }
+  if (conv.last_message_at) {
+    events.push({ at: conv.last_message_at, label: 'Last activity', tone: 'bg-slate-400' });
+  }
+
+  const ordered = events
+    .filter((e) => e.at)
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
+
+  if (!ordered.length) {
+    return <p className="text-[11px] text-slate-400">No activity recorded yet.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {ordered.map((e, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${e.tone}`} />
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold leading-tight text-slate-700">{e.label}</p>
+            <p className="text-[10px] text-slate-400">{timeAgo(e.at)}</p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

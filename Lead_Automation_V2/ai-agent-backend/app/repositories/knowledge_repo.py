@@ -105,15 +105,47 @@ class KnowledgeRepository:
 
         vector_literal = "[" + ",".join(str(x) for x in query_embedding) + "]"
 
+        # True hybrid: take the top candidates from EACH retriever and union
+        # them, rather than ranking by vector alone and letting keyword score
+        # only reshuffle that list. Previously a chunk that was an exact
+        # keyword hit but a mediocre vector match could never enter the
+        # candidate pool at all, so lexical matches on names, SKUs, and error
+        # codes were unreachable. Each arm also reports its own rank so the
+        # caller can fuse by rank (RRF) instead of by incomparable raw scores.
         rows = (await self._session.execute(
             text("""
-                SELECT id, knowledge_source_id, content, metadata,
-                       1 - (embedding <=> (:vector)::vector) AS vector_score,
-                       ts_rank(content_tsv, plainto_tsquery('english', :query_text)) AS keyword_score
-                  FROM knowledge_chunks
-                 WHERE organization_id = :org_id AND agent_type = :agent_type AND embedding IS NOT NULL
-                 ORDER BY (1 - (embedding <=> (:vector)::vector)) DESC
-                 LIMIT :candidate_k
+                WITH vec AS (
+                    SELECT id, knowledge_source_id, content, metadata,
+                           1 - (embedding <=> (:vector)::vector) AS vector_score,
+                           ROW_NUMBER() OVER (ORDER BY embedding <=> (:vector)::vector) AS vector_rank
+                      FROM knowledge_chunks
+                     WHERE organization_id = :org_id AND agent_type = :agent_type
+                       AND embedding IS NOT NULL
+                     ORDER BY embedding <=> (:vector)::vector
+                     LIMIT :candidate_k
+                ),
+                kw AS (
+                    SELECT id, knowledge_source_id, content, metadata,
+                           ts_rank(content_tsv, plainto_tsquery('english', :query_text)) AS keyword_score,
+                           ROW_NUMBER() OVER (
+                               ORDER BY ts_rank(content_tsv, plainto_tsquery('english', :query_text)) DESC
+                           ) AS keyword_rank
+                      FROM knowledge_chunks
+                     WHERE organization_id = :org_id AND agent_type = :agent_type
+                       AND content_tsv @@ plainto_tsquery('english', :query_text)
+                     ORDER BY keyword_score DESC
+                     LIMIT :candidate_k
+                )
+                SELECT COALESCE(v.id, k.id)                             AS id,
+                       COALESCE(v.knowledge_source_id, k.knowledge_source_id) AS knowledge_source_id,
+                       COALESCE(v.content, k.content)                   AS content,
+                       COALESCE(v.metadata, k.metadata)                 AS metadata,
+                       COALESCE(v.vector_score, 0)                      AS vector_score,
+                       COALESCE(k.keyword_score, 0)                     AS keyword_score,
+                       v.vector_rank                                    AS vector_rank,
+                       k.keyword_rank                                   AS keyword_rank
+                  FROM vec v
+                  FULL OUTER JOIN kw k ON k.id = v.id
             """),
             {
                 "vector": vector_literal, "org_id": str(organization_id), "agent_type": agent_type,

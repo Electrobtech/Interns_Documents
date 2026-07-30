@@ -114,6 +114,17 @@ export function useRunSupportAgent() {
   });
 }
 
+// POST /ai-agents/support/run, used by the inbox SuggestedReplyCard.
+// Same endpoint as useRunSupportAgent but deliberately does NOT invalidate the
+// runs list: this fires automatically per inbound message, and refetching the
+// history on every suggestion would churn the Support workspace underneath.
+export function useSuggestSupportReply() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: (body) => call('/ai-agents/support/run', { method: 'POST', body }),
+  });
+}
+
 // GET /ai-agents/support/runs — recent generation history.
 export function useSupportRuns() {
   const { call } = useApi();
