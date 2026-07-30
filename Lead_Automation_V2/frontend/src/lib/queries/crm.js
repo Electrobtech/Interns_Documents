@@ -136,3 +136,42 @@ export function usePostReviewReply() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reviews', 'list'] }),
   });
 }
+
+// ─── Contact import (CSV / XLSX) ─────────────────────────────────────────
+// Two-step so the user confirms a column mapping before anything is written:
+// preview writes nothing, import commits. Both post multipart to
+// contact-service via apiUpload (fetch, not JSON) — see services/
+// contact-service/src/importRoutes.js.
+
+function importFormData(file, opts = {}) {
+  const fd = new FormData();
+  fd.append('file', file);
+  if (opts.sheetName) fd.append('sheetName', opts.sheetName);
+  if (opts.mapping) fd.append('mapping', JSON.stringify(opts.mapping));
+  if (opts.defaultSource) fd.append('defaultSource', opts.defaultSource);
+  if (opts.onDuplicate) fd.append('onDuplicate', opts.onDuplicate);
+  if (opts.unmappedToNotes === false) fd.append('unmappedToNotes', 'false');
+  if (opts.tagWithSheetName === false) fd.append('tagWithSheetName', 'false');
+  return fd;
+}
+
+// POST /contacts/import/preview — dry run: sheets, detected mapping, stats
+export function usePreviewContactImport() {
+  const { upload } = useApi();
+  return useMutation({
+    mutationFn: ({ file, ...opts }) => upload('/contacts/import/preview', importFormData(file, opts)),
+  });
+}
+
+// POST /contacts/import — commits the rows
+export function useRunContactImport() {
+  const { upload } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, ...opts }) => upload('/contacts/import', importFormData(file, opts)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contacts'] });
+      qc.invalidateQueries({ queryKey: ['leads'] });
+    },
+  });
+}

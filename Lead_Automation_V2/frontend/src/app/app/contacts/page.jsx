@@ -1,12 +1,13 @@
 'use client';
 import { useState } from 'react';
-import { Users, TrendingUp, Sparkles, Target, AlertTriangle, Zap, ChevronRight } from 'lucide-react';
+import { Users, TrendingUp, Sparkles, Target, AlertTriangle, Zap, ChevronRight, Upload } from 'lucide-react';
 import Tabs from '@/components/Tabs';
 import CrudPage from '@/components/CrudPage';
 import { contacts, leads } from '@/lib/resources';
 import { useLeads } from '@/lib/queries/crm';
 import { useRunSalesAgent, useSalesRuns } from '@/lib/queries/aiAgents';
 import { BookMeetingButton } from '@/components/calendar/BookMeetingDialog';
+import ImportContactsDialog from '@/components/contacts/ImportContactsDialog';
 
 /* ─── score colour ──────────────────────────── */
 function scoreTone(s) {
@@ -201,11 +202,31 @@ function SalesAgentPanel() {
   );
 }
 
+/* ─── contacts tab: CRUD table plus spreadsheet import ──────────── */
+function ContactsTab() {
+  const [importOpen, setImportOpen] = useState(false);
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setImportOpen(true)}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm transition-all hover:border-violet-300 hover:bg-violet-50"
+        >
+          <Upload className="h-3.5 w-3.5" /> Import CSV / Excel
+        </button>
+      </div>
+      <CrudPage {...contacts} header={false} rowActions={(row) => <BookMeetingButton contact={row} />} />
+      <ImportContactsDialog open={importOpen} onClose={() => setImportOpen(false)} />
+    </div>
+  );
+}
+
 /* ─── page ──────────────────────────────────── */
 export default function ContactsPage() {
   return (
     <Tabs title="Contacts & Leads" icon={Users} tabs={[
-      { label: 'Contacts', icon: Users,     render: () => <CrudPage {...contacts} header={false} rowActions={(row) => <BookMeetingButton contact={row} />} /> },
+      { label: 'Contacts', icon: Users,     render: () => <ContactsTab /> },
       { label: 'Leads',    icon: Target,    render: () => <CrudPage {...leads}    header={false} rowActions={(row) => <BookMeetingButton contact={row} />} /> },
       { label: 'AI Lead Scoring', icon: Sparkles, render: () => <SalesAgentPanel /> },
     ]} />
