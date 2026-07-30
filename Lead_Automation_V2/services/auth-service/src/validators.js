@@ -105,9 +105,64 @@ function validateCompanyRegistration(body) {
 const ALLOWED_UPLOAD_MIME = new Set(['image/png', 'image/jpeg', 'application/pdf']);
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB, per spec
 
+// ---------------------------------------------------------------------------
+// PIN login (services/auth-service/src/controllers/pinController.js)
+// ---------------------------------------------------------------------------
+
+const PIN_LENGTHS = [4, 6];
+
+// Blocks the handful of PINs that are trivially guessable: every digit the
+// same (1111, 000000), strictly ascending/descending runs (1234, 654321,
+// including the wrap-around 0123), and a short list of PINs that show up
+// disproportionately often in real breach datasets (birthdays/years like
+// 1990, repeated pairs like 1212).
+const COMMON_PINS = new Set([
+  '1234', '4321', '0000', '1111', '2222', '3333', '4444', '5555',
+  '6666', '7777', '8888', '9999', '1212', '1122', '0852', '0987',
+  '123456', '654321', '000000', '111111', '112233', '121212',
+]);
+
+function isSequential(digits) {
+  let ascending = true;
+  let descending = true;
+  for (let i = 1; i < digits.length; i++) {
+    const prev = Number(digits[i - 1]);
+    const curr = Number(digits[i]);
+    if ((curr - prev + 10) % 10 !== 1) ascending = false;
+    if ((prev - curr + 10) % 10 !== 1) descending = false;
+  }
+  return ascending || descending;
+}
+
+function isRepetitive(digits) {
+  return new Set(digits.split('')).size === 1;
+}
+
+// Returns { ok, error } instead of throwing so callers can turn it directly
+// into a 400 response with a field-specific message.
+function validatePin(pin) {
+  if (typeof pin !== 'string' || !/^\d+$/.test(pin)) {
+    return { ok: false, error: 'PIN must contain only digits' };
+  }
+  if (!PIN_LENGTHS.includes(pin.length)) {
+    return { ok: false, error: 'PIN must be 4 or 6 digits' };
+  }
+  if (isRepetitive(pin)) {
+    return { ok: false, error: 'PIN cannot be the same digit repeated' };
+  }
+  if (isSequential(pin)) {
+    return { ok: false, error: 'PIN cannot be a sequential run of digits' };
+  }
+  if (COMMON_PINS.has(pin)) {
+    return { ok: false, error: 'This PIN is too common, please choose another' };
+  }
+  return { ok: true };
+}
+
 module.exports = {
   isEmail, isPhone, isGst, isPan, passwordStrength,
   validateCompanyRegistration,
   BUSINESS_TYPES, PLANS,
   ALLOWED_UPLOAD_MIME, MAX_UPLOAD_BYTES,
+  validatePin,
 };

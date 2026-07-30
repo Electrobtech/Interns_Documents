@@ -6,6 +6,7 @@ import CrudPage from '@/components/CrudPage';
 import { contacts, leads } from '@/lib/resources';
 import { useLeads } from '@/lib/queries/crm';
 import { useRunSalesAgent, useSalesRuns } from '@/lib/queries/aiAgents';
+import { BookMeetingButton } from '@/components/calendar/BookMeetingDialog';
 
 /* ─── score colour ──────────────────────────── */
 function scoreTone(s) {
@@ -204,8 +205,8 @@ function SalesAgentPanel() {
 export default function ContactsPage() {
   return (
     <Tabs title="Contacts & Leads" icon={Users} tabs={[
-      { label: 'Contacts', icon: Users,     render: () => <CrudPage {...contacts} header={false} /> },
-      { label: 'Leads',    icon: Target,    render: () => <CrudPage {...leads}    header={false} /> },
+      { label: 'Contacts', icon: Users,     render: () => <CrudPage {...contacts} header={false} rowActions={(row) => <BookMeetingButton contact={row} />} /> },
+      { label: 'Leads',    icon: Target,    render: () => <CrudPage {...leads}    header={false} rowActions={(row) => <BookMeetingButton contact={row} />} /> },
       { label: 'AI Lead Scoring', icon: Sparkles, render: () => <SalesAgentPanel /> },
     ]} />
   );

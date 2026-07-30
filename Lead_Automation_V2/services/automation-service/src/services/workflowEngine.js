@@ -348,9 +348,19 @@ async function runAction(actionData, session) {
   }
 }
 
-/** Placeholder — enqueue a delayed job (e.g. BullMQ) to resume this session later. */
+/**
+ * Placeholder — enqueue a delayed job (e.g. BullMQ) to resume this session
+ * later. A delay node carries either a relative `seconds` wait or an
+ * absolute `scheduledAt` ISO timestamp (see FlowBuilder.jsx's
+ * DelayNodeEditor — "Wait duration" vs "Specific date" — and
+ * flow-schema.md), never both; this resolves whichever is present down to
+ * the single delayMs a real job queue would need.
+ */
 async function scheduleDelayedContinuation(session, node) {
-  // queue.add('resume-session', { sessionId: session.id, nodeId: node.data.nextNodeId }, { delay: node.data.seconds * 1000 });
+  const delayMs = node.data.scheduledAt
+    ? Math.max(0, new Date(node.data.scheduledAt).getTime() - Date.now())
+    : (Number(node.data.seconds) || 0) * 1000;
+  // queue.add('resume-session', { sessionId: session.id, nodeId: node.data.nextNodeId }, { delay: delayMs });
   return;
 }
 

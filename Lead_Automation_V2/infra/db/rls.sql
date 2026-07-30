@@ -66,7 +66,8 @@ BEGIN
     'api_keys', 'webhooks', 'audit_logs',
     'playbooks', 'conversation_sessions',
     'email_accounts', 'email_threads', 'email_messages',
-    'sms_devices'
+    'sms_devices',
+    'calendar_accounts', 'calendar_events'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);

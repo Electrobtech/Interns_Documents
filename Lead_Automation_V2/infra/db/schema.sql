@@ -98,6 +98,12 @@ CREATE TABLE IF NOT EXISTS users (
   is_phone_verified   BOOLEAN NOT NULL DEFAULT false,
   two_factor_enabled  BOOLEAN NOT NULL DEFAULT false,
   two_factor_method   TEXT,                     -- authenticator | sms
+  pin_hash            TEXT,                      -- bcrypt hash of a 4-6 digit PIN, alt login (017_pin_authentication.sql)
+  is_pin_enabled      BOOLEAN NOT NULL DEFAULT false,
+  failed_pin_attempts INTEGER NOT NULL DEFAULT 0,
+  pin_lockout_until   TIMESTAMPTZ,
+  pin_updated_at      TIMESTAMPTZ,                -- age-checked at login for 30-day expiration
+  previous_pin_hash   TEXT,                       -- prior PIN, so a new one can't just repeat it (018_pin_expiration_history.sql)
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (organization_id, email)
 );
@@ -144,6 +150,27 @@ CREATE TABLE IF NOT EXISTS integrations (
   locked_by       UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Backs the 'sms' channel: one row per connected sending number/gateway,
+-- rather than a single JSON blob on channels.credentials (019_sms_devices.sql).
+CREATE TABLE IF NOT EXISTS sms_devices (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  label             TEXT NOT NULL,               -- human-friendly name, e.g. "Front Desk Android"
+  phone_number      TEXT NOT NULL,                -- E.164, e.g. +91XXXXXXXXXX
+  provider          TEXT NOT NULL DEFAULT 'android_gateway', -- android_gateway | twilio | other
+  status            TEXT NOT NULL DEFAULT 'disconnected',    -- connected | disconnected | error
+  sender_id         TEXT,                          -- alphanumeric sender ID for transactional SMS, if the provider supports one
+  credentials       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  connected_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+  last_seen_at      TIMESTAMPTZ,
+  last_error        TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, phone_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sms_devices_org_status ON sms_devices (organization_id, status);
 
 -- ---------- Contacts & Leads ----------
 CREATE TABLE IF NOT EXISTS contacts (
@@ -503,6 +530,51 @@ CREATE TABLE IF NOT EXISTS email_attachments (
 );
 
 CREATE INDEX IF NOT EXISTS ix_email_attachments_message ON email_attachments (message_id);
+
+-- ---------------------------------------------------------------------
+-- Google Calendar integration (services/calendar-service) — see
+-- infra/db/migrations/016_calendar_integration.sql for the full
+-- rationale/comments; kept in sync here for fresh installs.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS calendar_accounts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  google_email      TEXT,
+  access_token      TEXT,
+  refresh_token     TEXT,
+  token_expires_at  TIMESTAMPTZ,
+  scope             TEXT,
+  connected         BOOLEAN NOT NULL DEFAULT true,
+  connected_by      UUID REFERENCES users(id),
+  last_error        TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id)
+);
+
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  google_event_id     TEXT NOT NULL,
+  title               TEXT NOT NULL,
+  description         TEXT,
+  starts_at           TIMESTAMPTZ NOT NULL,
+  ends_at             TIMESTAMPTZ NOT NULL,
+  location            TEXT,
+  attendee_emails     TEXT[],
+  contact_id          UUID REFERENCES contacts(id) ON DELETE SET NULL,
+  campaign_id         UUID REFERENCES campaigns(id) ON DELETE SET NULL,
+  automation_node_id  TEXT,
+  status              TEXT NOT NULL DEFAULT 'confirmed',
+  html_link           TEXT,
+  created_by          UUID REFERENCES users(id),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_calendar_events_org_time ON calendar_events (organization_id, starts_at);
+CREATE INDEX IF NOT EXISTS ix_calendar_events_contact ON calendar_events (contact_id);
+CREATE INDEX IF NOT EXISTS ix_calendar_events_campaign ON calendar_events (campaign_id);
 
 -- ---------- SMS (receive-only, via forwarder app) — see
 -- migrations/015_sms_forwarder_devices.sql and services/integration-service

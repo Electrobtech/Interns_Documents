@@ -6,6 +6,7 @@ const { pool, sign, authenticate, logAuditRaw, permissionsForRoleId, withSystemA
 const companyController = require('./controllers/companyController');
 const verificationController = require('./controllers/verificationController');
 const gstController = require('./controllers/gstController');
+const pinController = require('./controllers/pinController');
 
 const app = express();
 app.use(cors());
@@ -24,6 +25,7 @@ app.get('/health', (_req, res) => res.json({ service: 'auth', ok: true }));
 app.use(companyController);
 app.use(verificationController);
 app.use(gstController);
+app.use(pinController);
 
 // ---- Register (also creates an org on first signup) ----
 app.post('/auth/register', async (req, res) => {
