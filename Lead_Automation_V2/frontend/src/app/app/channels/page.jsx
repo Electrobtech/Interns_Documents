@@ -17,6 +17,12 @@ const CHANNELS = [
   ['email', 'Email', Mail],
 ];
 
+// Instagram/WhatsApp/SMS show red (not just gray) when disconnected —
+// matches the same treatment on the Integrations & APIs page for
+// Instagram/Facebook/WhatsApp. Other channels here keep the original
+// neutral gray, since that wasn't asked for.
+const RED_WHEN_DISCONNECTED = new Set(['whatsapp', 'instagram', 'sms']);
+
 export default function ConnectChannelsPage() {
   const { call } = useApi();
   const [channels, setChannels] = useState([]);
@@ -56,22 +62,26 @@ export default function ConnectChannelsPage() {
         {CHANNELS.map(([type, label, Icon]) => {
           const ch = byType(type);
           const connected = ch?.status === 'connected';
+          const disconnectedTone = RED_WHEN_DISCONNECTED.has(type)
+            ? { icon: 'bg-red-50 text-red-500', text: 'text-red-500' }
+            : { icon: 'bg-slate-100 text-slate-400', text: 'text-slate-400' };
           return (
             <div key={type} className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col items-center text-center">
-              <div className={`w-12 h-12 rounded-xl grid place-items-center mb-2 ${connected ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+              <div className={`w-12 h-12 rounded-xl grid place-items-center mb-2 ${connected ? 'bg-emerald-50 text-emerald-600' : disconnectedTone.icon}`}>
                 <Icon size={22} />
               </div>
               <p className="text-sm font-medium">{label}</p>
-              <p className={`text-[11px] mb-2 ${connected ? 'text-emerald-600' : 'text-slate-400'}`}>
+              <p className={`text-[11px] mb-2 ${connected ? 'text-emerald-600' : disconnectedTone.text}`}>
                 {connected ? 'Connected' : 'Not connected'}
               </p>
               <div className="flex gap-2">
-                {type === 'email' ? (
-                  // Email connects via real Gmail OAuth (one or more actual
-                  // mailboxes), not the generic fake on/off toggle every
-                  // other channel here uses — send them to the dedicated
-                  // page where that flow (and mailbox list) actually lives.
-                  <Link href="/channels/email"
+                {type === 'email' || type === 'sms' ? (
+                  // Email and SMS each connect via a real per-device flow
+                  // (Gmail OAuth mailboxes / forwarder-app phones) rather
+                  // than the generic fake on/off toggle every other
+                  // channel here uses — send them to the dedicated page
+                  // where that flow (and device list) actually lives.
+                  <Link href={`/channels/${type}`}
                     className={`text-xs rounded-lg px-3 py-1.5 font-medium ${
                       connected ? 'border border-slate-300 text-slate-600' : 'bg-brand text-white'}`}>
                     {connected ? 'Open' : 'Connect'}

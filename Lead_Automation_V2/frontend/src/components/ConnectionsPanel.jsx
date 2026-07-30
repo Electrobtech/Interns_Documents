@@ -116,11 +116,73 @@ function FacebookCredentialsForm({ locked, isAdmin, onConnected }) {
   );
 }
 
+// ---------- Admin password prompt shown before an unlock goes through ----------
+
+function UnlockPasswordPrompt({ onConfirm, onCancel, unlocking, error }) {
+  const [password, setPassword] = useState('');
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onConfirm(password);
+      }}
+      className="mt-1 space-y-2"
+    >
+      <p className="text-xs text-slate-500">Enter the admin password to unlock this connection.</p>
+      <input
+        type="password"
+        autoFocus
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Admin password"
+        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
+      />
+      {error && (
+        <p className="text-sm text-red-600 flex items-center gap-1">
+          <AlertCircle size={14} /> {error}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={unlocking || !password}
+          className="inline-flex items-center justify-center gap-2 text-sm font-medium px-3 py-2 rounded-lg
+            border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {unlocking ? <Loader2 size={14} className="animate-spin" /> : <Unlock size={14} />}
+          {unlocking ? 'Unlocking…' : 'Confirm unlock'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={unlocking}
+          className="text-sm font-medium px-3 py-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 // ---------- Connection status card (Instagram or Facebook) ----------
 
 function StatusCard({ platform, icon: Icon, status, onConnect, connecting, isAdmin, onUnlock, unlocking, onConnected }) {
   const { loading, connected, data, error } = status;
   const locked = Boolean(data?.locked);
+  const [showUnlockPrompt, setShowUnlockPrompt] = useState(false);
+  const [unlockError, setUnlockError] = useState('');
+
+  const handleConfirmUnlock = async (password) => {
+    setUnlockError('');
+    try {
+      await onUnlock(platform, password);
+      setShowUnlockPrompt(false);
+    } catch (err) {
+      setUnlockError(err.data?.error || err.message || 'Could not unlock this connection.');
+    }
+  };
   const label = platform === 'instagram' ? 'Instagram' : 'Facebook';
   const accountName =
     platform === 'facebook' ? data?.pageName : data?.instagramBusinessAccountId;
@@ -145,7 +207,7 @@ function StatusCard({ platform, icon: Icon, status, onConnect, connecting, isAdm
             )}
             <span
               className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                connected ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'
+                connected ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
               }`}
             >
               {connected ? 'Connected' : 'Not Connected'}
@@ -187,15 +249,23 @@ function StatusCard({ platform, icon: Icon, status, onConnect, connecting, isAdm
 
       {locked ? (
         isAdmin && (
-          <button
-            onClick={() => onUnlock(platform)}
-            disabled={unlocking === platform}
-            className="mt-1 inline-flex items-center justify-center gap-2 text-sm font-medium px-3 py-2 rounded-lg
-              border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {unlocking === platform ? <Loader2 size={14} className="animate-spin" /> : <Unlock size={14} />}
-            {unlocking === platform ? 'Unlocking…' : 'Unlock to reconnect'}
-          </button>
+          showUnlockPrompt ? (
+            <UnlockPasswordPrompt
+              onConfirm={handleConfirmUnlock}
+              onCancel={() => { setShowUnlockPrompt(false); setUnlockError(''); }}
+              unlocking={unlocking === platform}
+              error={unlockError}
+            />
+          ) : (
+            <button
+              onClick={() => setShowUnlockPrompt(true)}
+              className="mt-1 inline-flex items-center justify-center gap-2 text-sm font-medium px-3 py-2 rounded-lg
+                border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Unlock size={14} />
+              Unlock to reconnect
+            </button>
+          )
         )
       ) : (
         <button
@@ -676,6 +746,8 @@ function WhatsAppCard({ isAdmin }) {
   const { call } = useApi();
   const [status, setStatus] = useState({ loading: true, connected: false, data: null, error: '' });
   const [unlocking, setUnlocking] = useState(false);
+  const [showUnlockPrompt, setShowUnlockPrompt] = useState(false);
+  const [unlockError, setUnlockError] = useState('');
 
   const loadStatus = useCallback(async () => {
     setStatus((s) => ({ ...s, loading: true }));
@@ -692,13 +764,15 @@ function WhatsAppCard({ isAdmin }) {
   const { loading, connected, data } = status;
   const locked = Boolean(data?.locked);
 
-  const handleUnlock = async () => {
+  const handleUnlock = async (password) => {
     setUnlocking(true);
+    setUnlockError('');
     try {
-      await call('/whatsapp/unlock', { method: 'POST' });
+      await call('/whatsapp/unlock', { method: 'POST', body: { password } });
       await loadStatus();
+      setShowUnlockPrompt(false);
     } catch (err) {
-      setStatus((s) => ({ ...s, error: err.data?.error || err.message }));
+      setUnlockError(err.data?.error || err.message || 'Could not unlock this connection.');
     } finally {
       setUnlocking(false);
     }
@@ -723,7 +797,7 @@ function WhatsAppCard({ isAdmin }) {
               </span>
             )}
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-              connected ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'
+              connected ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
             }`}>
               {connected ? 'Connected' : 'Not Connected'}
             </span>
@@ -741,15 +815,25 @@ function WhatsAppCard({ isAdmin }) {
       <WhatsAppConnectForm onConnected={loadStatus} locked={locked} isAdmin={isAdmin} />
 
       {locked && isAdmin && (
-        <button
-          onClick={handleUnlock}
-          disabled={unlocking}
-          className="self-start inline-flex items-center justify-center gap-2 text-sm font-medium px-3 py-2 rounded-lg
-            border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {unlocking ? <Loader2 size={14} className="animate-spin" /> : <Unlock size={14} />}
-          {unlocking ? 'Unlocking…' : 'Unlock to reconnect'}
-        </button>
+        showUnlockPrompt ? (
+          <div className="self-start w-full max-w-xs">
+            <UnlockPasswordPrompt
+              onConfirm={handleUnlock}
+              onCancel={() => { setShowUnlockPrompt(false); setUnlockError(''); }}
+              unlocking={unlocking}
+              error={unlockError}
+            />
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowUnlockPrompt(true)}
+            className="self-start inline-flex items-center justify-center gap-2 text-sm font-medium px-3 py-2 rounded-lg
+              border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <Unlock size={14} />
+            Unlock to reconnect
+          </button>
+        )
       )}
 
       {connected && <WhatsAppSendTest />}
@@ -813,16 +897,18 @@ export default function ConnectionsPanel() {
   );
 
   const handleUnlock = useCallback(
-    async (platform) => {
+    async (platform, password) => {
       setConnectError('');
       setUnlocking(platform);
       try {
         // Instagram and Facebook share one underlying connection row, so
         // either card's Unlock button lifts the lock for both.
-        await call('/auth/unlock', { method: 'POST' });
+        await call('/auth/unlock', { method: 'POST', body: { password } });
         await Promise.all([loadStatus('instagram', setInstagram), loadStatus('facebook', setFacebook)]);
       } catch (err) {
-        setConnectError(err.data?.error || err.message || 'Could not unlock this connection.');
+        // Re-throw so the card's own password prompt can show the error
+        // inline (e.g. wrong password) instead of only the page-level banner.
+        throw err;
       } finally {
         setUnlocking(null);
       }

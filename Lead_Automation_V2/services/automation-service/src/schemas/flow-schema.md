@@ -196,9 +196,16 @@ json{
   }
 }
 
-5. Delay Node (type: "delay")
+5. Delay Node (type: "delay") — waits before resuming at nextNodeId. Carries
+   EITHER a relative `seconds` wait OR an absolute `scheduledAt` ISO 8601
+   timestamp, never both (the flow builder's UI is a mode toggle, "Wait
+   duration" vs "Specific date"; workflowEngine.js's
+   scheduleDelayedContinuation() resolves whichever is present down to a
+   single delayMs). `scheduledAt` in the past resolves to a 0ms delay
+   (fires immediately on next evaluation) rather than erroring.
 
-json{ "id": "node_wait", "type": "delay", "data": { "seconds": 3600, "nextNodeId": "node_followup" } }
+json{ "id": "node_wait", "type": "delay", "data": { "seconds": 3600, "scheduledAt": null, "nextNodeId": "node_followup" } }
+json{ "id": "node_wait2", "type": "delay", "data": { "seconds": null, "scheduledAt": "2026-08-15T09:00:00.000Z", "nextNodeId": "node_followup" } }
 
 6. Handoff Node (type: "handoff") — end of automation, route to human
 { "id": "node_human", "type": "handoff", "data": { "team": "support_l2", "nextNodeId": null } }

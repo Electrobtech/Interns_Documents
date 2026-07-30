@@ -8,7 +8,7 @@ import ResourceForm from './ResourceForm';
 
 // Generic list + create/edit/delete page driven by a resource config.
 // { path, title, icon, columns, fields, readOnly?, idKey? }
-export default function CrudPage({ path, title, icon: Icon, columns, fields, readOnly, idKey = 'id', header = true }) {
+export default function CrudPage({ path, title, icon: Icon, columns, fields, readOnly, idKey = 'id', header = true, rowActions }) {
   const { call } = useApi();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -82,7 +82,7 @@ export default function CrudPage({ path, title, icon: Icon, columns, fields, rea
 
       <div className="bg-white rounded-xl border border-slate-200 p-2">
         <DataTable columns={columns} rows={rows} loading={loading}
-          onEdit={openEdit} onDelete={remove} readOnly={readOnly} idKey={idKey} />
+          onEdit={openEdit} onDelete={remove} readOnly={readOnly} idKey={idKey} rowActions={rowActions} />
       </div>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)}

@@ -10,6 +10,7 @@ import {
 import { useCampaigns, useUpdateCampaign, useCampaignDecision } from '@/lib/queries/crm';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '@/lib/useApi';
+import { DateTimePicker } from '@/components/calendar/DateTimePicker';
 
 function useCreateCampaign() {
   const { call } = useApi();
@@ -231,8 +232,13 @@ function CreateModal({ onClose, onCreate }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Schedule</label>
-              <input type="datetime-local" value={form.scheduled_at}
-                onChange={(e) => set('scheduled_at', e.target.value)} className="input-premium" />
+              <DateTimePicker
+                value={form.scheduled_at}
+                onChange={(v) => set('scheduled_at', v)}
+                minDate={new Date()}
+                placeholder="Pick send date & time"
+                className="w-full"
+              />
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Status</label>

@@ -504,6 +504,51 @@ CREATE TABLE IF NOT EXISTS email_attachments (
 
 CREATE INDEX IF NOT EXISTS ix_email_attachments_message ON email_attachments (message_id);
 
+-- ---------------------------------------------------------------------
+-- Google Calendar integration (services/calendar-service) — see
+-- infra/db/migrations/016_calendar_integration.sql for the full
+-- rationale/comments; kept in sync here for fresh installs.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS calendar_accounts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  google_email      TEXT,
+  access_token      TEXT,
+  refresh_token     TEXT,
+  token_expires_at  TIMESTAMPTZ,
+  scope             TEXT,
+  connected         BOOLEAN NOT NULL DEFAULT true,
+  connected_by      UUID REFERENCES users(id),
+  last_error        TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id)
+);
+
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  google_event_id     TEXT NOT NULL,
+  title               TEXT NOT NULL,
+  description         TEXT,
+  starts_at           TIMESTAMPTZ NOT NULL,
+  ends_at             TIMESTAMPTZ NOT NULL,
+  location            TEXT,
+  attendee_emails     TEXT[],
+  contact_id          UUID REFERENCES contacts(id) ON DELETE SET NULL,
+  campaign_id         UUID REFERENCES campaigns(id) ON DELETE SET NULL,
+  automation_node_id  TEXT,
+  status              TEXT NOT NULL DEFAULT 'confirmed',
+  html_link           TEXT,
+  created_by          UUID REFERENCES users(id),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_calendar_events_org_time ON calendar_events (organization_id, starts_at);
+CREATE INDEX IF NOT EXISTS ix_calendar_events_contact ON calendar_events (contact_id);
+CREATE INDEX IF NOT EXISTS ix_calendar_events_campaign ON calendar_events (campaign_id);
+
 -- ---------- SMS (receive-only, via forwarder app) — see
 -- migrations/015_sms_forwarder_devices.sql and services/integration-service
 -- routes/smsWebhook.js + smsDevices.js. Each row is one Android phone
