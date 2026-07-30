@@ -97,7 +97,7 @@ export default function CalendarPage() {
   const connected = status.data?.connected;
 
   return (
-    <div className="p-6 lg:p-8 space-y-5">
+    <div className="p-6 lg:p-8 space-y-4">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -206,7 +206,7 @@ export default function CalendarPage() {
           <>
             <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/60">
               {WEEKDAYS.map((d) => (
-                <div key={d} className="px-2 py-2 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">{d}</div>
+                <div key={d} className="px-2 py-1.5 text-center text-[10px] font-bold uppercase tracking-wide text-slate-500">{d}</div>
               ))}
             </div>
 
@@ -221,9 +221,9 @@ export default function CalendarPage() {
                     key={d.toISOString()}
                     onClick={() => setComposeFor(d)}
                     title="Add an event on this day"
-                    className={`group min-h-[104px] border-b border-r border-slate-100 p-2 text-left align-top transition-colors hover:bg-violet-50/50 ${inMonth ? 'bg-white' : 'bg-slate-50/40'}`}
+                    className={`group min-h-[68px] border-b border-r border-slate-100 p-1.5 text-left align-top transition-colors hover:bg-violet-50/50 ${inMonth ? 'bg-white' : 'bg-slate-50/40'}`}
                   >
-                    <span className={`inline-grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-xs font-bold tabular-nums ${
+                    <span className={`inline-grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold tabular-nums ${
                       isToday ? 'bg-violet-600 text-white'
                         : inMonth ? 'text-slate-700' : 'text-slate-300'
                     }`}>
@@ -231,15 +231,15 @@ export default function CalendarPage() {
                     </span>
 
                     <span className="mt-1 block space-y-1">
-                      {dayEvents.slice(0, 3).map((ev) => (
+                      {dayEvents.slice(0, 2).map((ev) => (
                         <span key={ev.id}
-                          className={`block truncate rounded-md border px-1.5 py-0.5 text-[11px] font-semibold ${KINDS[kindOf(ev)].chip}`}>
+                          className={`block truncate rounded border px-1 py-px text-[10px] font-semibold leading-tight ${KINDS[kindOf(ev)].chip}`}>
                           {ev.title}
                         </span>
                       ))}
-                      {dayEvents.length > 3 && (
+                      {dayEvents.length > 2 && (
                         <span className="block px-1 text-[10px] font-bold text-slate-400">
-                          +{dayEvents.length - 3} more
+                          +{dayEvents.length - 2} more
                         </span>
                       )}
                       {!dayEvents.length && inMonth && (
