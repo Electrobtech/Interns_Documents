@@ -5,7 +5,10 @@
   "scripts": { "start": "node src/index.js", "dev": "node src/index.js" },
   "dependencies": {
     "@lead/shared": "file:../../shared",
+    "bullmq": "^5.34.0",
     "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "ioredis": "^5.4.1"
   }
 }

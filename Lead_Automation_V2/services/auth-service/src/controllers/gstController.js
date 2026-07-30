@@ -38,9 +38,12 @@ router.post('/company/verify-gst', gstRateLimiter, async (req, res) => {
     // to expose; nothing from the raw provider payload leaks past this point.
     res.json(result);
   } catch (e) {
-    // Never log the API key or the raw provider response — only a short,
-    // stable error code for debugging.
-    console.error('[gst.verify] failed', { code: e.code || 'UNKNOWN' });
+    // Never log the API key or the raw provider response — but do log the
+    // error message (safe: the key only ever goes in a request header,
+    // never into any message/URL this code builds) so an uncoded error
+    // (e.g. a JSON-parse failure on a non-JSON 200 response) is still
+    // diagnosable instead of collapsing to a bare 'UNKNOWN'.
+    console.error('[gst.verify] failed', { code: e.code || 'UNKNOWN', message: e.message });
 
     if (e.code === 'GST_NOT_FOUND') {
       return res.status(404).json({ error: 'GST number not found. Please double-check and try again.' });

@@ -7,6 +7,7 @@ import SmsDetailsCard from './SmsDetailsCard';
 import EngineDiagnostics from './EngineDiagnostics';
 import ActivityLogTable from './ActivityLogTable';
 import NewFlowModal from './NewFlowModal';
+import BulkCampaignTab from '../bulk-campaign/BulkCampaignTab.jsx';
 
 // Seed flow catalog — the starting state for `flows` below. Each flow's
 // message body may reference {{variables}}, resolved against `demoContext`
@@ -75,7 +76,7 @@ function formatTimestamp(date) {
 }
 
 export default function SmsAutomationSimulator() {
-  const [tab, setTab] = useState('simulate'); // 'builder' | 'simulate'
+  const [tab, setTab] = useState('simulate'); // 'builder' | 'simulate' | 'bulk'
 
   const [flows, setFlows] = useState(INITIAL_FLOWS);
   const [phone, setPhone] = useState('+91 98765 43210');
@@ -94,6 +95,14 @@ export default function SmsAutomationSimulator() {
   const activeNode = useMemo(
     () => activeFlow.nodes.find((n) => n.id === nodeId) || activeFlow.nodes[0],
     [activeFlow, nodeId],
+  );
+
+  // BulkCampaignTab's Flow/Template dropdown just needs a flat list with
+  // each flow's entry-node text — same simplification handleSimulate/
+  // exportedFlow already make for this single-node-per-flow SMS catalog.
+  const bulkFlows = useMemo(
+    () => flows.map((f) => ({ id: f.id, name: f.name, trigger: f.trigger, body: f.nodes[0]?.body || '' })),
+    [flows],
   );
 
   function handleFlowChange(nextFlowId) {
@@ -184,6 +193,7 @@ export default function SmsAutomationSimulator() {
       <div className="flex items-center gap-1 px-1 pt-1 border-b border-slate-200 bg-white shrink-0">
         <TabButton active={tab === 'builder'} onClick={() => setTab('builder')}>Builder</TabButton>
         <TabButton active={tab === 'simulate'} onClick={() => setTab('simulate')}>Simulate</TabButton>
+        <TabButton active={tab === 'bulk'} onClick={() => setTab('bulk')}>Bulk Campaign</TabButton>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto bg-slate-50">
@@ -196,7 +206,7 @@ export default function SmsAutomationSimulator() {
             onNewFlow={() => setShowNewFlow(true)}
             onDeleteFlow={handleDeleteFlow}
           />
-        ) : (
+        ) : tab === 'simulate' ? (
           <div className="p-5 grid grid-cols-1 lg:grid-cols-[300px_340px_1fr] gap-5 items-start">
             {/* Column 1 */}
             <div className="bg-white rounded-2xl border border-slate-200 p-5 flex justify-center">
@@ -235,6 +245,8 @@ export default function SmsAutomationSimulator() {
               <ActivityLogTable entries={entries} />
             </div>
           </div>
+        ) : (
+          <BulkCampaignTab channel="sms" flows={bulkFlows} />
         )}
       </div>
 
