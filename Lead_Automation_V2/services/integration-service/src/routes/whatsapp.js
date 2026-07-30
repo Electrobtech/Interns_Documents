@@ -23,7 +23,7 @@ const router = express.Router();
 const { pool, requireRole } = require('@lead/shared');
 const { validateToken } = require('../services/graphApi');
 const { mapMetaError } = require('../services/errorMapper');
-const { getConnectedCredentials, getConnectionLockState, lockConnection, unlockConnection } = require('../services/credentials');
+const { getConnectedCredentials, getConnectionLockState, lockConnection, unlockConnection, verifyUnlockPassword } = require('../services/credentials');
 const { encryptCredentialTokens } = require('../services/crypto');
 const whatsappService = require('../services/whatsappService');
 
@@ -237,12 +237,17 @@ router.get('/status', async (req, res) => {
 });
 
 /**
- * POST /whatsapp/unlock  (admin only)
+ * POST /whatsapp/unlock  (admin only + password)
  * Lifts the lock set automatically on connect, so the org can reconnect
  * with different credentials. Use this deliberately — it's the one
  * documented way around the "clients can't break it themselves" guarantee.
+ * Being an admin is necessary but not sufficient — the request must also
+ * include the correct admin unlock password (see verifyUnlockPassword).
  */
 router.post('/unlock', requireRole('admin'), async (req, res) => {
+  if (!verifyUnlockPassword(req.body?.password)) {
+    return res.status(401).json({ error: 'Incorrect admin password.' });
+  }
   try {
     const didUnlock = await unlockConnection(req.user.organizationId, PROVIDER);
     if (!didUnlock) {

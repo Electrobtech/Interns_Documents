@@ -26,7 +26,7 @@ const { getRedisClient } = require('../services/redisClient');
 const { getAppSecretProof, parseSignedRequest } = require('../services/graphApi');
 const { refreshExpiringTokens } = require('../services/tokenRefreshJob');
 const { encryptCredentialTokens } = require('../services/crypto');
-const { getConnectionLockState, lockConnection, unlockConnection } = require('../services/credentials');
+const { getConnectionLockState, lockConnection, unlockConnection, verifyUnlockPassword } = require('../services/credentials');
 
 // Only used when /auth/facebook is hit directly without going through the
 // protected /auth/connect-url flow (e.g. manual testing via browser).
@@ -344,11 +344,16 @@ router.get('/data-deletion-status', (req, res) => {
 });
 
 /**
- * POST /auth/unlock  (protected, admin only)
+ * POST /auth/unlock  (protected, admin only + password)
  * Lifts the lock set automatically after a verified Instagram/Facebook
  * connect, so the org can go through OAuth again with a different account.
+ * Being an admin is necessary but not sufficient — the request must also
+ * include the correct admin unlock password (see verifyUnlockPassword).
  */
 router.post('/unlock', authenticate, requireRole('admin'), async (req, res) => {
+  if (!verifyUnlockPassword(req.body?.password)) {
+    return res.status(401).json({ error: 'Incorrect admin password.' });
+  }
   try {
     const didUnlock = await unlockConnection(req.user.organizationId, 'instagram');
     if (!didUnlock) {

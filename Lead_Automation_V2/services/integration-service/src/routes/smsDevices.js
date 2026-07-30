@@ -7,16 +7,18 @@
  * RLS backs it up — see infra/db/rls.sql).
  *
  * GET /sms/devices                        list this org's connected phones
- * POST /sms/devices                       { label, phone_number? } -> creates a device + webhook URL
- * PUT /sms/devices/:id                    rename / update phone number
- * POST /sms/devices/:id/regenerate-token  invalidate old URL, issue a new one
- * DELETE /sms/devices/:id                 remove a phone
+ * POST /sms/devices                       { label, phone_number? } -> creates a device + webhook URL, locked immediately
+ * PUT /sms/devices/:id                    rename / update phone number (blocked while locked)
+ * POST /sms/devices/:id/regenerate-token  invalidate old URL, issue a new one (blocked while locked)
+ * DELETE /sms/devices/:id                 remove a phone (blocked while locked)
+ * POST /sms/devices/:id/unlock            admin + admin password only — lifts the lock (see 017_sms_device_lock.sql)
  */
 
 const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
-const { pool } = require('@lead/shared');
+const { pool, requireRole } = require('@lead/shared');
+const { verifyUnlockPassword } = require('../services/credentials');
 
 function webhookUrlFor(token) {
   // The forwarder app on the phone must hit the API GATEWAY (not
@@ -28,7 +30,20 @@ function webhookUrlFor(token) {
 
 function serialize(row) {
   if (!row) return null;
-  return { ...row, webhook_url: webhookUrlFor(row.webhook_token) };
+  return { ...row, webhook_url: webhookUrlFor(row.webhook_token), locked: row.locked_at != null };
+}
+
+// Shared lock check used by every mutating route below (PUT, regenerate-token,
+// DELETE) — mirrors getConnectionLockState() in services/credentials.js for
+// Meta/WhatsApp, just scoped to a single sms_devices row instead of the
+// most-recent integrations row.
+async function getDeviceLockState(id, organizationId) {
+  const { rows } = await pool.query(
+    `SELECT locked_at FROM sms_devices WHERE id=$1 AND organization_id=$2`,
+    [id, organizationId]
+  );
+  if (!rows.length) return { found: false, locked: false };
+  return { found: true, locked: rows[0].locked_at != null };
 }
 
 router.get('/', async (req, res) => {
@@ -44,9 +59,12 @@ router.post('/', async (req, res) => {
   if (!label || !label.trim()) return res.status(400).json({ error: 'A label is required (e.g. "Front desk phone").' });
 
   const token = crypto.randomBytes(32).toString('hex');
+  // Locked immediately on creation, same as an Instagram/Facebook/WhatsApp
+  // connect — an admin must explicitly unlock it (with the admin password)
+  // before it can be renamed, re-tokened, or removed.
   const { rows } = await pool.query(
-    `INSERT INTO sms_devices (organization_id, label, phone_number, webhook_token, created_by)
-     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+    `INSERT INTO sms_devices (organization_id, label, phone_number, webhook_token, created_by, locked_at, locked_by)
+     VALUES ($1,$2,$3,$4,$5, now(), $5) RETURNING *`,
     [req.user.organizationId, label.trim(), phone_number || null, token, req.user.userId]
   );
 
@@ -69,6 +87,12 @@ router.post('/', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
+  const lockState = await getDeviceLockState(req.params.id, req.user.organizationId);
+  if (!lockState.found) return res.status(404).json({ error: 'Device not found.' });
+  if (lockState.locked) {
+    return res.status(403).json({ error: 'This device is locked. Ask an account admin to unlock it before editing.' });
+  }
+
   const { label, phone_number } = req.body || {};
   const { rows } = await pool.query(
     `UPDATE sms_devices SET label=COALESCE($1, label), phone_number=COALESCE($2, phone_number), updated_at=now()
@@ -79,6 +103,12 @@ router.put('/:id', async (req, res) => {
 });
 
 router.post('/:id/regenerate-token', async (req, res) => {
+  const lockState = await getDeviceLockState(req.params.id, req.user.organizationId);
+  if (!lockState.found) return res.status(404).json({ error: 'Device not found.' });
+  if (lockState.locked) {
+    return res.status(403).json({ error: 'This device is locked. Ask an account admin to unlock it before regenerating its token.' });
+  }
+
   const token = crypto.randomBytes(32).toString('hex');
   const { rows } = await pool.query(
     `UPDATE sms_devices SET webhook_token=$1, updated_at=now()
@@ -89,7 +119,33 @@ router.post('/:id/regenerate-token', async (req, res) => {
   res.json(serialize(rows[0]));
 });
 
+/**
+ * POST /sms/devices/:id/unlock  (admin only + admin password)
+ * Lifts the lock set automatically on connect, same gate as
+ * POST /auth/unlock and POST /whatsapp/unlock — being an admin is
+ * necessary but not sufficient, the request must also include the correct
+ * admin unlock password (see verifyUnlockPassword in services/credentials.js).
+ */
+router.post('/:id/unlock', requireRole('admin'), async (req, res) => {
+  if (!verifyUnlockPassword(req.body?.password)) {
+    return res.status(401).json({ error: 'Incorrect admin password.' });
+  }
+  const { rows } = await pool.query(
+    `UPDATE sms_devices SET locked_at=NULL, locked_by=NULL, updated_at=now()
+      WHERE id=$1 AND organization_id=$2 RETURNING *`,
+    [req.params.id, req.user.organizationId]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Device not found.' });
+  res.json(serialize(rows[0]));
+});
+
 router.delete('/:id', async (req, res) => {
+  const lockState = await getDeviceLockState(req.params.id, req.user.organizationId);
+  if (!lockState.found) return res.status(404).json({ error: 'Device not found.' });
+  if (lockState.locked) {
+    return res.status(403).json({ error: 'This device is locked. Ask an account admin to unlock it before removing it.' });
+  }
+
   await pool.query(`DELETE FROM sms_devices WHERE id=$1 AND organization_id=$2`,
     [req.params.id, req.user.organizationId]);
 

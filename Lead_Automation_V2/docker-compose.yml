@@ -63,7 +63,9 @@ services:
 
   # Authentication service - handles user login, registration, JWT tokens
   auth-service:
-    build: { context: ., dockerfile: services/auth-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -78,7 +80,9 @@ services:
 
   # Contact service - manages customer contacts and CRM data
   contact-service:
-    build: { context: ., dockerfile: services/contact-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/contact-service/Dockerfile
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -88,7 +92,9 @@ services:
 
   # Campaign service - handles marketing campaigns and outreach
   campaign-service:
-    build: { context: ., dockerfile: services/campaign-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/campaign-service/Dockerfile
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -98,7 +104,9 @@ services:
 
   # AI Agent service - Python/FastAPI for Marketing + Sales + Support agents
   ai-agent-service:
-    build: { context: ., dockerfile: ai-agent-backend/Dockerfile }
+    build:
+      context: .
+      dockerfile: ai-agent-backend/Dockerfile
     container_name: ai-agent-service
     env_file: .env
     environment:
@@ -126,7 +134,9 @@ services:
 
   # E-commerce service - integrates with e-commerce platforms
   ecommerce-service:
-    build: { context: ., dockerfile: services/ecommerce-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/ecommerce-service/Dockerfile
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -136,7 +146,9 @@ services:
 
   # Review service - manages customer reviews and feedback
   review-service:
-    build: { context: ., dockerfile: services/review-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/review-service/Dockerfile
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -146,7 +158,9 @@ services:
 
   # Analytics service - provides business analytics and reporting
   analytics-service:
-    build: { context: ., dockerfile: services/analytics-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/analytics-service/Dockerfile
     container_name: analytics-service
     env_file: .env
     environment:
@@ -160,7 +174,9 @@ services:
 
   # Integration service - manages third-party integrations
   integration-service:
-    build: { context: ., dockerfile: services/integration-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/integration-service/Dockerfile
     container_name: integration-service
     env_file: .env
     environment:
@@ -172,7 +188,9 @@ services:
 
   # LinkedIn service - handles LinkedIn integration and API
   linkedin-service:
-    build: { context: ., dockerfile: services/linkedin-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/linkedin-service/Dockerfile
     container_name: linkedin-service
     env_file: .env
     environment:
@@ -200,7 +218,9 @@ services:
 
   # Team service - manages team members and permissions
   team-service:
-    build: { context: ., dockerfile: services/team-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/team-service/Dockerfile
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -210,7 +230,9 @@ services:
 
   # Automation service - handles workflow automation
   automation-service:
-    build: { context: ., dockerfile: services/automation-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/automation-service/Dockerfile
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -222,13 +244,17 @@ services:
 
   # Notification service - handles email, SMS, and push notifications
   notification-service:
-    build: { context: ., dockerfile: services/notification-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
     env_file: .env
     ports: ["4012:4012"]
 
   # Email service - Gmail integration (OAuth, sync, send/reply, attachments)
   email-service:
-    build: { context: ., dockerfile: services/email-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/email-service/Dockerfile
     container_name: email-service
     env_file: .env
     environment:
@@ -244,9 +270,26 @@ services:
     volumes:
       - email_uploads:/app/services/email-service/public/uploads
 
+  # Calendar service - Google Calendar integration (OAuth, meeting booking,
+  # freebusy, campaign-send scheduling, automation delay-node scheduling)
+  calendar-service:
+    build:
+      context: .
+      dockerfile: services/calendar-service/Dockerfile
+    container_name: calendar-service
+    env_file: .env
+    environment:
+      CALENDAR_PORT: "4014"
+      DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4014:4014"]
+
   # Inbox service - unified inbox for all communication channels
   inbox-service:
-    build: { context: ., dockerfile: services/inbox-service/Dockerfile }
+    build:
+      context: .
+      dockerfile: services/inbox-service/Dockerfile
     container_name: inbox-service
     env_file: .env
     environment:
@@ -265,7 +308,9 @@ services:
 
   # API Gateway - routes requests to appropriate microservices
   api-gateway:
-    build: { context: ., dockerfile: api-gateway/Dockerfile }
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
     env_file: .env
     environment:
       # These target names/ports match each service's own container_name
@@ -286,6 +331,7 @@ services:
       AUTOMATION_SERVICE_URL:  http://automation-service:4011
       NOTIFICATION_SERVICE_URL: http://notification-service:4012
       EMAIL_SERVICE_URL:       http://email-service:4013
+      CALENDAR_SERVICE_URL:    http://calendar-service:4014
     depends_on:
       - auth-service
       - inbox-service
@@ -301,6 +347,7 @@ services:
       - automation-service
       - notification-service
       - email-service
+      - calendar-service
     ports: ["8080:8080"]
 
   # ─────────────────────────────────────────────

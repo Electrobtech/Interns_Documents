@@ -24,9 +24,11 @@ function fmt(value, col) {
   return String(value);
 }
 
-export default function DataTable({ columns, rows, loading, onEdit, onDelete, readOnly, idKey = 'id' }) {
+export default function DataTable({ columns, rows, loading, onEdit, onDelete, readOnly, idKey = 'id', rowActions }) {
   if (loading) return <p className="text-sm text-slate-400 py-8 text-center">Loading…</p>;
   if (!rows.length) return <p className="text-sm text-slate-400 py-8 text-center">No records yet.</p>;
+
+  const showActionsCol = !readOnly || !!rowActions;
 
   return (
     <div className="overflow-x-auto">
@@ -34,7 +36,7 @@ export default function DataTable({ columns, rows, loading, onEdit, onDelete, re
         <thead>
           <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
             {columns.map((c) => <th key={c.key} className="px-3 py-2 font-medium whitespace-nowrap">{c.label}</th>)}
-            {!readOnly && <th className="px-3 py-2 font-medium text-right">Actions</th>}
+            {showActionsCol && <th className="px-3 py-2 font-medium text-right">Actions</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-50">
@@ -47,10 +49,17 @@ export default function DataTable({ columns, rows, loading, onEdit, onDelete, re
                     : <span className="text-slate-700">{fmt(row[c.key], c)}</span>}
                 </td>
               ))}
-              {!readOnly && (
+              {showActionsCol && (
                 <td className="px-3 py-2.5 text-right whitespace-nowrap">
-                  <button onClick={() => onEdit(row)} className="text-slate-400 hover:text-brand p-1" title="Edit"><Pencil size={15} /></button>
-                  <button onClick={() => onDelete(row)} className="text-slate-400 hover:text-red-500 p-1" title="Delete"><Trash2 size={15} /></button>
+                  {/* Custom per-resource action (e.g. contacts/leads "Book a meeting") — shown
+                      independent of readOnly, since booking a meeting isn't editing the record. */}
+                  {rowActions && rowActions(row)}
+                  {!readOnly && (
+                    <>
+                      <button onClick={() => onEdit(row)} className="text-slate-400 hover:text-brand p-1" title="Edit"><Pencil size={15} /></button>
+                      <button onClick={() => onDelete(row)} className="text-slate-400 hover:text-red-500 p-1" title="Delete"><Trash2 size={15} /></button>
+                    </>
+                  )}
                 </td>
               )}
             </tr>
