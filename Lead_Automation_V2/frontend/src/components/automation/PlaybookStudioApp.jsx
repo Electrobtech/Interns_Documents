@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Rows3, LayoutList } from 'lucide-react';
 import FlowBuilder, { seedGraph, exportFlowJson, importFlowJson } from './FlowBuilder.jsx';
 import DiagnosticBench from './DiagnosticBench.jsx';
+import BulkCampaignTab from './bulk-campaign/BulkCampaignTab.jsx';
 import { useApi } from '@/lib/useApi';
 
 // How long to wait after the last edit before autosaving to Postgres.
@@ -61,7 +62,7 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
   // ---- Graph + title state, hydrated from Postgres on mount -----------
   const [graph, setGraphState] = useState(seedGraph);
   const [title, setTitleState] = useState('WEB — Ecommerce Customer Support');
-  const [tab, setTab] = useState('builder'); // 'builder' | 'simulate'
+  const [tab, setTab] = useState('builder'); // 'builder' | 'simulate' | 'bulk'
   const [syncStatus, setSyncStatus] = useState('loading'); // loading | saved | saving | offline | error
   // Deploy is DELIBERATELY separate from the debounced autosave above: the
   // autosave keeps status/playbookType whatever they already were (draft on
@@ -241,6 +242,9 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
         <TabButton active={tab === 'simulate'} onClick={() => setTab('simulate')}>
           Simulate
         </TabButton>
+        <TabButton active={tab === 'bulk'} onClick={() => setTab('bulk')}>
+          Bulk Campaign
+        </TabButton>
         <div className="flex-1" />
         <ViewPreferenceToggle value={viewPreference} onChange={handleViewPreferenceChange} />
       </div>
@@ -267,8 +271,10 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
               pauseState={pauseState}
             />
           )
-        ) : (
+        ) : tab === 'simulate' ? (
           <DiagnosticBench flow={exportedFlow} channel={channel} density={viewPreference} onBack={() => setTab('builder')} />
+        ) : (
+          <BulkCampaignTab channel={channel} />
         )}
       </div>
     </div>

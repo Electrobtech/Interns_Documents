@@ -1,6 +1,10 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const { pool, authenticate, requirePermission, logAudit } = require('@lead/shared');
+const { enqueueBroadcast } = require('./services/bulkCampaignQueue');
+const { startBulkCampaignWorker } = require('./services/bulkCampaignWorker');
 
 const app = express();
 app.use(cors());
@@ -95,6 +99,143 @@ app.post('/campaigns/:id/decision', canWrite, async (req, res) => {
   res.json(rows[0]);
 });
 
+// ---------------------------------------------------------------------
+// Bulk Messaging / Broadcast Campaign
+//
+// This is a deliberately separate path from POST /campaigns/:id/send above:
+// that route sends one static message_body to a pre-existing
+// campaign_audiences list synchronously (a handful of contacts, fine to
+// await in-request). This route is built for "thousands of rows from a
+// CSV, running an actual flow, at a controlled rate" — it creates the
+// campaign + every campaign_recipients row, hands them to BullMQ
+// (bulkCampaignQueue.js), and returns immediately; the worker
+// (bulkCampaignWorker.js) does the actual (simulated) sending afterward.
+// ---------------------------------------------------------------------
+
+/**
+ * POST /campaigns/broadcast
+ * Body: {
+ *   name, channelType: 'sms' | 'rcs',
+ *   messageBody,              // the flow's template text, {{var}} placeholders,
+ *                              // resolved client-side from SmsAutomationSimulator's
+ *                              // local flow catalog (no server-side flow lookup for SMS)
+ *   recipients: [{ phone, name, variables }],   // already parsed client-side
+ *                                                 // from CSV / manual entry / segment
+ *   recipientSource: 'csv' | 'manual' | 'segment',
+ *   sendMode: 'immediate' | 'scheduled', scheduledAt,
+ *   throttlePerMinute,
+ * }
+ */
+app.post('/campaigns/broadcast', canSend, async (req, res) => {
+  const {
+    name, channelType, messageBody, recipients, recipientSource,
+    sendMode = 'immediate', scheduledAt, throttlePerMinute = 60,
+  } = req.body;
+
+  if (!name || !Array.isArray(recipients) || recipients.length === 0) {
+    return res.status(400).json({ error: 'name and a non-empty recipients[] array are required.' });
+  }
+  if (sendMode === 'scheduled' && !scheduledAt) {
+    return res.status(400).json({ error: 'scheduledAt is required when sendMode is "scheduled".' });
+  }
+
+  // Recipients need at least a phone number; silently dropping unusable
+  // rows here (rather than failing the whole upload) matches how a real
+  // CSV import behaves elsewhere in this codebase (see campaign-service's
+  // /send route treating a missing external id as a per-contact failure,
+  // not a request-level error).
+  const validRecipients = recipients.filter((r) => r && typeof r.phone === 'string' && r.phone.trim());
+  if (validRecipients.length === 0) {
+    return res.status(400).json({ error: 'No recipient in the list had a usable phone number.' });
+  }
+
+  // NOTE: this uses pool.query (not pool.connect()) for BEGIN/COMMIT/ROLLBACK
+  // too. authenticate() (see shared/src/auth.js) already wraps this whole
+  // request in withTenantScope(), which checks out one Postgres connection,
+  // sets app.current_org on it, and pins it via AsyncLocalStorage so every
+  // pool.query() call in this request's async call graph transparently runs
+  // on that same connection (see shared/src/db.js). A separate
+  // pool.connect() here would hand out a *different*, unscoped connection —
+  // app.current_org never gets set on it, and the RLS policies on
+  // `campaigns`/`campaign_recipients` fail closed on the INSERT.
+  try {
+    await pool.query('BEGIN');
+
+    const { rows: campaignRows } = await pool.query(
+      `INSERT INTO campaigns (
+         organization_id, name, type, channel_type, message_body,
+         recipient_source, send_mode, scheduled_at, throttle_per_minute,
+         total_recipients, status
+       ) VALUES ($1,$2,'broadcast',$3,$4,$5,$6,$7,$8,$9, $10)
+       RETURNING *`,
+      [
+        req.user.organizationId, name, channelType || 'sms', messageBody || null,
+        recipientSource || 'manual', sendMode, sendMode === 'scheduled' ? scheduledAt : null,
+        throttlePerMinute, validRecipients.length,
+        sendMode === 'scheduled' ? 'scheduled' : 'queued',
+      ]
+    );
+    const campaign = campaignRows[0];
+
+    // Bulk-insert every recipient row in one round trip rather than N
+    // inserts — UNNEST turns the three parallel arrays into rows.
+    const phones = validRecipients.map((r) => r.phone.trim());
+    const names = validRecipients.map((r) => r.name || null);
+    const variables = validRecipients.map((r) => JSON.stringify(r.variables || {}));
+
+    const { rows: recipientRows } = await pool.query(
+      `INSERT INTO campaign_recipients (campaign_id, phone, name, variables)
+       SELECT $1, p, n, v::jsonb
+         FROM UNNEST($2::text[], $3::text[], $4::text[]) AS t(p, n, v)
+       RETURNING id, phone, name, variables`,
+      [campaign.id, phones, names, variables]
+    );
+
+    await pool.query('COMMIT');
+
+    logAudit(req, 'campaign.broadcast_created', { id: campaign.id, name, recipientCount: recipientRows.length });
+
+    // Enqueueing happens after COMMIT: a worker picking up a job whose
+    // campaign_recipients row doesn't exist yet (because we're still mid-
+    // transaction) would just error out, so BullMQ only sees these jobs
+    // once Postgres has durably committed them.
+    const enqueued = await enqueueBroadcast(campaign.id, recipientRows, {
+      throttlePerMinute,
+      channelType: channelType || 'sms',
+      scheduledAt: sendMode === 'scheduled' ? scheduledAt : null,
+    });
+
+    res.status(201).json({ campaign, queuedRecipients: enqueued.length });
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    console.error('[campaign-service] broadcast creation failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /campaigns/:id/recipients
+ * Per-recipient status list for the Bulk Campaign tab's diagnostics view
+ * (error messages, retry counts) — the aggregate sent/failed_count on the
+ * campaign row itself (returned by GET /campaigns/:id) is enough for the
+ * live progress bar alone.
+ */
+app.get('/campaigns/:id/recipients', async (req, res) => {
+  const { rows: owned } = await pool.query(
+    `SELECT id FROM campaigns WHERE id=$1 AND organization_id=$2`,
+    [req.params.id, req.user.organizationId]
+  );
+  if (!owned[0]) return res.status(404).json({ error: 'not found' });
+
+  const { rows } = await pool.query(
+    `SELECT id, phone, name, status, error, attempts, rendered_message, sent_at
+       FROM campaign_recipients WHERE campaign_id=$1
+      ORDER BY updated_at DESC LIMIT 500`,
+    [req.params.id]
+  );
+  res.json(rows);
+});
+
 // automation-service owns the channel Send API credentials + the Unified
 // Inbox transcript writes (messageRepository), so actually delivering a
 // campaign message is a service-to-service call there rather than campaign-
@@ -161,4 +302,7 @@ app.post('/campaigns/:id/send', canSend, async (req, res) => {
 });
 
 const PORT = process.env.CAMPAIGN_PORT || 4004;
-app.listen(PORT, () => console.log(`campaign-service on :${PORT}`));
+app.listen(PORT, () => {
+  console.log(`campaign-service on :${PORT}`);
+  startBulkCampaignWorker();
+});

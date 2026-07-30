@@ -8,15 +8,19 @@
 // spec asks for (POST /verify/email, POST /verify/mobile) instead of
 // splitting into four.
 //
-// No real SMS/email provider is wired up yet (that's an integration-service
-// concern) — in development the generated code is returned in the response
-// so the wizard can be exercised end-to-end; wire an email/SMS provider and
-// remove `devCode` from the response before shipping to production.
+// Email codes are delivered via Brevo (see ../services/brevoEmailService.js).
+// Mobile codes are delivered via 2Factor.in when OTP_ENABLED=true and
+// SMS_PROVIDER=2factor (see ../services/twoFactorSmsService.js) — otherwise
+// mobile still just echoes back `devCode` as before. `devCode` is also
+// still included for email in non-production so the wizard remains easy to
+// exercise locally without a working Brevo key; it's omitted in production.
 
 const express = require('express');
 const crypto = require('crypto');
 const { pool, withSystemAccess } = require('@lead/shared');
 const { isEmail, isPhone } = require('../validators');
+const { sendOtpEmail } = require('../services/brevoEmailService');
+const { sendOtpSms, isSmsOtpEnabled } = require('../services/twoFactorSmsService');
 
 const router = express.Router();
 
@@ -42,7 +46,28 @@ async function sendCode(channel, target, res) {
       [channel, target, hashCode(code)]
     )
   );
-  // TODO: send via email/SMS provider (integration-service) instead of returning it.
+
+  if (channel === 'email') {
+    try {
+      await sendOtpEmail(target, code);
+    } catch (err) {
+      console.error('Failed to send OTP email via Brevo:', err.message);
+      // The code is already stored, so a resend will reuse a fresh row
+      // rather than leaving the user stuck — but don't tell them it was
+      // sent when it wasn't.
+      return res.status(502).json({ error: 'Could not send verification email. Please try again shortly.' });
+    }
+  } else if (channel === 'mobile' && isSmsOtpEnabled()) {
+    try {
+      await sendOtpSms(target, code);
+    } catch (err) {
+      console.error('Failed to send OTP SMS via 2Factor.in:', err.message);
+      return res.status(502).json({ error: 'Could not send verification SMS. Please try again shortly.' });
+    }
+  }
+  // If OTP_ENABLED/SMS_PROVIDER aren't set to enable 2Factor.in, mobile
+  // falls through here unsent — same dev-only fallback as before.
+
   res.status(201).json({
     sent: true,
     channel,

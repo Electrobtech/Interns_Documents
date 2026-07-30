@@ -332,17 +332,49 @@ CREATE INDEX IF NOT EXISTS ix_email_attachments_message ON email_attachments (me
 
 -- ---------- Campaigns ----------
 CREATE TABLE IF NOT EXISTS campaigns (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  name            TEXT NOT NULL,
-  type            TEXT DEFAULT 'broadcast',
-  channel_type    TEXT,
-  message_body    TEXT,
-  cta             JSONB,
-  scheduled_at    TIMESTAMPTZ,
-  status          TEXT DEFAULT 'draft',    -- draft | scheduled | sent
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id      UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  name                 TEXT NOT NULL,
+  type                 TEXT DEFAULT 'broadcast',
+  channel_type         TEXT,
+  message_body         TEXT,
+  cta                  JSONB,
+  scheduled_at         TIMESTAMPTZ,
+  status               TEXT DEFAULT 'draft',    -- draft | scheduled | sent (bulk pipeline adds queued/processing/completed/failed — see campaign_recipients below, 020_bulk_campaigns.sql)
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  recipient_source     TEXT,                     -- 'csv' | 'manual' | 'segment' (020_bulk_campaigns.sql)
+  send_mode            TEXT DEFAULT 'immediate',  -- 'immediate' | 'scheduled'
+  throttle_per_minute  INT DEFAULT 60,
+  total_recipients     INT DEFAULT 0,
+  sent_count           INT DEFAULT 0,
+  failed_count         INT DEFAULT 0
 );
+
+-- Bulk Messaging / Broadcast Campaign — one row per recipient of a
+-- POST /campaigns/broadcast run (services/campaign-service/src/index.js),
+-- processed by bulkCampaignQueue.js/bulkCampaignWorker.js.
+-- (020_bulk_campaigns.sql, 021_campaign_recipient_message.sql)
+CREATE TABLE IF NOT EXISTS campaign_recipients (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id       UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  contact_id        UUID REFERENCES contacts(id) ON DELETE SET NULL,
+  phone             TEXT NOT NULL,
+  name              TEXT,
+  variables         JSONB NOT NULL DEFAULT '{}',
+  status            TEXT NOT NULL DEFAULT 'pending', -- pending | queued | sent | failed
+  error             TEXT,
+  attempts          INT NOT NULL DEFAULT 0,
+  job_id            TEXT,
+  rendered_message  TEXT,
+  sent_at           TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_campaign_recipients_campaign_status
+  ON campaign_recipients (campaign_id, status);
+CREATE INDEX IF NOT EXISTS ix_campaign_recipients_campaign_phone
+  ON campaign_recipients (campaign_id, phone);
 
 CREATE TABLE IF NOT EXISTS campaign_audiences (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
