@@ -171,24 +171,38 @@ export default function RegistrationWizard() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    // Dark ambient shell matching the landing/login pages; the form cards
+    // below stay white on purpose — the 8 step components use dark text, so
+    // they must sit on a light surface regardless of the shell treatment.
+    <div className="min-h-screen bg-[#FFF8F4] relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-40 -left-32 h-[32rem] w-[32rem] rounded-full bg-rose-300/40 blur-[140px]" />
+        <div className="absolute -bottom-40 -right-32 h-[32rem] w-[32rem] rounded-full bg-orange-300/40 blur-[140px]" />
+        <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'linear-gradient(#f43f5e 1px, transparent 1px), linear-gradient(90deg, #f43f5e 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
+      </div>
+
       <ToastStack toasts={toasts} onDismiss={dismiss} />
 
-      <header className="border-b border-slate-200 bg-white">
+      <header className="relative z-10 border-b border-rose-100 bg-white/70 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-brand text-white grid place-items-center"><Rocket size={16} /></div>
-            <span className="text-sm font-bold text-brand-dark">Lead Automation</span>
-          </div>
-          <span className="text-xs text-slate-400">Already have an account? <a href="/login" className="text-brand font-medium">Sign in</a></span>
+          <a href="/" className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-rose-600 to-violet-600 text-white grid place-items-center shadow-lg shadow-violet-500/30">
+              <Rocket size={15} />
+            </div>
+            <span className="text-sm font-black text-slate-900" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>ConnectSphere</span>
+          </a>
+          <span className="text-xs text-slate-500">
+            Already have an account?{' '}
+            <a href="/login" className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-rose-600 to-violet-600 hover:underline">Sign in</a>
+          </span>
         </div>
         {/* mobile progress bar */}
-        <div className="lg:hidden h-1 bg-slate-100">
-          <div className="h-full bg-brand transition-all duration-500" style={{ width: `${percent}%` }} />
+        <div className="lg:hidden h-1 bg-rose-100">
+          <div className="h-full bg-gradient-to-r from-rose-600 to-violet-600 transition-all duration-500" style={{ width: `${percent}%` }} />
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col lg:flex-row gap-6">
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col lg:flex-row gap-6">
         <StepSidebar step={step} furthestStep={furthestStep} onJump={jumpTo} />
 
         <main className="flex-1 min-w-0">
@@ -222,12 +236,12 @@ export default function RegistrationWizard() {
 
               {step < STEPS.length ? (
                 <button type="button" onClick={goNext}
-                  className="flex items-center gap-1.5 bg-brand text-white rounded-lg px-5 py-2.5 text-sm font-medium hover:bg-brand-dark transition-colors">
+                  className="flex items-center gap-1.5 bg-gradient-to-r from-rose-600 to-violet-600 text-white rounded-xl px-5 py-2.5 text-sm font-bold shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 hover:-translate-y-0.5 transition-all duration-150">
                   Next <ChevronRight size={16} />
                 </button>
               ) : (
                 <button type="button" onClick={submit} disabled={submitting}
-                  className="flex items-center gap-1.5 bg-brand text-white rounded-lg px-5 py-2.5 text-sm font-medium hover:bg-brand-dark transition-colors disabled:opacity-60">
+                  className="flex items-center gap-1.5 bg-gradient-to-r from-rose-600 to-violet-600 text-white rounded-xl px-5 py-2.5 text-sm font-bold shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 hover:-translate-y-0.5 transition-all duration-150 disabled:opacity-60 disabled:hover:translate-y-0">
                   {submitting ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />}
                   {submitting ? 'Creating…' : 'Create Company'}
                 </button>

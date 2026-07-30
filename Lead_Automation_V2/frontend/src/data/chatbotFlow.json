@@ -1,0 +1,1591 @@
+{
+  "rootNode": "root",
+  "nodes": {
+    "root": {
+      "id": "root",
+      "title": "Welcome",
+      "message": "Hi! 👋 Welcome to ConnectSphere. What would you like to know?",
+      "quickReplies": [
+        {
+          "label": "Learn About the Platform",
+          "next": "platform_overview"
+        },
+        {
+          "label": "Features",
+          "next": "features"
+        },
+        {
+          "label": "AI Agents",
+          "next": "ai_agents"
+        },
+        {
+          "label": "Integrations",
+          "next": "integrations"
+        },
+        {
+          "label": "Pricing",
+          "next": "pricing"
+        },
+        {
+          "label": "Book a Demo",
+          "next": "demo"
+        },
+        {
+          "label": "Contact Sales",
+          "next": "contact_sales"
+        },
+        {
+          "label": "Support",
+          "next": "support"
+        }
+      ],
+      "cta": null,
+      "backNode": null
+    },
+    "platform_overview": {
+      "id": "platform_overview",
+      "title": "About ConnectSphere",
+      "message": "ConnectSphere is an AI-powered Lead Automation Platform that helps businesses capture, manage, nurture, and convert leads from multiple communication channels.",
+      "quickReplies": [
+        {
+          "label": "How does it work?",
+          "next": "how_it_works"
+        },
+        {
+          "label": "Which businesses can use it?",
+          "next": "who_uses_it"
+        },
+        {
+          "label": "What problems does it solve?",
+          "next": "problems_solved"
+        },
+        {
+          "label": "Why choose ConnectSphere?",
+          "next": "why_choose"
+        },
+        {
+          "label": "Back",
+          "next": "root"
+        }
+      ],
+      "cta": null,
+      "backNode": "root"
+    },
+    "how_it_works": {
+      "id": "how_it_works",
+      "title": "How It Works",
+      "message": "Every conversation is captured the moment it comes in, an AI Agent reads intent and replies instantly, qualified leads sync straight to your CRM, and automation handles the follow-up — end to end, without anyone chasing it manually.",
+      "quickReplies": [
+        {
+          "label": "Lead Capture",
+          "next": "lead_capture"
+        },
+        {
+          "label": "AI Agents",
+          "next": "ai_agents"
+        },
+        {
+          "label": "CRM",
+          "next": "crm"
+        },
+        {
+          "label": "Workflow Automation",
+          "next": "workflow_automation"
+        },
+        {
+          "label": "Integrations",
+          "next": "integrations"
+        },
+        {
+          "label": "Back",
+          "next": "platform_overview"
+        }
+      ],
+      "cta": null,
+      "backNode": "platform_overview"
+    },
+    "who_uses_it": {
+      "id": "who_uses_it",
+      "title": "Who It's For",
+      "message": "D2C and e-commerce brands, SaaS companies, real estate and education consultancies, agencies juggling multiple client inboxes, and enterprises with high inbound volume across WhatsApp, Instagram, and email all run on ConnectSphere.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "platform_overview"
+        }
+      ],
+      "cta": null,
+      "backNode": "platform_overview"
+    },
+    "problems_solved": {
+      "id": "problems_solved",
+      "title": "Problems Solved",
+      "message": "Leads get lost across scattered tools, first response takes hours instead of seconds, teams have no unified view of a conversation, CRM entry is manual, and after-hours inquiries go unanswered. ConnectSphere fixes all five.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "platform_overview"
+        }
+      ],
+      "cta": null,
+      "backNode": "platform_overview"
+    },
+    "why_choose": {
+      "id": "why_choose",
+      "title": "Why ConnectSphere",
+      "message": "Teams switch because first response drops from hours to seconds, setup takes a few hours instead of six weeks, and every channel — not just one — reports into a single pipeline.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "platform_overview"
+        }
+      ],
+      "cta": {
+        "label": "See the full comparison",
+        "url": "#compare",
+        "external": false
+      },
+      "backNode": "platform_overview"
+    },
+    "features": {
+      "id": "features",
+      "title": "Features",
+      "message": "Everything you need to run your whole funnel from one place — capture, qualify, automate, and analyze, without stitching together five different tools.",
+      "quickReplies": [
+        {
+          "label": "Lead Capture",
+          "next": "lead_capture"
+        },
+        {
+          "label": "AI Agents",
+          "next": "ai_agents"
+        },
+        {
+          "label": "CRM",
+          "next": "crm"
+        },
+        {
+          "label": "Workflow Automation",
+          "next": "workflow_automation"
+        },
+        {
+          "label": "Campaigns",
+          "next": "campaigns"
+        },
+        {
+          "label": "Broadcasts",
+          "next": "broadcasts"
+        },
+        {
+          "label": "Analytics",
+          "next": "analytics"
+        },
+        {
+          "label": "Security",
+          "next": "security"
+        },
+        {
+          "label": "Back",
+          "next": "root"
+        }
+      ],
+      "cta": null,
+      "backNode": "root"
+    },
+    "lead_capture": {
+      "id": "lead_capture",
+      "title": "Lead Capture",
+      "message": "ConnectSphere listens across every channel your leads actually use and pulls every conversation into one unified inbox the moment it arrives.",
+      "quickReplies": [
+        {
+          "label": "WhatsApp",
+          "next": "ch_whatsapp"
+        },
+        {
+          "label": "Instagram",
+          "next": "ch_instagram"
+        },
+        {
+          "label": "Facebook Messenger",
+          "next": "ch_messenger"
+        },
+        {
+          "label": "Website Chat",
+          "next": "ch_webchat"
+        },
+        {
+          "label": "Email",
+          "next": "ch_email"
+        },
+        {
+          "label": "SMS",
+          "next": "ch_sms"
+        },
+        {
+          "label": "Voice",
+          "next": "ch_voice"
+        },
+        {
+          "label": "Back",
+          "next": "how_it_works"
+        }
+      ],
+      "cta": null,
+      "backNode": "how_it_works"
+    },
+    "ch_whatsapp": {
+      "id": "ch_whatsapp",
+      "title": "WhatsApp",
+      "message": "Connected via the official WhatsApp Business API — the same channel your customers already use every day.",
+      "quickReplies": [
+        {
+          "label": "WhatsApp API",
+          "next": "wa_api"
+        },
+        {
+          "label": "Automated Replies",
+          "next": "wa_auto_reply"
+        },
+        {
+          "label": "Shared Inbox",
+          "next": "wa_inbox"
+        },
+        {
+          "label": "Lead Qualification",
+          "next": "wa_qualify"
+        },
+        {
+          "label": "Back",
+          "next": "lead_capture"
+        }
+      ],
+      "cta": null,
+      "backNode": "lead_capture"
+    },
+    "wa_api": {
+      "id": "wa_api",
+      "title": "WhatsApp API",
+      "message": "Official Business API integration, no green-screen QR hacks. Send template messages, media, and buttons, fully within Meta's compliance rules.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_whatsapp"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_whatsapp"
+    },
+    "wa_auto_reply": {
+      "id": "wa_auto_reply",
+      "title": "Automated Replies",
+      "message": "The AI Agent answers FAQs, pricing questions, and product queries instantly using your own knowledge base — no waiting for a human.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_whatsapp"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_whatsapp"
+    },
+    "wa_inbox": {
+      "id": "wa_inbox",
+      "title": "Shared Inbox",
+      "message": "Every WhatsApp thread lands in the Unified Inbox, so your whole team sees the same conversation history instead of one person's personal phone.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_whatsapp"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_whatsapp"
+    },
+    "wa_qualify": {
+      "id": "wa_qualify",
+      "title": "Lead Qualification",
+      "message": "Before a conversation reaches sales, the AI Agent scores intent and budget signals, so reps only pick up warm, ready-to-buy leads.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_whatsapp"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_whatsapp"
+    },
+    "ch_instagram": {
+      "id": "ch_instagram",
+      "title": "Instagram",
+      "message": "DMs, story replies, and comments are all pulled into the same inbox as everything else — nothing sits in a separate app.",
+      "quickReplies": [
+        {
+          "label": "Instagram DMs",
+          "next": "ig_dm"
+        },
+        {
+          "label": "Lead Capture Forms",
+          "next": "ig_capture"
+        },
+        {
+          "label": "Human Handoff",
+          "next": "ig_handoff"
+        },
+        {
+          "label": "Back",
+          "next": "lead_capture"
+        }
+      ],
+      "cta": null,
+      "backNode": "lead_capture"
+    },
+    "ig_dm": {
+      "id": "ig_dm",
+      "title": "Instagram DMs",
+      "message": "The AI Agent auto-replies to story replies and comments in real time, so an engaged follower never waits for a manual response.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_instagram"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_instagram"
+    },
+    "ig_capture": {
+      "id": "ig_capture",
+      "title": "Lead Capture Forms",
+      "message": "Bio-link and ad-driven forms feed leads straight into ConnectSphere, pre-tagged with the campaign they came from.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_instagram"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_instagram"
+    },
+    "ig_handoff": {
+      "id": "ig_handoff",
+      "title": "Human Handoff",
+      "message": "Anything outside the AI's confidence range is flagged and handed to a human with full context attached.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_instagram"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_instagram"
+    },
+    "ch_messenger": {
+      "id": "ch_messenger",
+      "title": "Facebook Messenger",
+      "message": "Messenger threads share the same inbox, quick-reply menus, and handoff rules as every other channel.",
+      "quickReplies": [
+        {
+          "label": "Shared Inbox",
+          "next": "fb_shared"
+        },
+        {
+          "label": "Quick Replies & Menus",
+          "next": "fb_quick"
+        },
+        {
+          "label": "Human Handoff",
+          "next": "fb_handoff"
+        },
+        {
+          "label": "Back",
+          "next": "lead_capture"
+        }
+      ],
+      "cta": null,
+      "backNode": "lead_capture"
+    },
+    "fb_shared": {
+      "id": "fb_shared",
+      "title": "Shared Inbox",
+      "message": "Every Messenger conversation is visible to the whole team, with history preserved even after handoff.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_messenger"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_messenger"
+    },
+    "fb_quick": {
+      "id": "fb_quick",
+      "title": "Quick Replies & Menus",
+      "message": "Structured menus guide common questions (pricing, availability, support) without needing a human to type.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_messenger"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_messenger"
+    },
+    "fb_handoff": {
+      "id": "fb_handoff",
+      "title": "Human Handoff",
+      "message": "Sensitive or complex threads escalate to a human agent automatically, with the full chat log attached.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_messenger"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_messenger"
+    },
+    "ch_webchat": {
+      "id": "ch_webchat",
+      "title": "Website Chat",
+      "message": "An embeddable chat widget on your own site, backed by the same AI Agents and knowledge base as every other channel.",
+      "quickReplies": [
+        {
+          "label": "Embeddable Widget",
+          "next": "wc_widget"
+        },
+        {
+          "label": "Knowledge Base Answers",
+          "next": "wc_kb"
+        },
+        {
+          "label": "Smart Routing to Sales",
+          "next": "wc_route"
+        },
+        {
+          "label": "Back",
+          "next": "lead_capture"
+        }
+      ],
+      "cta": null,
+      "backNode": "lead_capture"
+    },
+    "wc_widget": {
+      "id": "wc_widget",
+      "title": "Embeddable Widget",
+      "message": "Drop a single script tag on your site and the widget matches your brand — no iframe, no third-party look.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_webchat"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_webchat"
+    },
+    "wc_kb": {
+      "id": "wc_kb",
+      "title": "Knowledge Base Answers",
+      "message": "Visitor questions are answered from your own product docs and pricing pages, grounded in what's actually true.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_webchat"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_webchat"
+    },
+    "wc_route": {
+      "id": "wc_route",
+      "title": "Smart Routing to Sales",
+      "message": "High-intent visitors are scored and routed to a live rep the moment they show buying signals.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_webchat"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_webchat"
+    },
+    "ch_email": {
+      "id": "ch_email",
+      "title": "Email",
+      "message": "Sales and support inboxes are parsed, tagged, and synced automatically — no more manually copying threads into a CRM.",
+      "quickReplies": [
+        {
+          "label": "Inbox Parsing",
+          "next": "em_parse"
+        },
+        {
+          "label": "Template Replies",
+          "next": "em_template"
+        },
+        {
+          "label": "Thread Sync to CRM",
+          "next": "em_thread"
+        },
+        {
+          "label": "Back",
+          "next": "lead_capture"
+        }
+      ],
+      "cta": null,
+      "backNode": "lead_capture"
+    },
+    "em_parse": {
+      "id": "em_parse",
+      "title": "Inbox Parsing",
+      "message": "Incoming emails are automatically classified as sales inquiries, support requests, or noise.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_email"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_email"
+    },
+    "em_template": {
+      "id": "em_template",
+      "title": "Template Replies",
+      "message": "Common questions get an instant, on-brand reply while the AI Agent drafts a fuller response for review.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_email"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_email"
+    },
+    "em_thread": {
+      "id": "em_thread",
+      "title": "Thread Sync to CRM",
+      "message": "Every email thread attaches to the right contact record automatically, no forwarding required.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_email"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_email"
+    },
+    "ch_sms": {
+      "id": "ch_sms",
+      "title": "SMS",
+      "message": "Two-way text messaging that plugs into the same automation and compliance rules as your other channels.",
+      "quickReplies": [
+        {
+          "label": "Two-Way Automation",
+          "next": "sms_auto"
+        },
+        {
+          "label": "Opt-Out Compliance",
+          "next": "sms_optout"
+        },
+        {
+          "label": "Broadcast Campaigns",
+          "next": "sms_broadcast"
+        },
+        {
+          "label": "Back",
+          "next": "lead_capture"
+        }
+      ],
+      "cta": null,
+      "backNode": "lead_capture"
+    },
+    "sms_auto": {
+      "id": "sms_auto",
+      "title": "Two-Way Automation",
+      "message": "Automated replies and reminders go out by SMS, with a human able to jump into the same thread anytime.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_sms"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_sms"
+    },
+    "sms_optout": {
+      "id": "sms_optout",
+      "title": "Opt-Out Compliance",
+      "message": "STOP/opt-out handling is automatic and enforced, so campaigns stay compliant without manual list management.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_sms"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_sms"
+    },
+    "sms_broadcast": {
+      "id": "sms_broadcast",
+      "title": "Broadcast Campaigns",
+      "message": "SMS can also be used for one-to-many broadcasts — see the Broadcasts section for details.",
+      "quickReplies": [
+        {
+          "label": "Explore Broadcasts",
+          "next": "broadcasts"
+        },
+        {
+          "label": "Back",
+          "next": "ch_sms"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_sms"
+    },
+    "ch_voice": {
+      "id": "ch_voice",
+      "title": "Voice",
+      "message": "Picks up inbound calls in real time with sub-second latency, qualifies the caller against the same rules your other agents use, then books the callback or warm-transfers to a human.",
+      "quickReplies": [
+        {
+          "label": "Real-Time Answering",
+          "next": "voice_answer"
+        },
+        {
+          "label": "Caller Qualification",
+          "next": "voice_qualify"
+        },
+        {
+          "label": "Callback & Warm Transfer",
+          "next": "voice_transfer"
+        },
+        {
+          "label": "Back",
+          "next": "lead_capture"
+        }
+      ],
+      "cta": null,
+      "backNode": "lead_capture"
+    },
+    "voice_answer": {
+      "id": "voice_answer",
+      "title": "Real-Time Answering",
+      "message": "Calls are answered instantly, 24/7, with natural, low-latency conversational AI — no hold music.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_voice"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_voice"
+    },
+    "voice_qualify": {
+      "id": "voice_qualify",
+      "title": "Caller Qualification",
+      "message": "The Voice Agent applies the exact same qualification rules as your chat channels, so scoring stays consistent everywhere.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_voice"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_voice"
+    },
+    "voice_transfer": {
+      "id": "voice_transfer",
+      "title": "Callback & Warm Transfer",
+      "message": "Complex calls get warm-transferred to a human with full context, or a callback is booked automatically if no one's free.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "ch_voice"
+        }
+      ],
+      "cta": null,
+      "backNode": "ch_voice"
+    },
+    "ai_agents": {
+      "id": "ai_agents",
+      "title": "AI Agents",
+      "message": "Four dedicated AI Agents run your entire lifecycle — each one specialized instead of one generic bot trying to do everything.",
+      "quickReplies": [
+        {
+          "label": "Marketing AI Agent",
+          "next": "marketing_agent"
+        },
+        {
+          "label": "Sales AI Agent",
+          "next": "sales_agent"
+        },
+        {
+          "label": "Support AI Agent",
+          "next": "support_agent"
+        },
+        {
+          "label": "Voice AI Agent",
+          "next": "voice_agent"
+        },
+        {
+          "label": "Back",
+          "next": "root"
+        }
+      ],
+      "cta": null,
+      "backNode": "root"
+    },
+    "marketing_agent": {
+      "id": "marketing_agent",
+      "title": "Marketing AI Agent",
+      "message": "Monitors campaigns, answers incoming queries from social channels using approved product guidelines, and triggers drip schedules to revive inactive cold leads.",
+      "quickReplies": [
+        {
+          "label": "Campaign Broadcasting",
+          "next": "campaigns"
+        },
+        {
+          "label": "Cold Lead Nurturing",
+          "next": "mk_nurture"
+        },
+        {
+          "label": "Social Query Handling",
+          "next": "mk_social"
+        },
+        {
+          "label": "Back",
+          "next": "ai_agents"
+        }
+      ],
+      "cta": null,
+      "backNode": "ai_agents"
+    },
+    "mk_nurture": {
+      "id": "mk_nurture",
+      "title": "Cold Lead Nurturing",
+      "message": "Leads that go quiet are automatically re-engaged with drip schedules, instead of sitting untouched in a spreadsheet.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "marketing_agent"
+        }
+      ],
+      "cta": null,
+      "backNode": "marketing_agent"
+    },
+    "mk_social": {
+      "id": "mk_social",
+      "title": "Social Query Handling",
+      "message": "Incoming questions on Instagram and Facebook are answered using your approved product guidelines — consistent messaging, no copy-paste.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "marketing_agent"
+        }
+      ],
+      "cta": null,
+      "backNode": "marketing_agent"
+    },
+    "sales_agent": {
+      "id": "sales_agent",
+      "title": "Sales AI Agent",
+      "message": "Evaluates user intent and matches lead profiles against custom parameters. Scores leads automatically and triggers live alerts or CRM routes.",
+      "quickReplies": [
+        {
+          "label": "Live Lead Scoring",
+          "next": "sa_scoring"
+        },
+        {
+          "label": "Custom Routing Rules",
+          "next": "sa_routing"
+        },
+        {
+          "label": "Real-Time Sales Alerts",
+          "next": "sa_alerts"
+        },
+        {
+          "label": "Back",
+          "next": "ai_agents"
+        }
+      ],
+      "cta": null,
+      "backNode": "ai_agents"
+    },
+    "sa_scoring": {
+      "id": "sa_scoring",
+      "title": "Live Lead Scoring",
+      "message": "Org size, budget, and channel are weighed automatically to produce a live Hot / Warm score for every lead — the same logic shown in our landing page score calculator.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "sales_agent"
+        }
+      ],
+      "cta": null,
+      "backNode": "sales_agent"
+    },
+    "sa_routing": {
+      "id": "sa_routing",
+      "title": "Custom Routing Rules",
+      "message": "Route leads by country, company size, budget intent, or any score the AI generates — defined visually, no code required.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "sales_agent"
+        }
+      ],
+      "cta": null,
+      "backNode": "sales_agent"
+    },
+    "sa_alerts": {
+      "id": "sa_alerts",
+      "title": "Real-Time Sales Alerts",
+      "message": "The moment a lead crosses your hot-lead threshold, the assigned rep gets notified instantly — no end-of-day report to wait for.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "sales_agent"
+        }
+      ],
+      "cta": null,
+      "backNode": "sales_agent"
+    },
+    "support_agent": {
+      "id": "support_agent",
+      "title": "Support AI Agent",
+      "message": "Handles post-sale inquiries, searches vector store libraries for product queries, and triggers manual team redirects if it detects unhappy customer sentiment.",
+      "quickReplies": [
+        {
+          "label": "Knowledge Base Search",
+          "next": "sp_kb"
+        },
+        {
+          "label": "Sentiment Detection",
+          "next": "sp_sentiment"
+        },
+        {
+          "label": "Human Escalation",
+          "next": "sp_handoff"
+        },
+        {
+          "label": "Back",
+          "next": "ai_agents"
+        }
+      ],
+      "cta": null,
+      "backNode": "ai_agents"
+    },
+    "sp_kb": {
+      "id": "sp_kb",
+      "title": "Knowledge Base Search",
+      "message": "Answers are grounded in your own product docs via an isolated vector store per organization — not a generic public model guess.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "support_agent"
+        }
+      ],
+      "cta": null,
+      "backNode": "support_agent"
+    },
+    "sp_sentiment": {
+      "id": "sp_sentiment",
+      "title": "Sentiment Detection",
+      "message": "Frustration or dissatisfaction in a message is detected automatically, and the conversation is flagged for a human before it escalates further.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "support_agent"
+        }
+      ],
+      "cta": null,
+      "backNode": "support_agent"
+    },
+    "sp_handoff": {
+      "id": "sp_handoff",
+      "title": "Human Escalation",
+      "message": "Any unhappy or unresolved thread routes to your support team with full conversation history attached — no re-explaining.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "support_agent"
+        }
+      ],
+      "cta": null,
+      "backNode": "support_agent"
+    },
+    "voice_agent": {
+      "id": "voice_agent",
+      "title": "Voice AI Agent",
+      "message": "Picks up inbound calls in real time with sub-second latency, qualifies the caller against the same rules your other agents use, then books the callback or warm-transfers to a human.",
+      "quickReplies": [
+        {
+          "label": "Sub-Second Latency",
+          "next": "vc_latency"
+        },
+        {
+          "label": "Live Caller Qualification",
+          "next": "vc_qualify"
+        },
+        {
+          "label": "Warm Transfer to Human",
+          "next": "vc_transfer"
+        },
+        {
+          "label": "Back",
+          "next": "ai_agents"
+        }
+      ],
+      "cta": null,
+      "backNode": "ai_agents"
+    },
+    "vc_latency": {
+      "id": "vc_latency",
+      "title": "Sub-Second Latency",
+      "message": "Calls are answered and responded to in real time — the conversation feels natural, not like talking to an IVR menu.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "voice_agent"
+        }
+      ],
+      "cta": null,
+      "backNode": "voice_agent"
+    },
+    "vc_qualify": {
+      "id": "vc_qualify",
+      "title": "Live Caller Qualification",
+      "message": "The same scoring rules used across chat and email apply on the call, so a hot lead is flagged consistently no matter the channel.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "voice_agent"
+        }
+      ],
+      "cta": null,
+      "backNode": "voice_agent"
+    },
+    "vc_transfer": {
+      "id": "vc_transfer",
+      "title": "Warm Transfer to Human",
+      "message": "If a human is needed, the call transfers with full context already summarized — or a callback is booked automatically if no one's available.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "voice_agent"
+        }
+      ],
+      "cta": null,
+      "backNode": "voice_agent"
+    },
+    "crm": {
+      "id": "crm",
+      "title": "CRM",
+      "message": "ConnectSphere sits in front of your existing CRM — HubSpot, Salesforce, Zoho, and more — instantly capturing, qualifying, and syncing leads with full chat transcripts, no manual entry.",
+      "quickReplies": [
+        {
+          "label": "Bi-Directional Sync",
+          "next": "crm_sync"
+        },
+        {
+          "label": "Pipeline Automation",
+          "next": "crm_pipeline"
+        },
+        {
+          "label": "Full Conversation History",
+          "next": "crm_transcripts"
+        },
+        {
+          "label": "Back",
+          "next": "how_it_works"
+        }
+      ],
+      "cta": null,
+      "backNode": "how_it_works"
+    },
+    "crm_sync": {
+      "id": "crm_sync",
+      "title": "Bi-Directional Sync",
+      "message": "Updates flow both ways — a status change in your CRM reflects back in ConnectSphere, and vice versa, so nothing goes stale.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "crm"
+        }
+      ],
+      "cta": null,
+      "backNode": "crm"
+    },
+    "crm_pipeline": {
+      "id": "crm_pipeline",
+      "title": "Pipeline Automation",
+      "message": "Deals move stage automatically as qualification signals change, instead of a rep manually dragging cards.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "crm"
+        }
+      ],
+      "cta": null,
+      "backNode": "crm"
+    },
+    "crm_transcripts": {
+      "id": "crm_transcripts",
+      "title": "Full Conversation History",
+      "message": "Every deal carries its complete chat, email, and call history — so sales never has to ask a lead to repeat themselves.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "crm"
+        }
+      ],
+      "cta": null,
+      "backNode": "crm"
+    },
+    "workflow_automation": {
+      "id": "workflow_automation",
+      "title": "Workflow Automation",
+      "message": "A visual, no-code workflow builder lets you define exact rules — route by country, company size, budget signal, or any score the AI generates — without writing a line of code.",
+      "quickReplies": [
+        {
+          "label": "Visual Workflow Builder",
+          "next": "wf_builder"
+        },
+        {
+          "label": "Custom Routing Rules",
+          "next": "wf_rules"
+        },
+        {
+          "label": "Automated Triggers",
+          "next": "wf_triggers"
+        },
+        {
+          "label": "Back",
+          "next": "how_it_works"
+        }
+      ],
+      "cta": null,
+      "backNode": "how_it_works"
+    },
+    "wf_builder": {
+      "id": "wf_builder",
+      "title": "Visual Workflow Builder",
+      "message": "Drag-and-drop nodes define your flow — no engineering ticket required to change a rule.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "workflow_automation"
+        }
+      ],
+      "cta": null,
+      "backNode": "workflow_automation"
+    },
+    "wf_rules": {
+      "id": "wf_rules",
+      "title": "Custom Routing Rules",
+      "message": "Route by country, company size, budget intent, or any AI-generated score — the same rules engine that powers Sales AI Agent routing.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "workflow_automation"
+        }
+      ],
+      "cta": null,
+      "backNode": "workflow_automation"
+    },
+    "wf_triggers": {
+      "id": "wf_triggers",
+      "title": "Automated Triggers",
+      "message": "Actions fire automatically on events like 'lead goes cold for 3 days' or 'score crosses 75' — no one has to watch a dashboard.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "workflow_automation"
+        }
+      ],
+      "cta": null,
+      "backNode": "workflow_automation"
+    },
+    "campaigns": {
+      "id": "campaigns",
+      "title": "Campaigns",
+      "message": "Launch multi-channel campaigns — Instagram Story broadcasts, WhatsApp drip sequences, email nurtures — from one composer, and let the Marketing AI Agent monitor performance in real time.",
+      "quickReplies": [
+        {
+          "label": "Campaign Composer",
+          "next": "cp_composer"
+        },
+        {
+          "label": "Broadcast Simulator",
+          "next": "cp_simulator"
+        },
+        {
+          "label": "Automated Drip Schedules",
+          "next": "cp_drip"
+        },
+        {
+          "label": "Back",
+          "next": "features"
+        }
+      ],
+      "cta": null,
+      "backNode": "features"
+    },
+    "cp_composer": {
+      "id": "cp_composer",
+      "title": "Campaign Composer",
+      "message": "Build a campaign once and target it across WhatsApp, Instagram, and email from a single screen.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "campaigns"
+        }
+      ],
+      "cta": null,
+      "backNode": "campaigns"
+    },
+    "cp_simulator": {
+      "id": "cp_simulator",
+      "title": "Broadcast Simulator",
+      "message": "Preview reach and conversion before you launch — like the 942-contact, 32.8% conversion Insta Story broadcast shown on our landing page.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "campaigns"
+        }
+      ],
+      "cta": null,
+      "backNode": "campaigns"
+    },
+    "cp_drip": {
+      "id": "cp_drip",
+      "title": "Automated Drip Schedules",
+      "message": "Cold or inactive leads are automatically re-engaged on a schedule you define, without manual follow-up.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "campaigns"
+        }
+      ],
+      "cta": null,
+      "backNode": "campaigns"
+    },
+    "broadcasts": {
+      "id": "broadcasts",
+      "title": "Broadcasts",
+      "message": "Send one-to-many messages across WhatsApp, SMS, and Instagram with delivery tracking, so you always know what landed and what converted.",
+      "quickReplies": [
+        {
+          "label": "Multi-Channel Sends",
+          "next": "bc_multichannel"
+        },
+        {
+          "label": "Delivery & Read Tracking",
+          "next": "bc_tracking"
+        },
+        {
+          "label": "Audience Segments",
+          "next": "bc_segments"
+        },
+        {
+          "label": "Back",
+          "next": "features"
+        }
+      ],
+      "cta": null,
+      "backNode": "features"
+    },
+    "bc_multichannel": {
+      "id": "bc_multichannel",
+      "title": "Multi-Channel Sends",
+      "message": "One broadcast, sent across WhatsApp, SMS, and Instagram simultaneously, each formatted for its channel.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "broadcasts"
+        }
+      ],
+      "cta": null,
+      "backNode": "broadcasts"
+    },
+    "bc_tracking": {
+      "id": "bc_tracking",
+      "title": "Delivery & Read Tracking",
+      "message": "Delivery, read, and reply status are tracked per recipient, per channel — no guessing what actually landed.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "broadcasts"
+        }
+      ],
+      "cta": null,
+      "backNode": "broadcasts"
+    },
+    "bc_segments": {
+      "id": "bc_segments",
+      "title": "Audience Segments",
+      "message": "Target broadcasts to segments built from lead score, channel, tags, or CRM stage — not just your whole list every time.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "broadcasts"
+        }
+      ],
+      "cta": null,
+      "backNode": "broadcasts"
+    },
+    "analytics": {
+      "id": "analytics",
+      "title": "Analytics",
+      "message": "Live dashboards track conversations autopiloted, median response time, CSAT, and pipeline generated — broken down by channel, so you always know what's working.",
+      "quickReplies": [
+        {
+          "label": "Funnel & Conversion Charts",
+          "next": "an_funnel"
+        },
+        {
+          "label": "Channel Performance Breakdown",
+          "next": "an_channel"
+        },
+        {
+          "label": "Real-Time Dashboards",
+          "next": "an_realtime"
+        },
+        {
+          "label": "Back",
+          "next": "features"
+        }
+      ],
+      "cta": {
+        "label": "See live analytics",
+        "url": "#analytics",
+        "external": false
+      },
+      "backNode": "features"
+    },
+    "an_funnel": {
+      "id": "an_funnel",
+      "title": "Funnel & Conversion Charts",
+      "message": "Track the funnel from new conversation to AI-qualified to hot lead to won deal, with conversion rate at every stage.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "analytics"
+        }
+      ],
+      "cta": null,
+      "backNode": "analytics"
+    },
+    "an_channel": {
+      "id": "an_channel",
+      "title": "Channel Performance Breakdown",
+      "message": "See which channel — WhatsApp, Email, Web chat, Instagram, Messenger, SMS, or Voice — is actually driving pipeline, not just volume.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "analytics"
+        }
+      ],
+      "cta": null,
+      "backNode": "analytics"
+    },
+    "an_realtime": {
+      "id": "an_realtime",
+      "title": "Real-Time Dashboards",
+      "message": "Metrics like 82.6% conversations autopiloted, 3s median response time, and 4.8/5 CSAT update live, not on a nightly batch job.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "analytics"
+        }
+      ],
+      "cta": null,
+      "backNode": "analytics"
+    },
+    "security": {
+      "id": "security",
+      "title": "Security",
+      "message": "Every organization gets isolated, encrypted vector databases. Conversations and documents are encrypted at rest and in transit, and are never used to train public models.",
+      "quickReplies": [
+        {
+          "label": "Isolated Vector DBs",
+          "next": "sec_isolation"
+        },
+        {
+          "label": "Encryption at Rest & Transit",
+          "next": "sec_encryption"
+        },
+        {
+          "label": "No Public Model Training",
+          "next": "sec_privacy"
+        },
+        {
+          "label": "Back",
+          "next": "features"
+        }
+      ],
+      "cta": null,
+      "backNode": "features"
+    },
+    "sec_isolation": {
+      "id": "sec_isolation",
+      "title": "Isolated Vector DBs",
+      "message": "Each organization's knowledge base lives in its own isolated vector store — never mixed with another company's data.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "security"
+        }
+      ],
+      "cta": null,
+      "backNode": "security"
+    },
+    "sec_encryption": {
+      "id": "sec_encryption",
+      "title": "Encryption at Rest & Transit",
+      "message": "Documents, logs, and conversations are encrypted both while stored and while in transit between services.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "security"
+        }
+      ],
+      "cta": null,
+      "backNode": "security"
+    },
+    "sec_privacy": {
+      "id": "sec_privacy",
+      "title": "No Public Model Training",
+      "message": "Your company data is never used to train public models — it stays scoped to your organization, full stop.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "security"
+        }
+      ],
+      "cta": null,
+      "backNode": "security"
+    },
+    "integrations": {
+      "id": "integrations",
+      "title": "Integrations",
+      "message": "ConnectSphere plugs into the tools your team already runs on — CRMs, comms channels, and workflow tools — instead of asking you to replace them.",
+      "quickReplies": [
+        {
+          "label": "CRM Integrations",
+          "next": "int_crm"
+        },
+        {
+          "label": "Channel Integrations",
+          "next": "int_comms"
+        },
+        {
+          "label": "Developer & API Access",
+          "next": "int_dev"
+        },
+        {
+          "label": "Back",
+          "next": "root"
+        }
+      ],
+      "cta": {
+        "label": "View the full integrations grid",
+        "url": "#integrations",
+        "external": false
+      },
+      "backNode": "root"
+    },
+    "int_crm": {
+      "id": "int_crm",
+      "title": "CRM Integrations",
+      "message": "HubSpot, Salesforce, and Zoho are supported out of the box — leads and full conversation transcripts sync automatically, no manual export or import.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "integrations"
+        }
+      ],
+      "cta": null,
+      "backNode": "integrations"
+    },
+    "int_comms": {
+      "id": "int_comms",
+      "title": "Channel Integrations",
+      "message": "WhatsApp Business API, Instagram DMs, Facebook Messenger, LinkedIn lead forms, Twilio Voice, Email, and SMS all connect natively.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "integrations"
+        }
+      ],
+      "cta": null,
+      "backNode": "integrations"
+    },
+    "int_dev": {
+      "id": "int_dev",
+      "title": "Developer & API Access",
+      "message": "Need something custom? A REST API and webhook layer let your engineering team push and pull lead data programmatically.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "integrations"
+        }
+      ],
+      "cta": null,
+      "backNode": "integrations"
+    },
+    "pricing": {
+      "id": "pricing",
+      "title": "Pricing",
+      "message": "Pricing is scoped to your channel mix and lead volume — not a flat per-seat fee — so talk to our team and we'll build a plan around what you actually need.",
+      "quickReplies": [
+        {
+          "label": "How does pricing scale?",
+          "next": "pr_scale"
+        },
+        {
+          "label": "Is there a free trial?",
+          "next": "pr_trial"
+        },
+        {
+          "label": "Contact Sales",
+          "next": "contact_sales"
+        },
+        {
+          "label": "Back",
+          "next": "root"
+        }
+      ],
+      "cta": null,
+      "backNode": "root"
+    },
+    "pr_scale": {
+      "id": "pr_scale",
+      "title": "How Pricing Scales",
+      "message": "Plans scale with lead volume, not team size — so a 5-person team and a 50-person team handling the same volume pay the same.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "pricing"
+        }
+      ],
+      "cta": null,
+      "backNode": "pricing"
+    },
+    "pr_trial": {
+      "id": "pr_trial",
+      "title": "Free Trial",
+      "message": "Most teams start with a live trial to see qualified leads flow in before ever talking numbers. Contact sales to get set up.",
+      "quickReplies": [
+        {
+          "label": "Contact Sales",
+          "next": "contact_sales"
+        },
+        {
+          "label": "Back",
+          "next": "pricing"
+        }
+      ],
+      "cta": null,
+      "backNode": "pricing"
+    },
+    "demo": {
+      "id": "demo",
+      "title": "Book a Demo",
+      "message": "Great choice! Book a live walkthrough and we'll show ConnectSphere running on your actual use case — channels, CRM, and all.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "root"
+        }
+      ],
+      "cta": {
+        "label": "Book a Demo",
+        "url": "mailto:sales@connectsphere.ai?subject=Demo%20Request",
+        "external": true
+      },
+      "backNode": "root"
+    },
+    "contact_sales": {
+      "id": "contact_sales",
+      "title": "Contact Sales",
+      "message": "Our team typically replies within a few hours. Tell us your use case and we'll get you set up.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "root"
+        }
+      ],
+      "cta": {
+        "label": "Email Sales",
+        "url": "mailto:sales@connectsphere.ai",
+        "external": true
+      },
+      "backNode": "root"
+    },
+    "support": {
+      "id": "support",
+      "title": "Support",
+      "message": "Need help with something already set up? Our support team handles onboarding, integration issues, and account questions.",
+      "quickReplies": [
+        {
+          "label": "Onboarding Help",
+          "next": "su_onboarding"
+        },
+        {
+          "label": "Technical Issue",
+          "next": "su_technical"
+        },
+        {
+          "label": "Account / Billing",
+          "next": "su_account"
+        },
+        {
+          "label": "Back",
+          "next": "root"
+        }
+      ],
+      "cta": {
+        "label": "Contact Support",
+        "url": "mailto:support@connectsphere.ai",
+        "external": true
+      },
+      "backNode": "root"
+    },
+    "su_onboarding": {
+      "id": "su_onboarding",
+      "title": "Onboarding Help",
+      "message": "Our team can walk you through connecting your first channel and uploading your knowledge base — just email support and mention you're onboarding.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "support"
+        }
+      ],
+      "cta": null,
+      "backNode": "support"
+    },
+    "su_technical": {
+      "id": "su_technical",
+      "title": "Technical Issue",
+      "message": "For integration errors, sync failures, or anything not behaving as expected, email support with a screenshot and we'll dig in fast.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "support"
+        }
+      ],
+      "cta": null,
+      "backNode": "support"
+    },
+    "su_account": {
+      "id": "su_account",
+      "title": "Account / Billing",
+      "message": "For plan changes, invoices, or account access questions, email support and our team will loop in billing directly.",
+      "quickReplies": [
+        {
+          "label": "Back",
+          "next": "support"
+        }
+      ],
+      "cta": null,
+      "backNode": "support"
+    }
+  }
+}

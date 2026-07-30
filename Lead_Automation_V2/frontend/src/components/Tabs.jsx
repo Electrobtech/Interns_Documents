@@ -13,13 +13,13 @@ export default function Tabs({ title, icon: TitleIcon, tabs }) {
         <div className="px-6 pt-6 pb-0">
           <div className="flex items-center gap-3 mb-5">
             {TitleIcon && (
-              <div className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600 shadow-sm">
+              <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-rose-100 text-violet-600 shadow-sm">
                 <TitleIcon size={20} />
               </div>
             )}
             <div>
               <h2 className="text-xl font-bold text-slate-800 leading-tight">{title}</h2>
-              <div className="h-0.5 w-8 bg-gradient-to-r from-blue-500 to-violet-500 rounded-full mt-1" />
+              <div className="h-0.5 w-8 bg-gradient-to-r from-violet-500 to-rose-500 rounded-full mt-1" />
             </div>
           </div>
         </div>
@@ -44,12 +44,12 @@ export default function Tabs({ title, icon: TitleIcon, tabs }) {
               {t.icon && (
                 <t.icon
                   size={14}
-                  className={i === active ? 'text-blue-500' : 'text-slate-400'}
+                  className={i === active ? 'text-violet-500' : 'text-slate-400'}
                 />
               )}
               {t.label}
               {i === active && (
-                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-gradient-to-r from-blue-500 to-violet-500 rounded-full" />
+                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-gradient-to-r from-violet-500 to-rose-500 rounded-full" />
               )}
             </button>
           ))}

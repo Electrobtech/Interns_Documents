@@ -152,3 +152,12 @@ export function useUpdateHandoff() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['ai-agents', 'handoff'] }),
   });
 }
+
+// POST /ai-agents/workflow/prompt-to-nodes — Prompt-to-Workflow Canvas Builder.
+// Parses natural language into { workflow_name, nodes, edges, summary, warnings }.
+export function usePromptToNodes() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: (prompt) => call('/ai-agents/workflow/prompt-to-nodes', { method: 'POST', body: { prompt } }),
+  });
+}

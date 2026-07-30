@@ -11,7 +11,7 @@ import { useRunSalesAgent, useSalesRuns } from '@/lib/queries/aiAgents';
 function scoreTone(s) {
   if (s >= 70) return { bg: 'bg-red-50 text-red-700 ring-red-200',   bar: 'from-red-500 to-rose-500'    };
   if (s >= 40) return { bg: 'bg-amber-50 text-amber-700 ring-amber-200', bar: 'from-amber-500 to-orange-400' };
-  return        { bg: 'bg-blue-50 text-blue-700 ring-blue-200',       bar: 'from-blue-400 to-blue-500'   };
+  return        { bg: 'bg-sky-50 text-sky-700 ring-sky-200',       bar: 'from-sky-400 to-sky-500'   };
 }
 
 /* ─── embedded Sales Agent panel ───────────── */

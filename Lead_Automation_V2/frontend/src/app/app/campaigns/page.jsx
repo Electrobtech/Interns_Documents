@@ -44,14 +44,14 @@ const STATUS_CFG = {
   needs_approval: { label: 'Needs Approval',  Icon: ShieldCheck,  bg: 'bg-violet-50',  text: 'text-violet-700', pulse: false },
   scheduled:      { label: 'Scheduled',       Icon: Clock,        bg: 'bg-amber-50',   text: 'text-amber-700',  pulse: false },
   sent:           { label: 'Sent',            Icon: CheckCircle2, bg: 'bg-emerald-50', text: 'text-emerald-700',pulse: false },
-  active:         { label: 'Active',          Icon: Play,         bg: 'bg-blue-50',    text: 'text-blue-700',   pulse: true  },
+  active:         { label: 'Active',          Icon: Play,         bg: 'bg-violet-50',    text: 'text-violet-700',   pulse: true  },
   paused:         { label: 'Paused',          Icon: Pause,        bg: 'bg-orange-50',  text: 'text-orange-700', pulse: false },
   rejected:       { label: 'Rejected',        Icon: XCircle,      bg: 'bg-red-50',     text: 'text-red-700',    pulse: false },
   failed:         { label: 'Failed',          Icon: XCircle,      bg: 'bg-red-50',     text: 'text-red-700',    pulse: false },
 };
 
 const TYPE_CFG = {
-  broadcast:     { label: 'Broadcast',     bg: 'bg-blue-50   text-blue-700'    },
+  broadcast:     { label: 'Broadcast',     bg: 'bg-violet-50   text-violet-700'    },
   drip:          { label: 'Drip',          bg: 'bg-violet-50 text-violet-700'  },
   transactional: { label: 'Transactional', bg: 'bg-teal-50   text-teal-700'    },
 };
@@ -99,7 +99,7 @@ function CampaignRow({ c, onDelete, onSubmitForApproval, idx }) {
   const [menu, setMenu] = useState(false);
 
   return (
-    <tr className="border-b border-slate-50 hover:bg-blue-50/30 transition-colors animate-slide-up" style={{ animationDelay: `${idx * 30}ms` }}>
+    <tr className="border-b border-slate-50 hover:bg-violet-50/30 transition-colors animate-slide-up" style={{ animationDelay: `${idx * 30}ms` }}>
       <td className="px-4 py-3 min-w-0 max-w-xs">
         <p className="text-sm font-semibold text-slate-800 truncate">{c.name}</p>
         {c.message_body && <p className="text-[11px] text-slate-400 truncate mt-0.5">{c.message_body}</p>}
@@ -110,7 +110,7 @@ function CampaignRow({ c, onDelete, onSubmitForApproval, idx }) {
       <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
         {c.scheduled_at ? (
           <span className="flex items-center gap-1.5">
-            <Calendar size={11} className="text-blue-400" /> {fmtDate(c.scheduled_at)} {fmtTime(c.scheduled_at)}
+            <Calendar size={11} className="text-violet-400" /> {fmtDate(c.scheduled_at)} {fmtTime(c.scheduled_at)}
           </span>
         ) : (
           <span className="text-slate-400">Not scheduled</span>
@@ -181,7 +181,7 @@ function CreateModal({ onClose, onCreate }) {
         {/* modal header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl z-10">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600">
+            <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-rose-100 text-violet-600">
               <Megaphone size={15} />
             </div>
             <div>
@@ -345,7 +345,7 @@ export default function CampaignsPage() {
       {/* ── page header ─────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600 shadow-sm">
+          <div className="p-2.5 rounded-2xl bg-gradient-to-br from-violet-50 to-rose-100 text-violet-600 shadow-sm">
             <Megaphone size={20} />
           </div>
           <div>
@@ -363,7 +363,7 @@ export default function CampaignsPage() {
       {/* ── KPI stats row ───────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {[
-          { label: 'Total',          value: stats.total,         icon: Megaphone,   from: 'from-blue-50',    to: 'to-indigo-100', text: 'text-blue-600'    },
+          { label: 'Total',          value: stats.total,         icon: Megaphone,   from: 'from-violet-50',    to: 'to-rose-100', text: 'text-violet-600'    },
           { label: 'Active',         value: stats.active,        icon: TrendingUp,  from: 'from-emerald-50', to: 'to-teal-100',   text: 'text-emerald-600' },
           { label: 'Scheduled',      value: stats.scheduled,     icon: Calendar,    from: 'from-amber-50',   to: 'to-orange-100', text: 'text-amber-600'   },
           { label: 'Needs Approval', value: stats.needsApproval, icon: ShieldCheck, from: 'from-violet-50',  to: 'to-purple-100', text: 'text-violet-600'  },
@@ -492,15 +492,15 @@ export default function CampaignsPage() {
           </div>
 
           {/* AI Broadcast tip */}
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-5 text-white">
+          <div className="bg-gradient-to-br from-violet-600 to-rose-700 rounded-2xl p-5 text-white">
             <div className="flex items-center gap-2 mb-2">
-              <Sparkles size={15} className="text-blue-200" />
-              <p className="text-xs font-bold text-blue-100">Marketing Agent</p>
+              <Sparkles size={15} className="text-violet-200" />
+              <p className="text-xs font-bold text-violet-100">Marketing Agent</p>
             </div>
             <p className="text-sm font-bold leading-snug mb-3">
               Generate campaign content from your knowledge base
             </p>
-            <p className="text-[11px] text-blue-200 leading-relaxed mb-4">
+            <p className="text-[11px] text-violet-200 leading-relaxed mb-4">
               The Marketing Agent can write broadcasts, drip sequences, and ad copy grounded in your uploaded documents.
             </p>
             <a href="/ai-agents"

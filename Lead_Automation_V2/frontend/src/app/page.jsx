@@ -12,6 +12,7 @@ import {
   ScanSearch, Route, RefreshCw, LineChart, Linkedin, FileText, Upload, 
   Check, PlayCircle, Plus, Eye, Share2, Layers, Database
 } from 'lucide-react';
+import ChatAssistant from '../components/landing/ChatAssistant';
 
 /* ─── GSAP dynamic import helper ────────────────────────────────── */
 let gsap, ScrollTrigger;
@@ -462,62 +463,459 @@ function StepVisual({ index }) {
   );
 }
 
+/* ── AI Engine diagram ──────────────────────────────────────────────
+   Channels fan in on the left, converge on the AI core, and fan back out
+   as concrete outcomes on the right. Drawn as one SVG in a fixed 1200x620
+   coordinate space with the HTML nodes positioned from the SAME numbers —
+   so the curves always terminate exactly on a card edge instead of drifting
+   out of alignment the way hand-placed absolute offsets do. */
+
+const DIAG_W = 1200;
+const DIAG_H = 620;
+const CORE = { x: 600, y: 300, r: 78 };
+const LEFT_X = 330;   // right edge of the channel column
+const RIGHT_X = 870;  // left edge of the outcome column
+
+const FLOW_CHANNELS = [
+  { name: 'WhatsApp',  icon: MessageCircle,  count: 148, color: '#22c55e', y: 60 },
+  { name: 'Instagram', icon: InstagramIcon,  count: 61,  color: '#ec4899', y: 128 },
+  { name: 'Messenger', icon: MessagesSquare, count: 34,  color: '#3b82f6', y: 196 },
+  { name: 'LinkedIn',  icon: Linkedin,       count: 27,  color: '#0ea5e9', y: 264 },
+  { name: 'Web chat',  icon: Globe,          count: 79,  color: '#a78bfa', y: 332 },
+  { name: 'Email',     icon: Mail,           count: 44,  color: '#f43f5e', y: 400 },
+  { name: 'SMS',       icon: Smartphone,     count: 18,  color: '#f59e0b', y: 468 },
+  { name: 'Voice',     icon: Phone,          count: 11,  color: '#14b8a6', y: 536 },
+];
+
+const OUTCOMES = [
+  { title: 'Auto reply sent',  badge: 'Success',     tone: 'emerald', icon: CheckCircle2, l1: '1,062 replies sent automatically', l2: '82.6% resolved by AI',  color: '#34d399', y: 92 },
+  { title: 'Human handoff',    badge: 'In progress', tone: 'amber',   icon: UserCheck,    l1: '84 conversations assigned',        l2: 'Median wait: 2m 11s',   color: '#fbbf24', y: 232 },
+  { title: 'Qualified lead',   badge: 'New',         tone: 'violet',  icon: TrendingUp,   l1: '138 qualified leads captured',     l2: '₹42.8L pipeline added', color: '#a78bfa', y: 372 },
+  { title: 'CRM updated',      badge: 'Synced',      tone: 'sky',     icon: Database,     l1: 'Every conversation logged',        l2: 'Contacts & deals updated', color: '#38bdf8', y: 512 },
+];
+
+// Satellite capabilities orbiting the core, evenly spaced from 12 o'clock.
+const SATELLITES = [
+  { label: 'Intent\nDetection',   icon: ScanSearch },
+  { label: 'Knowledge\nSearch (RAG)', icon: Layers },
+  { label: 'Lead\nScoring',       icon: BarChart3 },
+  { label: 'Smart\nRouting',      icon: Share2 },
+  { label: 'Draft\nReply',        icon: FileText },
+  { label: 'CRM\nMatch',          icon: Plug },
+  { label: 'Sentiment\nAnalysis', icon: Cpu },
+];
+
+const BADGE_TONES = {
+  emerald: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25',
+  amber:   'bg-amber-500/15 text-amber-300 border-amber-500/25',
+  violet:  'bg-violet-500/15 text-violet-300 border-violet-500/25',
+  sky:     'bg-sky-500/15 text-sky-300 border-sky-500/25',
+};
+
+// Cubic bezier that leaves horizontally and arrives horizontally, so every
+// curve meets the core tangentially rather than at a hard angle.
+function curveTo(x1, y1, x2, y2) {
+  const dx = Math.abs(x2 - x1) * 0.55;
+  return `M ${x1},${y1} C ${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`;
+}
+
 function StepFlow() {
-  const [active, setActive] = useState(0);
-
-  useEffect(() => {
-    const t = setTimeout(() => setActive((a) => (a + 1) % STEP_DATA.length), STEP_DURATION);
-    return () => clearTimeout(t);
-  }, [active]);
-
-  const s = STEP_DATA[active];
+  const satPositions = SATELLITES.map((s, i) => {
+    const angle = (-90 + i * (360 / SATELLITES.length)) * (Math.PI / 180);
+    const R = 152;
+    return { ...s, x: CORE.x + R * Math.cos(angle), y: CORE.y + R * Math.sin(angle) };
+  });
 
   return (
     <div className="relative">
-      {/* segmented, auto-filling progress bar */}
-      <div className="flex gap-2 mb-10">
-        {STEP_DATA.map((step, i) => (
-          <button key={i} onClick={() => setActive(i)} className="flex-1 group text-left">
-            <div className="h-1 rounded-full bg-white/10 overflow-hidden mb-3">
-              {i < active && <div className="h-full w-full rounded-full" style={{ background: step.accent }} />}
-              {i === active && (
-                <div key={active} className="h-full rounded-full animate-fill-bar" style={{ background: step.accent, animationDuration: `${STEP_DURATION}ms` }} />
-              )}
-            </div>
-            <p className={`text-xs font-bold uppercase tracking-widest transition-colors ${i === active ? 'text-white' : 'text-slate-500 group-hover:text-slate-300'}`}>
-              {step.kicker}
-            </p>
-          </button>
-        ))}
-      </div>
+      <div
+        className="relative mx-auto w-full"
+        style={{ maxWidth: DIAG_W, aspectRatio: `${DIAG_W} / ${DIAG_H}` }}
+      >
+        {/* Connector lines. Sits under the nodes; pointer-events off so the
+            cards above stay hoverable. */}
+        <svg
+          viewBox={`0 0 ${DIAG_W} ${DIAG_H}`}
+          className="absolute inset-0 h-full w-full pointer-events-none"
+          fill="none"
+        >
+          <defs>
+            {FLOW_CHANNELS.map((c, i) => (
+              <linearGradient key={`gi${i}`} id={`gi${i}`} x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor={c.color} stopOpacity="0.05" />
+                <stop offset="55%" stopColor={c.color} stopOpacity="0.85" />
+                <stop offset="100%" stopColor={c.color} stopOpacity="0.25" />
+              </linearGradient>
+            ))}
+            {OUTCOMES.map((o, i) => (
+              <linearGradient key={`go${i}`} id={`go${i}`} x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor={o.color} stopOpacity="0.25" />
+                <stop offset="45%" stopColor={o.color} stopOpacity="0.85" />
+                <stop offset="100%" stopColor={o.color} stopOpacity="0.05" />
+              </linearGradient>
+            ))}
+            <radialGradient id="coreGlow">
+              <stop offset="0%" stopColor="#fb7185" stopOpacity="0.55" />
+              <stop offset="70%" stopColor="#e11d48" stopOpacity="0.12" />
+              <stop offset="100%" stopColor="#e11d48" stopOpacity="0" />
+            </radialGradient>
+          </defs>
 
-      <AnimatePresence mode="wait">
-        <motion.div key={active}
-          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
-          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-          className="grid gap-10 md:grid-cols-2 items-center">
-          <div>
-            <div className={`inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${s.ring} shadow-lg mb-6`}>
-              <s.icon className="h-7 w-7 text-white" />
-            </div>
-            <h3 className="text-2xl sm:text-3xl font-black text-white mb-3">{s.title}</h3>
-            <p className="text-base text-slate-400 leading-relaxed max-w-md">{s.copy}</p>
+          <circle cx={CORE.x} cy={CORE.y} r={230} fill="url(#coreGlow)" />
+
+          {/* dashed orbit the satellites sit on */}
+          <circle cx={CORE.x} cy={CORE.y} r={152} stroke="rgba(251,113,133,0.25)" strokeWidth="1" strokeDasharray="4 7" />
+
+          {/* inbound: channel -> core */}
+          {FLOW_CHANNELS.map((c, i) => {
+            const d = curveTo(LEFT_X, c.y, CORE.x - CORE.r - 6, CORE.y);
+            return (
+              <g key={c.name}>
+                <path d={d} stroke={`url(#gi${i})`} strokeWidth="1.6" />
+                <path
+                  d={d}
+                  stroke={c.color}
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeDasharray="3 190"
+                  className="animate-dash-flow"
+                  style={{ animationDelay: `${i * 0.45}s` }}
+                />
+              </g>
+            );
+          })}
+
+          {/* outbound: core -> outcome */}
+          {OUTCOMES.map((o, i) => {
+            const d = curveTo(CORE.x + CORE.r + 6, CORE.y, RIGHT_X, o.y);
+            return (
+              <g key={o.title}>
+                <path d={d} stroke={`url(#go${i})`} strokeWidth="1.6" />
+                <path
+                  d={d}
+                  stroke={o.color}
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeDasharray="3 170"
+                  className="animate-dash-flow"
+                  style={{ animationDelay: `${0.9 + i * 0.5}s` }}
+                />
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* ── Left: channels ─────────────────────────────── */}
+        <p
+          className="absolute text-[11px] font-bold uppercase tracking-widest text-slate-400"
+          style={{ left: `${(24 / DIAG_W) * 100}%`, top: `${(14 / DIAG_H) * 100}%` }}
+        >
+          All your channels
+        </p>
+        {FLOW_CHANNELS.map((c) => (
+          <div
+            key={c.name}
+            className="absolute flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.06] backdrop-blur-md px-3 py-2 hover:border-white/25 hover:bg-white/[0.1] transition-colors"
+            style={{
+              left: `${(24 / DIAG_W) * 100}%`,
+              width: `${((LEFT_X - 24) / DIAG_W) * 100}%`,
+              top: `${(c.y / DIAG_H) * 100}%`,
+              transform: 'translateY(-50%)',
+            }}
+          >
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg" style={{ background: `${c.color}22`, color: c.color }}>
+              <c.icon className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-[13px] font-bold text-white truncate">{c.name}</span>
+            <span className="ml-auto text-[11px] font-bold text-slate-400 tabular-nums">{c.count}</span>
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: c.color }} />
           </div>
-          <StepVisual index={active} />
-        </motion.div>
-      </AnimatePresence>
+        ))}
 
-      <div className="mt-14 flex flex-wrap items-center justify-center gap-3">
-        {[
-          { name: 'WhatsApp', icon: MessageCircle }, { name: 'Instagram', icon: InstagramIcon }, { name: 'Messenger', icon: MessagesSquare },
-          { name: 'Web chat', icon: Globe }, { name: 'Email', icon: Mail }, { name: 'SMS', icon: Smartphone }, { name: 'Voice', icon: Phone },
-        ].map((ch) => (
-          <span key={ch.name} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-slate-300">
-            <ch.icon className="h-3.5 w-3.5" /> {ch.name}
-          </span>
+        {/* ── Center: AI core + satellites ────────────────── */}
+        <div
+          className="absolute -translate-x-1/2 -translate-y-1/2"
+          style={{ left: '50%', top: `${(CORE.y / DIAG_H) * 100}%` }}
+        >
+          <div className="relative grid place-items-center rounded-full bg-gradient-to-br from-rose-500 via-fuchsia-500 to-orange-400 shadow-[0_0_60px_-8px_rgba(251,113,133,0.85)]"
+            style={{ height: CORE.r * 2 * 0.9, width: CORE.r * 2 * 0.9 }}>
+            <div className="absolute inset-[3px] rounded-full bg-[#1a0a12]/85 backdrop-blur-sm grid place-items-center border border-white/10">
+              <Bot className="h-6 w-6 text-white mb-0.5" />
+              <span className="text-[10px] font-black text-white tracking-wide">AI Engine</span>
+            </div>
+          </div>
+        </div>
+
+        {satPositions.map((s) => (
+          <div
+            key={s.label}
+            className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 w-24"
+            style={{ left: `${(s.x / DIAG_W) * 100}%`, top: `${(s.y / DIAG_H) * 100}%` }}
+          >
+            <span className="grid h-9 w-9 place-items-center rounded-full border border-rose-400/30 bg-[#1a0a12]/80 backdrop-blur-sm text-rose-300 shadow-lg">
+              <s.icon className="h-4 w-4" />
+            </span>
+            <span className="text-[9px] font-bold leading-[1.15] text-center text-slate-400 whitespace-pre-line">{s.label}</span>
+          </div>
+        ))}
+
+        {/* ── Right: outcomes ─────────────────────────────── */}
+        <p
+          className="absolute text-[11px] font-bold uppercase tracking-widest text-slate-400 text-right"
+          style={{ right: `${(24 / DIAG_W) * 100}%`, top: `${(14 / DIAG_H) * 100}%` }}
+        >
+          Outcomes that drive growth
+        </p>
+        {OUTCOMES.map((o) => (
+          <div
+            key={o.title}
+            className="absolute rounded-xl border border-white/10 bg-white/[0.06] backdrop-blur-md p-3 hover:border-white/25 hover:bg-white/[0.1] transition-colors"
+            style={{
+              right: `${(24 / DIAG_W) * 100}%`,
+              width: `${((DIAG_W - RIGHT_X - 24) / DIAG_W) * 100}%`,
+              top: `${(o.y / DIAG_H) * 100}%`,
+              transform: 'translateY(-50%)',
+            }}
+          >
+            <div className="flex items-start gap-2.5">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg" style={{ background: `${o.color}22`, color: o.color }}>
+                <o.icon className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-[13px] font-bold text-white truncate">{o.title}</p>
+                  <span className={`ml-auto shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${BADGE_TONES[o.tone]}`}>{o.badge}</span>
+                </div>
+                <p className="text-[10px] text-slate-400 truncate mt-0.5">{o.l1}</p>
+                <p className="text-[10px] text-slate-500 truncate">{o.l2}</p>
+              </div>
+            </div>
+          </div>
         ))}
       </div>
     </div>
+  );
+}
+
+/* ─── "Why ConnectSphere Wins" — fragmented apps merge into a unified AI-run
+   dashboard through a glowing core, instead of a plain comparison table. ─── */
+const LEGACY_APPS = [
+  { id: 'wa',   label: 'WhatsApp',    sub: 'Rohan Verma · unread',   Icon: WhatsAppIcon,     badge: 4, left: '4%',  top: '4%',  w: 168, rot: -6,  ring: 'text-emerald-500' },
+  { id: 'mail', label: 'Inbox',       sub: '42 unread threads',      Icon: Mail,             badge: 12, left: '38%', top: '0%',  w: 176, rot: 4,  ring: 'text-sky-500' },
+  { id: 'sheet',label: 'Leads.xlsx',  sub: 'Manual copy-paste',      Icon: FileText,         spinner: true, left: '2%',  top: '46%', w: 172, rot: 5,  ring: 'text-amber-500' },
+  { id: 'crm',  label: 'Old CRM',     sub: 'Sync failed · 2h ago',   Icon: Database,         warn: true, left: '40%', top: '50%', w: 178, rot: -3, ring: 'text-red-500' },
+  { id: 'call', label: 'Missed Call', sub: '2 missed · no callback', Icon: Phone,            badge: 2, left: '14%', top: '78%', w: 168, rot: 3,  ring: 'text-slate-500' },
+  { id: 'msg',  label: 'Messenger',   sub: '1 new · unanswered',     Icon: MessagesSquare,   badge: 1, left: '46%', top: '80%', w: 172, rot: -5, ring: 'text-indigo-500' },
+];
+
+const UNIFIED_CARDS = [
+  { id: 'inbox',  title: 'Unified Inbox',      Icon: Inbox,      metric: '24 active',        accent: 'rose' },
+  { id: 'agent',  title: 'AI Agent',           Icon: Bot,        metric: 'Auto-replying',     accent: 'violet' },
+  { id: 'crm',    title: 'CRM Pipeline',       Icon: Layers,     metric: 'Deal moved → Won',  accent: 'emerald' },
+  { id: 'ana',    title: 'Live Analytics',     Icon: BarChart3,  metric: '+18% today',        accent: 'orange' },
+  { id: 'auto',   title: 'Automation Builder', Icon: Workflow,   metric: '6 flows live',      accent: 'rose' },
+  { id: 'score',  title: 'Lead Scoring',       Icon: TrendingUp, metric: 'Score 92',          accent: 'violet' },
+  { id: 'kb',     title: 'Knowledge Base',     Icon: FileText,   metric: '318 docs indexed',  accent: 'amber' },
+];
+
+const CARD_ACCENTS = {
+  rose:    { bg: 'bg-rose-50',    text: 'text-rose-600',    ring: 'ring-rose-200' },
+  violet:  { bg: 'bg-violet-50',  text: 'text-violet-600',  ring: 'ring-violet-200' },
+  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', ring: 'ring-emerald-200' },
+  orange:  { bg: 'bg-orange-50',  text: 'text-orange-600',  ring: 'ring-orange-200' },
+  amber:   { bg: 'bg-amber-50',   text: 'text-amber-600',   ring: 'ring-amber-200' },
+};
+
+const WIN_METRICS = [
+  { label: 'Response Time', from: 'Hours',   to: 'Seconds' },
+  { label: 'Setup Time',    from: '6 Weeks', to: 'A Few Hours' },
+  { label: 'Channels Live', from: '1',       to: '7 Connected' },
+];
+
+function MetricMorphCard({ label, from, to, trigger, delay = 0 }) {
+  const [morphed, setMorphed] = useState(false);
+  useEffect(() => {
+    if (!trigger) return;
+    const t = setTimeout(() => setMorphed(true), 900 + delay);
+    return () => clearTimeout(t);
+  }, [trigger, delay]);
+
+  return (
+    <motion.div
+      variants={fadeUp}
+      custom={delay / 120}
+      className={`rounded-2xl border p-6 text-center transition-all duration-700 ${
+        morphed
+          ? 'border-emerald-200 bg-emerald-50/40 shadow-[0_0_36px_-10px_rgba(16,185,129,0.4)]'
+          : 'border-slate-200 bg-white shadow-sm'
+      }`}
+    >
+      <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-3">{label}</p>
+      <div className="relative h-9">
+        <AnimatePresence mode="wait">
+          {!morphed ? (
+            <motion.p key="from" exit={{ y: -22, opacity: 0 }} transition={{ duration: 0.4 }} className="text-2xl font-black text-slate-400 line-through decoration-slate-300">
+              {from}
+            </motion.p>
+          ) : (
+            <motion.p key="to" initial={{ y: 22, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} className="text-2xl font-black text-emerald-600">
+              {to}
+            </motion.p>
+          )}
+        </AnimatePresence>
+      </div>
+      <div className={`mt-3 mx-auto h-1 w-10 rounded-full transition-colors duration-700 ${morphed ? 'bg-emerald-400' : 'bg-slate-200'}`} />
+    </motion.div>
+  );
+}
+
+function WhyWinsSection() {
+  const containerRef = useRef(null);
+  const isInView = useInView(containerRef, { once: true, margin: '-120px' });
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+
+  const handleMouseMove = useCallback((e) => {
+    const rect = containerRef.current.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width - 0.5;
+    const py = (e.clientY - rect.top) / rect.height - 0.5;
+    setTilt({ x: px * 6, y: py * -6 });
+  }, []);
+
+  return (
+    <section id="compare" className="relative py-20 lg:py-28 overflow-hidden bg-white">
+      {/* Soft mesh gradient backdrop + floating particles — subtle, never competes with the product */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute -top-20 left-[10%] w-[36rem] h-[36rem] rounded-full bg-rose-100/40 blur-[120px]" />
+        <div className="absolute top-1/3 right-[5%] w-[30rem] h-[30rem] rounded-full bg-violet-100/40 blur-[120px]" />
+        <div className="absolute bottom-0 left-1/3 w-[28rem] h-[28rem] rounded-full bg-orange-100/40 blur-[120px]" />
+        {Array.from({ length: 14 }).map((_, i) => (
+          <span
+            key={i}
+            className="absolute h-1 w-1 rounded-full bg-rose-300/50 animate-float"
+            style={{ left: `${(i * 37) % 100}%`, top: `${(i * 53) % 100}%`, animationDuration: `${5 + (i % 5)}s`, animationDelay: `${i * 0.3}s` }}
+          />
+        ))}
+      </div>
+
+      <div ref={containerRef} onMouseMove={handleMouseMove} onMouseLeave={() => setTilt({ x: 0, y: 0 })} className="relative mx-auto max-w-[1400px] px-6 lg:px-12">
+
+        <RevealSection className="text-center max-w-2xl mx-auto mb-16 space-y-4">
+          <motion.span variants={fadeUp} custom={0} className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3.5 py-1 text-xs font-semibold text-rose-700">
+            <Zap className="h-3.5 w-3.5" /> Why switch
+          </motion.span>
+          <motion.h2 variants={fadeUp} custom={1} className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
+            Traditional platforms vs. ConnectSphere
+          </motion.h2>
+          <motion.p variants={fadeUp} custom={2} className="text-base text-slate-600 font-medium">
+            Most platforms solve one step of the customer journey. ConnectSphere orchestrates the entire lifecycle —
+            from the first message to qualified leads, CRM updates, and analytics — in one intelligent platform.
+          </motion.p>
+        </RevealSection>
+
+        {/* ── the transformation visual ── */}
+        <div
+          className="relative grid lg:grid-cols-[1fr_auto_1fr] gap-6 lg:gap-2 items-center transition-transform duration-300 ease-out"
+          style={{ transform: `perspective(1600px) rotateX(${tilt.y}deg) rotateY(${tilt.x}deg)` }}
+        >
+          {/* LEFT — fragmented legacy tools */}
+          <div className="relative h-[420px]">
+            <svg className="absolute inset-0 w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+              {[['12,14', '45,10'], ['45,10', '48,54'], ['12,14', '20,50'], ['20,50', '48,54'], ['22,82', '50,84'], ['48,54', '50,84']].map(([a, b], i) => {
+                const [x1, y1] = a.split(',');
+                const [x2, y2] = b.split(',');
+                return (
+                  <line
+                    key={i}
+                    x1={x1} y1={y1} x2={x2} y2={y2}
+                    stroke="#cbd5e1" strokeWidth="0.4" strokeDasharray="1.5 1.5"
+                    className="animate-break-blink" style={{ animationDelay: `${i * 0.5}s` }}
+                  />
+                );
+              })}
+            </svg>
+
+            {LEGACY_APPS.map((app, i) => (
+              <motion.div
+                key={app.id}
+                initial={{ opacity: 0, scale: 0.85 }}
+                animate={isInView ? { opacity: 1, scale: 1 } : {}}
+                transition={{ duration: 0.5, delay: i * 0.08 }}
+                className="absolute animate-float rounded-2xl border border-slate-200 bg-white/90 backdrop-blur-md shadow-md p-3.5"
+                style={{ left: app.left, top: app.top, width: app.w, transform: `rotate(${app.rot}deg)`, animationDuration: `${4.5 + i * 0.4}s`, animationDelay: `${i * 0.35}s` }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-slate-50 ${app.ring}`}>
+                    {app.spinner ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <app.Icon className="h-3.5 w-3.5" />}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-700 truncate">{app.label}</p>
+                    <p className="text-[10px] text-slate-400 truncate">{app.sub}</p>
+                  </div>
+                  {app.badge && (
+                    <span className="ml-auto shrink-0 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white animate-pulse">
+                      {app.badge}
+                    </span>
+                  )}
+                  {app.warn && <AlertTriangle className="ml-auto h-3.5 w-3.5 text-red-500 shrink-0" />}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* CENTER — glowing AI core */}
+          <div className="relative mx-auto h-[220px] w-[220px] shrink-0 grid place-items-center">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-rose-400/25 via-fuchsia-400/15 to-orange-300/25 blur-2xl animate-pulse-ring" />
+            <div className="absolute inset-3 rounded-full border border-dashed border-rose-300/60 animate-[spin_16s_linear_infinite]" />
+            <div className="absolute inset-8 rounded-full border border-dashed border-orange-300/50 animate-[spin_22s_linear_infinite_reverse]" />
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="absolute inset-0 animate-[spin_10s_linear_infinite]" style={{ animationDelay: `${i * -1.7}s` }}>
+                <span className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-rose-400 shadow-[0_0_8px_2px_rgba(244,63,94,0.5)]" />
+              </div>
+            ))}
+            <div className="relative h-24 w-24 rounded-full bg-gradient-to-br from-rose-500 via-fuchsia-500 to-orange-400 shadow-[0_0_50px_-6px_rgba(244,63,94,0.7)] grid place-items-center animate-pulse-ring">
+              <Cpu className="h-8 w-8 text-white" />
+            </div>
+            <span className="absolute -bottom-2 rounded-full bg-white border border-rose-100 px-3 py-1 text-[10px] font-bold text-rose-600 shadow-sm">AI Core</span>
+          </div>
+
+          {/* RIGHT — unified ConnectSphere dashboard, assembling */}
+          <div className="relative">
+            <div className="grid grid-cols-2 gap-3">
+              {UNIFIED_CARDS.map((card, i) => {
+                const accent = CARD_ACCENTS[card.accent];
+                return (
+                  <motion.div
+                    key={card.id}
+                    initial={{ opacity: 0, x: 24, scale: 0.92 }}
+                    animate={isInView ? { opacity: 1, x: 0, scale: 1 } : {}}
+                    transition={{ duration: 0.5, delay: 0.3 + i * 0.09, ease: [0.22, 1, 0.36, 1] }}
+                    className={`rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 ${card.id === 'kb' ? 'col-span-2' : ''}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${accent.bg} ${accent.text}`}>
+                        <card.Icon className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 truncate">{card.title}</p>
+                        <p className={`text-[10px] font-semibold truncate ${accent.text}`}>{card.metric}</p>
+                      </div>
+                      <span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* ── metrics row: morph on scroll-into-view ── */}
+        <div className="grid sm:grid-cols-3 gap-5 mt-16">
+          {WIN_METRICS.map((m, i) => (
+            <MetricMorphCard key={m.label} {...m} trigger={isInView} delay={i * 150} />
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -650,12 +1048,12 @@ export default function Landing() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-[#FAF8FC] text-slate-900 font-sans antialiased selection:bg-pink-100 selection:text-pink-900">
+    <main className="relative min-h-screen overflow-x-hidden bg-[#FFF8F4] text-slate-900 font-sans antialiased selection:bg-rose-100 selection:text-rose-900">
       
       {/* ── Ambient Background glows (Reactive to cursor) ── */}
       <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
         <div 
-          className="absolute rounded-full w-[600px] h-[600px] bg-gradient-to-tr from-rose-400/10 to-violet-400/5 blur-[120px] transition-transform duration-700 ease-out"
+          className="absolute rounded-full w-[600px] h-[600px] bg-gradient-to-tr from-rose-400/12 to-orange-300/8 blur-[120px] transition-transform duration-700 ease-out"
           style={{ 
             transform: `translate(${mousePos.x * 0.05}px, ${mousePos.y * 0.05}px)`, 
             top: '5%', 
@@ -663,7 +1061,7 @@ export default function Landing() {
           }} 
         />
         <div 
-          className="absolute rounded-full w-[500px] h-[500px] bg-gradient-to-br from-violet-400/10 to-pink-400/5 blur-[120px] transition-transform duration-700 ease-out"
+          className="absolute rounded-full w-[500px] h-[500px] bg-gradient-to-br from-orange-300/10 to-rose-400/8 blur-[120px] transition-transform duration-700 ease-out"
           style={{ 
             transform: `translate(${mousePos.x * -0.04}px, ${mousePos.y * -0.04}px)`, 
             top: '30%', 
@@ -671,7 +1069,7 @@ export default function Landing() {
           }} 
         />
         <div 
-          className="absolute rounded-full w-[700px] h-[700px] bg-gradient-to-tr from-fuchsia-400/10 to-rose-400/5 blur-[140px] transition-transform duration-700 ease-out"
+          className="absolute rounded-full w-[700px] h-[700px] bg-gradient-to-tr from-rose-400/10 to-amber-300/6 blur-[140px] transition-transform duration-700 ease-out"
           style={{ 
             transform: `translate(${mousePos.x * 0.03}px, ${mousePos.y * 0.03}px)`, 
             bottom: '15%', 
@@ -712,7 +1110,7 @@ export default function Landing() {
             <Link href="/login" className="text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors">
               Sign In
             </Link>
-            <Link href="/register" className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-violet-600 px-6 py-2.5 text-sm font-bold text-white shadow-md shadow-rose-500/15 hover:shadow-rose-500/30 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150">
+            <Link href="/register" className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-rose-600 to-violet-600 px-6 py-2.5 text-sm font-bold text-white shadow-md shadow-violet-500/15 hover:shadow-violet-500/30 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150">
               Register
             </Link>
           </div>
@@ -748,7 +1146,7 @@ export default function Landing() {
               {/* Headline */}
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black leading-[1.05] tracking-tight text-slate-900">
                 Every lead.{' '}
-                <span className="bg-gradient-to-r from-rose-500 via-violet-600 to-fuchsia-500 bg-clip-text text-transparent">
+                <span className="bg-gradient-to-r from-rose-600 via-fuchsia-600 to-violet-600 bg-clip-text text-transparent">
                   Every channel.
                 </span>{' '}
                 Answered in seconds.
@@ -787,12 +1185,12 @@ export default function Landing() {
 
               {/* ── CTAs ── */}
               <div className="flex flex-col sm:flex-row gap-4 pt-2">
-                <Link href="/login" className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-violet-600 px-7 py-4 text-base font-bold text-white shadow-lg shadow-rose-500/20 hover:shadow-rose-500/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">
+                <Link href="/login" className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-violet-600 px-7 py-4 text-base font-bold text-white shadow-lg shadow-violet-500/20 hover:shadow-violet-500/35 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">
                   Book Live Demo
                   <ArrowRight className="h-5 w-5" />
                 </Link>
                 <button className="group inline-flex items-center justify-center gap-2.5 rounded-xl border border-slate-200 bg-white/80 backdrop-blur-md px-7 py-4 text-base font-bold text-slate-800 transition-all hover:bg-slate-50 hover:border-slate-300">
-                  <PlayCircle className="h-5 w-5 text-violet-600 transition-transform group-hover:scale-110" />
+                  <PlayCircle className="h-5 w-5 text-rose-600 transition-transform group-hover:scale-110" />
                   See Video Demo
                 </button>
               </div>
@@ -909,7 +1307,7 @@ export default function Landing() {
                 border: 'border-fuchsia-100' 
               }
             ].map((item, i) => (
-              <motion.div key={i} variants={fadeUp} custom={i} className="relative rounded-2xl border border-slate-200/60 bg-white p-8 shadow-sm hover:bg-violet-100 hover:border-violet-300 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+              <motion.div key={i} variants={fadeUp} custom={i} className="relative rounded-2xl border border-slate-200/60 bg-white p-8 shadow-sm hover:bg-violet-50 hover:border-violet-300 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
                 <span className={`text-4xl font-black ${item.color}`}><AnimatedCounter target={item.stat} suffix={item.suffix} /></span>
                 <h3 className="mt-3 text-base font-bold text-slate-900">{item.label}</h3>
                 <p className="mt-2 text-sm text-slate-500 leading-relaxed font-semibold">{item.copy}</p>
@@ -920,12 +1318,44 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─────────────────────────────────── 3. 7-CHANNEL INTEGRATION BENTO GRID ─── */}
+      {/* ─────────────────────────────────── 3. HOW IT WORKS (AI ENGINE) ─── */}
+      <section id="builder" className="relative py-24 lg:py-32 overflow-hidden" style={{ background: 'linear-gradient(135deg, #1a0a12 0%, #2d0f1f 45%, #3b1020 100%)' }}>
+        {/* Dot grid backdrop */}
+        <div className="absolute inset-0 z-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, rgba(99,102,241,0.15) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+        {/* Glow orbs */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-rose-600/10 blur-3xl z-0 pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full bg-rose-500/10 blur-3xl z-0 pointer-events-none" />
+
+        <div className="relative z-10 mx-auto max-w-[1400px] px-6 lg:px-12">
+          
+          {/* Section header */}
+          <div className="gsap-reveal text-center max-w-3xl mx-auto mb-16 space-y-4">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/10 px-4 py-1.5 text-xs font-bold text-rose-300 backdrop-blur-sm">
+              <Workflow className="h-3.5 w-3.5" /> See It In Action
+            </span>
+            <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
+              One canvas. Zero code.{' '}
+              <span style={{ background: 'linear-gradient(90deg, #fdba74, #fda4af)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                Complete automation.
+              </span>
+            </h2>
+            <p className="text-base text-slate-400 font-medium max-w-xl mx-auto">
+              Every channel funnels into one AI layer, and every reply writes straight back to your CRM — nothing hand-wired, nothing to keep in sync yourself.
+            </p>
+          </div>
+
+          <StepFlow />
+
+        </div>
+      </section>
+
+
+      {/* ─────────────────────────────────── 4. 7-CHANNEL INTEGRATION BENTO GRID ─── */}
       <section id="integrations" className="relative py-20 lg:py-32 overflow-hidden bg-orange-50/60 border-y border-orange-100/60">
         <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
           
           <RevealSection className="text-center max-w-2xl mx-auto mb-8 space-y-4">
-            <motion.span variants={fadeUp} custom={0} className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 border border-violet-100 px-3.5 py-1 text-xs font-semibold text-violet-700">
+            <motion.span variants={fadeUp} custom={0} className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3.5 py-1 text-xs font-semibold text-rose-700">
               <Layers className="h-3.5 w-3.5" /> Integration Ecosystem
             </motion.span>
             <motion.h2 variants={fadeUp} custom={1} className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
@@ -1069,58 +1499,26 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─────────────────────────────────── 4. INTERACTIVE WORKFLOW BUILDER ─── */}
-      <section id="builder" className="relative py-24 lg:py-32 overflow-hidden" style={{ background: 'linear-gradient(135deg, #0a0520 0%, #130d3a 40%, #0d1f4a 100%)' }}>
-        {/* Dot grid backdrop */}
-        <div className="absolute inset-0 z-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, rgba(99,102,241,0.15) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
-        {/* Glow orbs */}
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-violet-600/10 blur-3xl z-0 pointer-events-none" />
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full bg-rose-500/10 blur-3xl z-0 pointer-events-none" />
-
-        <div className="relative z-10 mx-auto max-w-[1400px] px-6 lg:px-12">
-          
-          {/* Section header */}
-          <div className="gsap-reveal text-center max-w-3xl mx-auto mb-16 space-y-4">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-1.5 text-xs font-bold text-violet-300 backdrop-blur-sm">
-              <Workflow className="h-3.5 w-3.5" /> See It In Action
-            </span>
-            <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
-              One canvas. Zero code.{' '}
-              <span style={{ background: 'linear-gradient(90deg, #c4b5fd, #fda4af)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                Complete automation.
-              </span>
-            </h2>
-            <p className="text-base text-slate-400 font-medium max-w-xl mx-auto">
-              Every channel funnels into one AI layer, and every reply writes straight back to your CRM — nothing hand-wired, nothing to keep in sync yourself.
-            </p>
-          </div>
-
-          <StepFlow />
-
-        </div>
-      </section>
-
-
       {/* ─────────────────────────────────── 5. THE THREE-AGENT SHOWCASE ─── */}
       <section id="agents" className="relative py-20 lg:py-32">
         <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
           
           <RevealSection className="text-center max-w-2xl mx-auto mb-16 space-y-4">
-            <motion.span variants={fadeUp} custom={0} className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 border border-violet-100 px-3.5 py-1 text-xs font-semibold text-violet-700">
+            <motion.span variants={fadeUp} custom={0} className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3.5 py-1 text-xs font-semibold text-rose-700">
               <Bot className="h-3.5 w-3.5" /> Dedicated AI Agents
             </motion.span>
             <motion.h2 variants={fadeUp} custom={1} className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
-              Three agents. One unified lifecycle.
+              Four agents. One unified lifecycle.
             </motion.h2>
             <motion.p variants={fadeUp} custom={2} className="text-base text-slate-600 font-medium">
-              We divide execution roles between three specialized agents, ensuring leads are attracted, qualified, and retained efficiently.
+              Execution is split across four specialists — so every lead is attracted, qualified, answered on the phone, and retained without anyone chasing it manually.
             </motion.p>
           </RevealSection>
 
-          <RevealSection className="grid gap-8 lg:grid-cols-3">
+          <RevealSection className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
             
             {/* Marketing Agent Card */}
-            <motion.div variants={fadeUp} custom={0} className="relative rounded-3xl border border-slate-200/80 bg-white p-8 shadow-sm hover:bg-violet-100 hover:border-violet-300 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+            <motion.div variants={fadeUp} custom={0} className="relative rounded-3xl border border-slate-200/80 bg-white p-8 shadow-sm hover:bg-violet-50 hover:border-violet-300 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-rose-500 to-fuchsia-500 text-white shadow-md shadow-rose-500/20">
                 <Megaphone className="h-6 w-6" />
               </div>
@@ -1147,10 +1545,28 @@ export default function Landing() {
                   </div>
                 </div>
               </div>
+
+              {/* Active automations running right now */}
+              <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-2.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Active Automations</p>
+                {[
+                  { label: 'Cold Lead Drip Sequence', meta: '3-step · 14 leads queued', dot: 'bg-emerald-500' },
+                  { label: 'Story Reply Auto-Responder', meta: 'Instagram · replying live', dot: 'bg-emerald-500' },
+                  { label: 'Comment-to-DM Capture', meta: 'Facebook · 6 new today', dot: 'bg-amber-500' },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-start gap-2">
+                    <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${row.dot}`} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-700 truncate">{row.label}</p>
+                      <p className="text-[10px] text-slate-400 font-semibold truncate">{row.meta}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </motion.div>
 
             {/* Sales Agent Card (With interactive Lead Scorer) */}
-            <motion.div variants={fadeUp} custom={1} className="relative rounded-3xl border border-slate-200/80 bg-white p-8 shadow-sm hover:bg-violet-100 hover:border-violet-300 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+            <motion.div variants={fadeUp} custom={1} className="relative rounded-3xl border border-slate-200/80 bg-white p-8 shadow-sm hover:bg-violet-50 hover:border-violet-300 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-violet-600 to-violet-500 text-white shadow-md shadow-violet-500/20">
                 <TrendingUp className="h-6 w-6" />
               </div>
@@ -1265,7 +1681,7 @@ export default function Landing() {
             </motion.div>
 
             {/* Support Agent Card */}
-            <motion.div variants={fadeUp} custom={2} className="relative rounded-3xl border border-slate-200/80 bg-white p-8 shadow-sm hover:bg-violet-100 hover:border-violet-300 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+            <motion.div variants={fadeUp} custom={2} className="relative rounded-3xl border border-slate-200/80 bg-white p-8 shadow-sm hover:bg-violet-50 hover:border-violet-300 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
               <div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-fuchsia-600 to-teal-400 text-white shadow-md shadow-fuchsia-500/20">
                   <Headset className="h-6 w-6" />
@@ -1291,137 +1707,51 @@ export default function Landing() {
               </div>
             </motion.div>
 
-          </RevealSection>
-
-        </div>
-      </section>
-
-      {/* ─────────────────────────────────── 6. RAG KNOWLEDGE BASE SIMULATOR ─── */}
-      <section className="relative py-20 lg:py-28 bg-rose-50/50 border-y border-rose-100/60">
-        <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
-          
-          <div className="grid gap-12 lg:grid-cols-[0.45fr_0.55fr] items-center">
-            
-            {/* Text description - slides in from left */}
-            <motion.div
-              initial={{ opacity: 0, x: -50 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, margin: '-80px' }}
-              transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-              className="space-y-6"
-            >
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3.5 py-1 text-xs font-semibold text-rose-700">
-                <Database className="h-3.5 w-3.5" /> Retrieval-Augmented Generation (RAG)
-              </span>
-              <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight leading-tight" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
-                Grounded in your company docs. No hallucinations.
-              </h2>
-              <p className="text-base text-slate-600 font-medium">
-                Upload your product guides, FAQs, AMC rules, or pricing sheets. Our RAG engine extracts the details, builds structured embeddings, and limits the AI to answering solely from what you document.
-              </p>
-
-              <div className="space-y-3 pt-2">
-                {[
-                  'Supports PDF, CSV, Word, and Excel formats.',
-                  'Auto-chunking algorithm creates vector records dynamically.',
-                  'Gives citations in agent replies for human auditing.'
-                ].map((point, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -20 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.5, delay: 0.2 + i * 0.1, ease: 'easeOut' }}
-                    className="flex items-start gap-3"
-                  >
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600 mt-0.5">
-                      <Check className="h-3 w-3" />
-                    </span>
-                    <p className="text-sm font-semibold text-slate-700">{point}</p>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Document Uploader Simulator - slides in from right */}
-            <motion.div
-              initial={{ opacity: 0, x: 50 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, margin: '-80px' }}
-              transition={{ duration: 0.7, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-              className="border border-slate-200/80 bg-white rounded-3xl p-6 shadow-sm hover:bg-violet-100 hover:border-violet-300 hover:shadow-xl transition-all duration-300"
-            >
-              <div className="mb-4 border-b border-slate-100 pb-3 flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-800">Knowledge Ingestion panel</span>
-                <span className="text-[10px] text-slate-400 font-semibold">Database collections</span>
+            {/* Voice Agent Card — live-call waveform keeps it visibly "on air" */}
+            <motion.div variants={fadeUp} custom={3} className="relative rounded-3xl border border-slate-200/80 bg-white p-8 shadow-sm hover:bg-violet-50 hover:border-violet-300 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+              <div>
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-sky-500 to-cyan-400 text-white shadow-md shadow-sky-500/20">
+                  <Phone className="h-6 w-6" />
+                </div>
+                <h3 className="mt-6 text-xl font-bold text-slate-900">Voice AI Agent</h3>
+                <p className="mt-1 font-mono text-[10px] text-sky-600 uppercase font-extrabold tracking-wide">Answers &amp; Qualifies</p>
+                <p className="mt-3 text-sm text-slate-500 leading-relaxed font-semibold">
+                  Picks up inbound calls in real time with sub-second latency, qualifies the caller against the same rules your other agents use, then books the callback or warm-transfers to a human.
+                </p>
               </div>
 
-              {/* Upload Input form */}
-              <form onSubmit={startFileIngestion} className="space-y-3">
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="Enter document name (e.g. refund_policy.pdf)" 
-                    value={newFileName}
-                    onChange={(e) => setNewFileName(e.target.value)}
-                    disabled={isIngesting}
-                    className="flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-xs outline-none focus:border-rose-500 font-semibold"
-                  />
-                  <button 
-                    type="submit"
-                    disabled={!newFileName.trim() || isIngesting}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-4 py-2.5 disabled:opacity-50 transition-colors"
-                  >
-                    <Upload className="h-3.5 w-3.5" /> Upload
-                  </button>
-                </div>
-              </form>
-
-              {/* Ingestion loader */}
-              {isIngesting && (
-                <div className="mt-4 p-4 rounded-xl border border-rose-100 bg-rose-50/50 space-y-2">
-                  <div className="flex items-center justify-between text-xs font-semibold text-rose-700">
-                    <span className="flex items-center gap-1.5">
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Chunking and vectorizing: {newFileName}
+              {/* Live call widget */}
+              <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Live Call</p>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-sky-600">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-500 opacity-75" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-sky-500" />
                     </span>
-                    <span>{ingestionProgress}%</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-rose-600 transition-all duration-100" style={{ width: `${ingestionProgress}%` }} />
-                  </div>
+                    On air · 00:42
+                  </span>
                 </div>
-              )}
 
-              {/* File list */}
-              <div className="mt-4 space-y-2">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Ingested Documents</p>
-                <div className="space-y-2 max-h-[180px] overflow-y-auto">
-                  {uploadedFiles.map((file, idx) => (
-                    <motion.div
-                      key={idx}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.35, delay: idx * 0.08 }}
-                      className="flex items-center justify-between p-3 border border-slate-100 bg-slate-50/50 rounded-xl"
-                    >
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-rose-600" />
-                        <div>
-                          <p className="text-xs font-bold text-slate-800">{file.name}</p>
-                          <p className="text-[9px] text-slate-400 font-semibold">{file.size} · {file.chunks} vector chunks</p>
-                        </div>
-                      </div>
-                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
-                        <Check className="h-3 w-3" /> Ready
-                      </span>
-                    </motion.div>
+                {/* Animated waveform */}
+                <div className="flex items-center justify-center gap-[3px] h-10">
+                  {[...Array(16)].map((_, i) => (
+                    <span
+                      key={i}
+                      style={{ animationDelay: `${i * 0.07}s` }}
+                      className="w-1 h-8 rounded-full bg-gradient-to-t from-sky-500 to-cyan-300 origin-center animate-waveform"
+                    />
                   ))}
                 </div>
-              </div>
 
+                <div className="p-2 rounded bg-sky-50 border border-sky-100 text-[10px] text-sky-700 font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                  Intent captured — callback booked for 4:30 PM
+                </div>
+              </div>
             </motion.div>
 
-          </div>
+          </RevealSection>
 
         </div>
       </section>
@@ -1465,7 +1795,7 @@ export default function Landing() {
 
                 {/* Timeline Step 2 */}
                 <div className="gsap-card-reveal relative pl-12 flex gap-4">
-                  <span className="absolute left-3.5 -translate-x-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-white font-mono text-[10px] font-bold shadow-md">
+                  <span className="absolute left-3.5 -translate-x-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-rose-600 text-white font-mono text-[10px] font-bold shadow-md">
                     2
                   </span>
                   <div>
@@ -1580,7 +1910,7 @@ export default function Landing() {
         <div className="mx-auto max-w-[1400px] px-6 lg:px-12">
           
           <div className="gsap-reveal text-center max-w-2xl mx-auto mb-16 space-y-4">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 border border-violet-100 px-3.5 py-1 text-xs font-semibold text-violet-700">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3.5 py-1 text-xs font-semibold text-rose-700">
               <BarChart3 className="h-3.5 w-3.5" /> Performance &amp; ROI
             </span>
             <h2 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
@@ -1598,7 +1928,7 @@ export default function Landing() {
               { label: 'CSAT Average', num: 4.8, suffix: '/5', change: '+8%', foot: 'Across 2,400+ reviews' },
               { label: 'Pipeline Generated', prefix: '₹', num: 42.8, suffix: 'L', change: '+35%', foot: 'From qualified leads' }
             ].map((stat, i) => (
-              <motion.div key={i} variants={fadeUp} custom={i} className="relative rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm hover:bg-violet-100 hover:border-violet-300 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 text-center md:text-left">
+              <motion.div key={i} variants={fadeUp} custom={i} className="relative rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm hover:bg-violet-50 hover:border-violet-300 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 text-center md:text-left">
                 {/* Live green dot */}
                 <span className="absolute top-4 right-4 flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -1620,7 +1950,7 @@ export default function Landing() {
           <div className="mt-6 grid gap-6 lg:grid-cols-3">
 
             {/* Bar chart 1: leads captured, by channel */}
-            <div className="gsap-reveal rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm hover:bg-violet-100 hover:border-violet-300 hover:shadow-md transition-all duration-300">
+            <div className="gsap-reveal rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm hover:bg-violet-50 hover:border-violet-300 hover:shadow-md transition-all duration-300">
               <h3 className="text-base font-bold text-slate-800">Leads Captured by Channel</h3>
               <p className="text-xs text-slate-500 font-medium mt-0.5 mb-6">Last 30 days, across every connected inbox.</p>
               <div className="flex items-end justify-between gap-3 h-48">
@@ -1649,15 +1979,15 @@ export default function Landing() {
             </div>
 
             {/* Bar chart 2: lead qualification funnel */}
-            <div className="gsap-reveal rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm hover:bg-violet-100 hover:border-violet-300 hover:shadow-md transition-all duration-300">
+            <div className="gsap-reveal rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm hover:bg-violet-50 hover:border-violet-300 hover:shadow-md transition-all duration-300">
               <h3 className="text-base font-bold text-slate-800">Lead Qualification Funnel</h3>
               <p className="text-xs text-slate-500 font-medium mt-0.5 mb-6">Where inbound conversations end up, AI-scored end to end.</p>
               <div className="space-y-4">
                 {[
-                  { label: 'New conversations', value: 420, color: 'bg-slate-300' },
-                  { label: 'AI-qualified', value: 268, color: 'bg-rose-400' },
-                  { label: 'Hot leads', value: 154, color: 'bg-rose-500' },
-                  { label: 'Won / converted', value: 92, color: 'bg-violet-500' },
+                  { label: 'New conversations', value: 420, color: 'bg-gradient-to-r from-sky-400 to-cyan-400' },
+                  { label: 'AI-qualified', value: 268, color: 'bg-gradient-to-r from-violet-500 to-fuchsia-400' },
+                  { label: 'Hot leads', value: 154, color: 'bg-gradient-to-r from-rose-500 to-orange-400' },
+                  { label: 'Won / converted', value: 92, color: 'bg-gradient-to-r from-emerald-500 to-teal-400' },
                 ].map((row) => (
                   <div key={row.label}>
                     <div className="flex items-center justify-between mb-1.5">
@@ -1680,7 +2010,7 @@ export default function Landing() {
             </div>
 
             {/* Donut chart 3: conversation resolution */}
-            <div className="gsap-reveal rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm hover:bg-violet-100 hover:border-violet-300 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
+            <div className="gsap-reveal rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm hover:bg-violet-50 hover:border-violet-300 hover:shadow-md transition-all duration-300 flex flex-col justify-between">
               <div>
                 <h3 className="text-base font-bold text-slate-800">Conversation Resolution</h3>
                 <p className="text-xs text-slate-500 font-medium mt-0.5 mb-4">Autopilot resolution vs. human handoff ratio.</p>
@@ -1776,63 +2106,8 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─────────────────────────────────── 8B. COMPARISON TABLE ─── */}
-      <section id="compare" className="relative py-20 lg:py-28 overflow-hidden">
-        <div className="mx-auto max-w-[1100px] px-6 lg:px-12">
-
-          <RevealSection className="text-center max-w-2xl mx-auto mb-14 space-y-4">
-            <motion.span variants={fadeUp} custom={0} className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 border border-rose-100 px-3.5 py-1 text-xs font-semibold text-rose-700">
-              <Zap className="h-3.5 w-3.5" /> Why switch
-            </motion.span>
-            <motion.h2 variants={fadeUp} custom={1} className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
-              Traditional platforms vs. ConnectSphere
-            </motion.h2>
-            <motion.p variants={fadeUp} custom={2} className="text-base text-slate-600 font-medium">
-              Most tools give you a piece of the funnel. ConnectSphere owns the whole thing, end to end.
-            </motion.p>
-          </RevealSection>
-
-          <RevealSection className="rounded-3xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[640px]">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-100">
-                    <th className="px-6 py-4 text-base font-extrabold text-slate-800 uppercase tracking-wide">Capability</th>
-                    <th className="px-6 py-4 text-base font-extrabold text-slate-800 uppercase tracking-wide">Traditional platforms</th>
-                    <th className="px-6 py-4 text-base font-extrabold uppercase tracking-wide text-rose-600">ConnectSphere</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { label: 'Channel coverage', old: 'One channel per tool — WhatsApp here, email there', new: 'WhatsApp, Instagram, Messenger, email, SMS, voice — one pipeline' },
-                    { label: 'First response time', old: 'Hours, often overnight', new: 'Seconds, 24/7, no human needed to start' },
-                    { label: 'Lead qualification', old: 'Manual review or brittle keyword rules', new: 'AI reads intent and scores against your real pipeline' },
-                    { label: 'CRM sync', old: 'Manual entry or a one-way export', new: 'Bi-directional, updates the moment a conversation does' },
-                    { label: 'Setup time', old: 'Weeks of implementation, often a consultant', new: 'A few hours — connect a channel, upload your docs' },
-                    { label: 'Escalation to humans', old: 'A missed message or a cold transfer', new: 'Automatic handoff with full context attached' },
-                    { label: 'Pricing model', old: 'Per-seat, scales against your headcount', new: 'Scales with lead volume, not team size' },
-                  ].map((row, i) => (
-                    <tr key={row.label} className={i % 2 === 1 ? 'bg-slate-50/40' : ''}>
-                      <td className="px-6 py-4 text-sm font-bold text-slate-800 border-t border-slate-100 align-top">{row.label}</td>
-                      <td className="px-6 py-4 text-sm text-slate-500 font-medium border-t border-slate-100 align-top">
-                        <span className="flex items-start gap-2">
-                          <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-300 shrink-0" /> {row.old}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-800 font-semibold border-t border-slate-100 align-top">
-                        <span className="flex items-start gap-2">
-                          <Check className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" /> {row.new}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </RevealSection>
-
-        </div>
-      </section>
+      {/* ─────────────────────────────────── 8B. WHY CONNECTSPHERE WINS ─── */}
+      <WhyWinsSection />
 
       {/* ─────────────────────────────────── 9. TRUST & SOCIAL PROOF ─── */}
       <section className="relative py-20 lg:py-28 overflow-hidden">
@@ -1949,7 +2224,7 @@ export default function Landing() {
 
       {/* ─────────────────────────────────── 12. FINAL CTA ─── */}
       <section className="relative py-16 px-6">
-        <div className="gsap-reveal relative mx-auto max-w-[1100px] overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-12 sm:p-16 text-center shadow-xl shadow-slate-100 hover:bg-violet-100 hover:border-violet-300 transition-all duration-400">
+        <div className="gsap-reveal relative mx-auto max-w-[1100px] overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-12 sm:p-16 text-center shadow-xl shadow-slate-100 hover:bg-violet-50 hover:border-violet-300 transition-all duration-400">
           
           {/* Ambient blurred glow inside card */}
           <div className="absolute inset-0 bg-white/20 backdrop-blur-2xl z-0" />
@@ -1960,7 +2235,7 @@ export default function Landing() {
             </span>
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
               Stop losing hot leads to{' '}
-              <span className="bg-gradient-to-r from-rose-500 via-violet-600 to-fuchsia-500 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-rose-600 via-fuchsia-600 to-violet-600 bg-clip-text text-transparent">
                 slow manual responses.
               </span>
             </h2>
@@ -1969,7 +2244,7 @@ export default function Landing() {
             </p>
 
             <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link href="/register" className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold px-8 py-4 text-sm shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all">
+              <Link href="/register" className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-violet-600 text-white font-bold px-8 py-4 text-sm shadow-md shadow-violet-500/25 hover:shadow-violet-500/40 hover:-translate-y-0.5 active:translate-y-0 transition-all">
                 Register
                 <ArrowRight className="h-4 w-4" />
               </Link>
@@ -2020,6 +2295,7 @@ export default function Landing() {
                 <a href="#integrations" className="hover:text-rose-600 transition-colors">7 Channels Grid</a>
                 <a href="#agents" className="hover:text-rose-600 transition-colors">Marketing Agent</a>
                 <a href="#agents" className="hover:text-rose-600 transition-colors">Sales AI Agent</a>
+                <a href="#agents" className="hover:text-rose-600 transition-colors">Voice AI Agent</a>
               </div>
             </div>
 
@@ -2057,6 +2333,8 @@ export default function Landing() {
 
         </div>
       </footer>
+
+      <ChatAssistant />
 
     </main>
   );

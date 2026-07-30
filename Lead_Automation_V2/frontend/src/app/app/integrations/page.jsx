@@ -110,7 +110,7 @@ export default function IntegrationsPage() {
     <div className="p-6 max-w-6xl mx-auto space-y-10">
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <Plug size={24} className="text-blue-600" />
+          <Plug size={24} className="text-violet-600" />
           <h1 className="text-2xl font-bold">Integrations & APIs</h1>
         </div>
         <p className="text-sm text-slate-500">
@@ -153,7 +153,7 @@ export default function IntegrationsPage() {
           />
           <button
             onClick={triggerSync}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
+            className="bg-violet-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-violet-700"
           >
             <RefreshCw size={16} /> Trigger Sync
           </button>
@@ -181,7 +181,7 @@ export default function IntegrationsPage() {
               rows={4}
             />
             <div className="flex gap-2">
-              <button onClick={createConnection} className="bg-blue-600 text-white px-4 py-2 rounded-lg">
+              <button onClick={createConnection} className="bg-violet-600 text-white px-4 py-2 rounded-lg">
                 Add Connection
               </button>
               <button onClick={() => setShowCreate(false)} className="border px-4 py-2 rounded-lg">
@@ -198,7 +198,7 @@ export default function IntegrationsPage() {
             <h2 className="font-semibold">CRM Connections</h2>
             <button
               onClick={() => setShowCreate(true)}
-              className="bg-blue-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 text-sm"
+              className="bg-violet-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 text-sm"
             >
               <Plus size={14} /> Add
             </button>

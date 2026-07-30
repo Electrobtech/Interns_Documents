@@ -217,7 +217,7 @@ function AgentTooltip({ active, payload, label }) {
 // Compact stat tile used only within the AI Agent Performance panel.
 function StatCard({ label, value, icon: Icon, tone = 'blue' }) {
   const TONES = {
-    blue:    'from-blue-50 to-indigo-100 text-blue-600',
+    blue:    'from-violet-50 to-rose-100 text-violet-600',
     emerald: 'from-emerald-50 to-teal-100 text-emerald-600',
     amber:   'from-amber-50 to-orange-100 text-amber-600',
     violet:  'from-violet-50 to-purple-100 text-violet-600',
@@ -701,7 +701,7 @@ function AgentPerformance() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { type: 'marketing', label: 'Marketing Agent', icon: Megaphone,  gradient: 'from-blue-600 to-indigo-600',   sub: 'Campaigns · Segments · SEO'        },
+          { type: 'marketing', label: 'Marketing Agent', icon: Megaphone,  gradient: 'from-violet-600 to-rose-600',   sub: 'Campaigns · Segments · SEO'        },
           { type: 'sales',     label: 'Sales Agent',     icon: TrendingUp, gradient: 'from-emerald-600 to-teal-600',  sub: 'Lead scoring · Follow-ups · Pipeline'},
           { type: 'support',   label: 'Support Agent',   icon: Headphones, gradient: 'from-violet-600 to-purple-600', sub: 'Ticket replies · Escalations · CSAT' },
         ].map(({ type, label, icon: Icon, gradient, sub }) => {
