@@ -356,6 +356,7 @@ function ConversationPanes({ conversationId }) {
               customerName={conv.contact_name}
               channel={conv.channel_type}
               sessionId={conversationId}
+              contactId={conv.contact_id}
               onUse={(text) => setDraft(text)}
             />
           </div>

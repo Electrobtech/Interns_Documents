@@ -11,7 +11,7 @@ import { useSuggestSupportReply } from '@/lib/queries/aiAgents';
 //
 // Fires once per unanswered inbound message (keyed by `brief`), not on every
 // keystroke or render, so it reads as one suggestion per customer message.
-export default function SuggestedReplyCard({ brief, customerName, channel, sessionId, onUse }) {
+export default function SuggestedReplyCard({ brief, customerName, channel, sessionId, contactId, onUse }) {
   const suggest = useSuggestSupportReply();
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -21,7 +21,7 @@ export default function SuggestedReplyCard({ brief, customerName, channel, sessi
     if (!brief || firedFor.current === brief) return;
     firedFor.current = brief;
     setDismissed(false);
-    suggest.mutate({ brief, customer_name: customerName || undefined, channel: channel || undefined, session_id: sessionId });
+    suggest.mutate({ brief, customer_name: customerName || undefined, channel: channel || undefined, session_id: sessionId, contact_id: contactId || undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brief]);
 
@@ -29,7 +29,7 @@ export default function SuggestedReplyCard({ brief, customerName, channel, sessi
 
   const regenerate = () => {
     setDismissed(false);
-    suggest.mutate({ brief, customer_name: customerName || undefined, channel: channel || undefined, session_id: sessionId });
+    suggest.mutate({ brief, customer_name: customerName || undefined, channel: channel || undefined, session_id: sessionId, contact_id: contactId || undefined });
   };
 
   const out = suggest.data;

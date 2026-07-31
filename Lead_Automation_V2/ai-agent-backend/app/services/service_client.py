@@ -66,3 +66,78 @@ async def create_campaign(organization_id: uuid.UUID, *, name: str, type_: str, 
         )
         resp.raise_for_status()
         return resp.json()
+
+
+async def get_customer_context(organization_id: uuid.UUID, contact_id: str) -> dict | None:
+    """Fetches the customer's own record so the Support Agent can answer
+    account questions ("what plan am I on", "have you replied to me") from
+    real data instead of deflecting.
+
+    The knowledge base only holds documents; questions about *this customer*
+    were previously unanswerable, and the agent would ask the customer for
+    details the platform already had. Best-effort: returns None on any
+    failure, since a missing record must not fail the support run.
+    """
+    settings = get_settings()
+    token = sign_service_token(organization_id)
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            headers = {"Authorization": f"Bearer {token}"}
+            contact_resp = await client.get(
+                f"{settings.CONTACT_SERVICE_URL}/contacts/{contact_id}", headers=headers
+            )
+            contact_resp.raise_for_status()
+            contact = contact_resp.json()
+            if not contact or not contact.get("id"):
+                return None
+
+            # The lead row (score/stage/priority) lives on a separate endpoint.
+            lead = None
+            try:
+                leads_resp = await client.get(
+                    f"{settings.CONTACT_SERVICE_URL}/leads", headers=headers
+                )
+                leads_resp.raise_for_status()
+                lead = next(
+                    (l for l in leads_resp.json() if str(l.get("contact_id")) == str(contact_id)),
+                    None,
+                )
+            except Exception:
+                logger.warning("lead_lookup_failed (non-fatal)", exc_info=True)
+
+            return {"contact": contact, "lead": lead}
+    except Exception:
+        logger.warning("customer_context_fetch_failed (non-fatal)", exc_info=True)
+        return None
+
+
+def format_customer_context(ctx: dict | None) -> str | None:
+    """Renders the account record as prompt text. Only fields that are
+    actually populated are emitted, so the model never sees empty labels it
+    might treat as real values."""
+    if not ctx or not ctx.get("contact"):
+        return None
+    c = ctx["contact"]
+    lead = ctx.get("lead") or {}
+
+    lines = []
+    for label, value in (
+        ("Name", c.get("name")),
+        ("Email", c.get("email")),
+        ("Phone", c.get("phone")),
+        ("Acquired via", c.get("source")),
+        ("Customer since", (c.get("created_at") or "")[:10] or None),
+        ("Tags", ", ".join(c.get("tags") or []) or None),
+        ("Opted out of messaging", "yes" if c.get("opted_out") else None),
+        ("Lead stage", lead.get("stage")),
+        ("Lead score", lead.get("score")),
+        ("Lead priority", lead.get("priority")),
+    ):
+        if value not in (None, "", []):
+            lines.append(f"- {label}: {value}")
+
+    notes = (c.get("notes") or "").strip()
+    if notes:
+        lines.append(f"- Notes on file: {notes[:600]}")
+
+    return "\n".join(lines) if lines else None

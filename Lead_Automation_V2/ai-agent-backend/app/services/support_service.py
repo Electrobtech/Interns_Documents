@@ -14,6 +14,7 @@ from app.repositories.conversation_repo import ConversationRepository
 from app.repositories.handoff_repo import HandoffRepository
 from app.repositories.support_repo import SupportRepository
 from app.schemas.support import SupportRunIn, SupportRunOut
+from app.services.service_client import format_customer_context, get_customer_context
 from app.services.webhook_service import WebhookService
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,15 @@ class SupportService:
         )
         context = retriever.format_context(chunks)
 
+        # The customer's own record, when the caller knows who they are.
+        # Best-effort: a failed lookup must not fail the support run, so the
+        # agent simply runs without account context as it did before.
+        account_context = None
+        if body.contact_id:
+            account_context = format_customer_context(
+                await get_customer_context(organization_id, body.contact_id)
+            )
+
         history_text = None
         if body.session_id:
             turns = await self._conversations.history(organization_id, body.session_id)
@@ -42,7 +52,8 @@ class SupportService:
             ChatMessage(
                 role="user",
                 content=build_user_prompt(
-                    body.brief, context, body.customer_name, body.channel, history_text
+                    body.brief, context, body.customer_name, body.channel, history_text,
+                    account_context,
                 ),
             ),
         ]
@@ -60,13 +71,27 @@ class SupportService:
 
         data = validate_shape(data)
 
-        if low_confidence:
-            # Knowledge base couldn't answer confidently — force the safe path.
+        if low_confidence and not account_context:
+            # Knowledge base couldn't answer confidently and there was no
+            # account record either — force the safe path. With account data
+            # present the agent may legitimately have answered from it, so a
+            # weak document match alone is not grounds for escalation.
             data["escalation_needed"] = True
             data["human_handoff"] = True
             if not data.get("human_handoff_note"):
                 data["human_handoff_note"] = (
                     "Knowledge base had no confident answer for this question."
+                )
+
+        # Questions needing live operational data (order status, invoices,
+        # usage counters) are not answerable by this agent at all — route them
+        # to a human rather than let a vague reply reach the customer.
+        if data.get("data_lookup_needed"):
+            data["escalation_needed"] = True
+            data["human_handoff"] = True
+            if not data.get("human_handoff_note"):
+                data["human_handoff_note"] = (
+                    "Needs an account/order data lookup the Support Agent cannot perform."
                 )
 
         source_ids = sorted({c.knowledge_source_id for c in chunks})

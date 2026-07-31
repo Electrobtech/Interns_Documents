@@ -13,6 +13,10 @@ class SupportRunIn(BaseModel):
     customer_name: str | None = None
     channel: str | None = None  # whatsapp | instagram | email | webchat | ...
     session_id: str | None = None  # ties into shared conversation memory
+    # When the caller knows which contact this is (the Unified Inbox always
+    # does), the agent pulls their real record so account questions can be
+    # answered from data instead of deflected back to the customer.
+    contact_id: str | None = None
 
 
 class SupportRunOut(BaseModel):
@@ -29,6 +33,14 @@ class SupportRunOut(BaseModel):
     follow_up_questions: list[Any] = Field(default_factory=list)
     human_handoff: bool = False
     knowledge_sources_used: list[str] = Field(default_factory=list)
+    # True when the question needs live operational data the agent is not given
+    # (order status, invoices, usage counters) — the signal that a human must
+    # look something up, rather than the agent asking the customer for data the
+    # business already holds.
+    data_lookup_needed: bool = False
+    # Questions in a multi-part message that went unanswered, so a rep can see
+    # the gap instead of the customer having to chase it.
+    unanswered_questions: list[Any] = Field(default_factory=list)
 
 
 class SupportRunSummary(BaseModel):
