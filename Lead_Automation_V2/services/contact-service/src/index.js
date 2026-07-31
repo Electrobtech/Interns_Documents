@@ -19,8 +19,32 @@ app.get('/health', (_req, res) => res.json({ service: 'contact', ok: true }));
 app.use(importRoutes);
 
 app.get('/contacts', async (req, res) => {
+  // ?tag=vip lets the Bulk Campaign tab's "Contact Segment" dropdown
+  // (BulkCampaignTab.jsx) pull every contact carrying a given tag as the
+  // broadcast's recipient list — same `tags` column used elsewhere (e.g.
+  // /contacts/bulk-tag below), just filterable here instead of write-only.
+  const { tag } = req.query;
   const { rows } = await pool.query(
-    `SELECT * FROM contacts WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 200`,
+    tag
+      ? `SELECT * FROM contacts WHERE organization_id=$1 AND $2 = ANY(tags) ORDER BY created_at DESC LIMIT 5000`
+      : `SELECT * FROM contacts WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 200`,
+    tag ? [req.user.organizationId, tag] : [req.user.organizationId]
+  );
+  res.json(rows);
+});
+
+// GET /contacts/segments
+// Every distinct tag this org currently has on at least one contact, with
+// how many contacts carry it — powers the Bulk Campaign tab's segment
+// picker without it needing to know tag names in advance. Registered
+// before /contacts/:id so it's never mistaken for an id lookup.
+app.get('/contacts/segments', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT tag, COUNT(*)::int AS contact_count
+       FROM contacts, UNNEST(tags) AS tag
+      WHERE organization_id = $1
+      GROUP BY tag
+      ORDER BY tag`,
     [req.user.organizationId]
   );
   res.json(rows);

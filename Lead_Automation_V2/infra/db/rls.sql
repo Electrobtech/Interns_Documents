@@ -105,6 +105,28 @@ CREATE POLICY tenant_isolation ON campaign_audiences
     )
   );
 
+-- campaign_recipients (020_bulk_campaigns.sql) hangs off campaigns the same
+-- way campaign_audiences does — EXISTS check against the parent row rather
+-- than its own organization_id column.
+ALTER TABLE campaign_recipients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE campaign_recipients FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON campaign_recipients;
+CREATE POLICY tenant_isolation ON campaign_recipients
+  USING (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM campaigns c
+       WHERE c.id = campaign_recipients.campaign_id
+         AND c.organization_id = app_current_org()
+    )
+  )
+  WITH CHECK (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM campaigns c
+       WHERE c.id = campaign_recipients.campaign_id
+         AND c.organization_id = app_current_org()
+    )
+  );
+
 ALTER TABLE campaign_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE campaign_logs FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation ON campaign_logs;

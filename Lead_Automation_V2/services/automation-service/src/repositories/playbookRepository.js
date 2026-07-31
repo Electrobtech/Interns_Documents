@@ -84,6 +84,40 @@ async function findActiveStandardCandidates({ clientId, channel }) {
 }
 
 /**
+ * Playbook.find({ clientId, channels: channel }).select('id name status').sort('-updated_at')
+ * equivalent — every playbook this org has for a channel, newest first.
+ * Powers the Bulk Campaign tab's "Flow / Template" dropdown
+ * (BulkCampaignTab.jsx): a broadcast picks an existing flow rather than
+ * authoring a new message body, so recipients get the flow's actual first
+ * outbound node (with each recipient's mapped variables substituted in),
+ * not a one-off string. `channel` is optional so the dropdown can also list
+ * every flow across channels if the caller omits it.
+ */
+async function findAllByOrg({ clientId, channel }) {
+  const { rows } = await pool.query(
+    channel
+      ? `SELECT id, name, channels, playbook_type, status, updated_at FROM playbooks
+          WHERE organization_id = $1 AND $2 = ANY(channels)
+          ORDER BY updated_at DESC`
+      : `SELECT id, name, channels, playbook_type, status, updated_at FROM playbooks
+          WHERE organization_id = $1
+          ORDER BY updated_at DESC`,
+    channel ? [clientId, channel] : [clientId]
+  );
+  // Deliberately not routed through toPlaybook() — that shape includes the
+  // full `nodes` JSONB graph, which the dropdown never needs and would just
+  // bloat the response for orgs with large flows.
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    channels: r.channels || [],
+    playbookType: r.playbook_type,
+    status: r.status,
+    updatedAt: r.updated_at,
+  }));
+}
+
+/**
  * Generic upsert-by-id. Used by both the seed script (upsertFromSeed below)
  * and the flow builder's autosave endpoint (playbookController.js) — same
  * "write the whole graph atomically" shape either way, so one query does
@@ -148,6 +182,7 @@ module.exports = {
   findActiveById,
   findActiveByRole,
   findActiveStandardCandidates,
+  findAllByOrg,
   upsert,
   upsertFromSeed,
 };

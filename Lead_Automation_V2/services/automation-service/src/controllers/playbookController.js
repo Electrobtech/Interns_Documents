@@ -15,6 +15,23 @@ const playbookRepository = require('../repositories/playbookRepository');
 
 const router = express.Router();
 
+// GET /automation/playbooks?channel=whatsapp
+// Lightweight list (no `nodes` graph) for pickers like the Bulk Campaign
+// tab's Flow/Template dropdown (BulkCampaignTab.jsx). Registered before the
+// /:id route below so a literal request to this path is never mistaken for
+// an id lookup.
+router.get('/automation/playbooks', async (req, res) => {
+  try {
+    const playbooks = await playbookRepository.findAllByOrg({
+      clientId: req.user.organizationId,
+      channel: req.query.channel,
+    });
+    res.status(200).json(playbooks);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /automation/playbooks/:id
 // Scoped to the caller's own organization — a playbook id existing at all
 // doesn't mean this user's org owns it, so a cross-tenant guess still 404s.
