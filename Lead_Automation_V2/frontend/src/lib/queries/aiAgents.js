@@ -164,3 +164,27 @@ export function useUpdateHandoff() {
   });
 }
 
+
+/* ─── Restored panels: sales fit scoring + support coverage audit ─────────
+   Both reuse the agents' existing /run endpoints rather than inventing new
+   routes — the panels differ in how they frame the brief and render the
+   result, not in what the backend does. */
+
+// Scores how well a lead fits the ICP. Backed by POST /ai-agents/sales/run,
+// whose SalesRunOut already carries lead_score and the qualification reason.
+export function useScoreLeadFit() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: (body) => call('/ai-agents/sales/run', { method: 'POST', body }),
+  });
+}
+
+// Checks whether the knowledge base can actually answer a given question.
+// Backed by POST /ai-agents/support/run: human_handoff / low-confidence in the
+// response is exactly the "not covered" signal this audit reports.
+export function useSupportCoverageAudit() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: (body) => call('/ai-agents/support/run', { method: 'POST', body }),
+  });
+}

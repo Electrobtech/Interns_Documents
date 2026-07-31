@@ -87,7 +87,7 @@ export default function SEOPanel() {
             </div>
             <div>
               <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Long-Tail Keywords</p>
-              <KeywordChips items={active.long_tail_keywords} tone="bg-blue-50 text-blue-700" />
+              <KeywordChips items={active.long_tail_keywords} tone="bg-violet-50 text-violet-700" />
             </div>
             {active.search_intent && Object.keys(active.search_intent).length > 0 && (
               <div>

@@ -143,3 +143,63 @@ export function useMarketingPerformance(days = 30) {
     queryFn: () => call(`/ai-agents/marketing/performance?days=${days}`),
   });
 }
+
+/* ─── Restored panels (AEO, anti-ban, click-to-WhatsApp, cold revival) ────
+   These hooks back panels that MarketingWorkspace imports but that had no
+   query layer, so the build failed with "not exported". Each maps to a route
+   that already exists in ai-agent-backend/app/api/v1/marketing_growth.py. */
+
+// POST /marketing/aeo/optimize — rewrite a page for AI answer engines.
+export function useOptimizeAEO() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => call('/ai-agents/marketing/aeo/optimize', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing', 'aeo'] }),
+  });
+}
+
+// GET /marketing/aeo/optimizations — past AEO runs.
+export function useAEOOptimizations() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing', 'aeo', 'list'],
+    queryFn: () => call('/ai-agents/marketing/aeo/optimizations'),
+  });
+}
+
+// POST /marketing/anti-ban-check — flags message copy likely to trip
+// WhatsApp/Meta policy before it is ever broadcast.
+export function useAntiBanCheck() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: (body) => call('/ai-agents/marketing/anti-ban-check', { method: 'POST', body }),
+  });
+}
+
+// POST /marketing/ctwa/generate — click-to-WhatsApp ad package.
+export function useGenerateCTWA() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => call('/ai-agents/marketing/ctwa/generate', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing', 'ctwa'] }),
+  });
+}
+
+// GET /marketing/ctwa/packages
+export function useCTWAPackages() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing', 'ctwa', 'list'],
+    queryFn: () => call('/ai-agents/marketing/ctwa/packages'),
+  });
+}
+
+// POST /marketing/cold-revival — drip sequence to re-engage dormant leads.
+export function useColdRevival() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: (body) => call('/ai-agents/marketing/cold-revival', { method: 'POST', body }),
+  });
+}

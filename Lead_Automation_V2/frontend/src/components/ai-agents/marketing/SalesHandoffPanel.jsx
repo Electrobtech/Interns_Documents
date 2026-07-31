@@ -8,7 +8,7 @@ import { useCampaigns } from '@/lib/queries/crm';
 
 const STATUS_TONE = {
   sent: 'bg-emerald-50 text-emerald-700',
-  scheduled: 'bg-blue-50 text-blue-700',
+  scheduled: 'bg-violet-50 text-violet-700',
   draft: 'bg-slate-100 text-slate-600',
   needs_approval: 'bg-amber-50 text-amber-700',
   failed: 'bg-red-50 text-red-700',
@@ -87,7 +87,7 @@ export default function SalesHandoffPanel() {
 
           <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 space-y-4">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600">
+              <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-purple-100 text-violet-600">
                 <TrendingUp size={15} />
               </div>
               <p className="text-sm font-bold text-slate-800">{out.headline_stat}</p>

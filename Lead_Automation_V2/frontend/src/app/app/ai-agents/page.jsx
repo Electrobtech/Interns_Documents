@@ -17,8 +17,8 @@ import HandoffQueue from '@/components/ai-agents/HandoffQueue';
 const AGENT_CONFIG = {
   marketing: {
     label: 'Marketing Agent', type: 'Marketing', icon: Megaphone,
-    iconBg: 'bg-gradient-to-br from-violet-50 to-rose-100', iconColor: 'text-violet-600',
-    accent: 'from-violet-500 to-rose-600', description: 'Attracts & nurtures leads',
+    iconBg: 'bg-gradient-to-br from-violet-50 to-purple-100', iconColor: 'text-violet-600',
+    accent: 'from-violet-500 to-purple-600', description: 'Attracts & nurtures leads',
   },
   sales: {
     label: 'Sales Agent', type: 'Sales', icon: TrendingUp,
@@ -101,7 +101,7 @@ export default function AIAgentsPage() {
       {/* header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-gradient-to-br from-violet-50 to-rose-100 text-violet-600 shadow-sm">
+          <div className="p-2.5 rounded-2xl bg-gradient-to-br from-violet-50 to-purple-100 text-violet-600 shadow-sm">
             <Bot size={20} />
           </div>
           <div>

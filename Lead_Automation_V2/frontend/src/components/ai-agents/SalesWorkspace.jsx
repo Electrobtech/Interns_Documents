@@ -8,6 +8,8 @@ import {
 import { useRunSalesAgent, useSalesRuns } from '@/lib/queries/aiAgents';
 import { useLeads, useCreateLead, useSendReply, useFindConversationByName } from '@/lib/queries/crm';
 import KpiCard from './KpiCard';
+import WorkspaceHeader from './shared/WorkspaceHeader';
+import FitScorerPanel from './sales/FitScorerPanel';
 import KnowledgeUploadPanel from './KnowledgeUploadPanel';
 
 const STAGES = ['new', 'qualified', 'active', 'won'];
@@ -137,24 +139,12 @@ export default function SalesWorkspace() {
   return (
     <div className="space-y-6 animate-fade-in">
 
-      {/* Header banner */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700 p-6 shadow-emerald">
-        <div className="absolute inset-0 opacity-10"
-          style={{ backgroundImage: 'radial-gradient(circle at 30% 70%, white 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
-        <div className="relative flex items-center gap-4">
-          <div className="p-3 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30">
-            <TrendingUp size={22} className="text-white" />
-          </div>
-          <div>
-            <h3 className="font-bold text-white text-lg">Sales Agent</h3>
-            <p className="text-emerald-200 text-sm mt-0.5">Qualify, score, and close deals with AI precision</p>
-          </div>
-          <div className="ml-auto hidden sm:flex items-center gap-2 bg-white/10 rounded-xl px-3 py-1.5 border border-white/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
-            <span className="text-white text-xs font-medium">Agent Online</span>
-          </div>
-        </div>
-      </div>
+      <WorkspaceHeader
+        agent="sales"
+        icon={TrendingUp}
+        title="Sales Agent"
+        subtitle="Qualify, score, and close deals with AI precision"
+      />
 
       {/* KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -171,13 +161,16 @@ export default function SalesWorkspace() {
         ))}
       </div>
 
+      {/* Interactive Fit Scorer — segmented pills drive a live 0-100 score bar */}
+      <FitScorerPanel />
+
       {/* Pipeline overview row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* Lead Scoring */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5">
           <div className="flex items-center gap-2.5 mb-4">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600">
+            <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-purple-100 text-violet-600">
               <Gauge size={15} />
             </div>
             <div>

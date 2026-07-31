@@ -11,7 +11,7 @@ import {
   Shield, Cpu, BarChart3, AlertTriangle, Lock, UserCheck, 
   ScanSearch, Route, RefreshCw, LineChart, Linkedin, FileText, Upload, 
   Check, PlayCircle, Plus, Eye, Share2, Layers, Database, Sparkles, Radar,
-  Clock, Users2, X
+  Clock, Users2, X, Instagram, LayoutGrid, Search
 } from 'lucide-react';
 import ChatAssistant from '../components/landing/ChatAssistant';
 
@@ -700,34 +700,125 @@ function StepFlow() {
 
 /* ─── "Why Orbq Wins" — fragmented apps merge into a unified AI-run
    dashboard through a glowing core, instead of a plain comparison table. ─── */
+/* ─── Compare section data ──────────────────────────────────────────────
+   The "old way" half: real tools a team actually juggles, each with the
+   symptom that makes it costly (unread counts, a failed sync, a missed call). */
 const LEGACY_APPS = [
-  { id: 'wa',   label: 'WhatsApp',    sub: 'Rohan Verma · unread',   Icon: WhatsAppIcon,     badge: 4, left: '4%',  top: '4%',  w: 168, rot: -6,  ring: 'text-emerald-500' },
-  { id: 'mail', label: 'Inbox',       sub: '42 unread threads',      Icon: Mail,             badge: 12, left: '38%', top: '0%',  w: 176, rot: 4,  ring: 'text-sky-500' },
-  { id: 'sheet',label: 'Leads.xlsx',  sub: 'Manual copy-paste',      Icon: FileText,         spinner: true, left: '2%',  top: '46%', w: 172, rot: 5,  ring: 'text-amber-500' },
-  { id: 'crm',  label: 'Old CRM',     sub: 'Sync failed · 2h ago',   Icon: Database,         warn: true, left: '40%', top: '50%', w: 178, rot: -3, ring: 'text-red-500' },
-  { id: 'call', label: 'Missed Call', sub: '2 missed · no callback', Icon: Phone,            badge: 2, left: '14%', top: '78%', w: 168, rot: 3,  ring: 'text-slate-500' },
-  { id: 'msg',  label: 'Messenger',   sub: '1 new · unanswered',     Icon: MessagesSquare,   badge: 1, left: '46%', top: '80%', w: 172, rot: -5, ring: 'text-indigo-500' },
+  { id: 'wa',    label: 'WhatsApp',      line1: 'Hi, I’m interested in your product.', line2: 'Can you share pricing?', badge: 8,  Icon: MessageCircle, brand: 'bg-emerald-500', left: '4%',  top: '6%',  w: 168 },
+  { id: 'mail',  label: 'Email',         line1: 'New Lead Enquiry',      line2: 'Re: Follow up · yesterday',   badge: 12, Icon: Mail,          brand: 'bg-blue-500',    left: '48%', top: '2%',  w: 164 },
+  { id: 'sheet', label: 'Spreadsheets',  line1: 'Leads_07.xlsx',         line2: 'Updated manually',                            Icon: FileText,      brand: 'bg-emerald-600', left: '18%', top: '36%', w: 156 },
+  { id: 'call',  label: 'Calls',         line1: 'Missed call',           line2: '1m ago',                          badge: 3,  Icon: Phone,         brand: 'bg-emerald-500', left: '54%', top: '38%', w: 150 },
+  { id: 'crm',   label: 'CRM',           line1: 'Last updated',          line2: '2 days ago',                      warn: true, Icon: Database,     brand: 'bg-sky-500',     left: '8%',  top: '62%', w: 158 },
+  { id: 'ig',    label: 'Instagram',     line1: 'DM from user',          line2: '5m ago',                          badge: 5,  Icon: Instagram,     brand: 'bg-pink-500',    left: '2%',  top: '20%', w: 150 },
+  { id: 'msg',   label: 'Messenger',     line1: 'New message',           line2: '7m ago',                          badge: 6,  Icon: MessagesSquare, brand: 'bg-blue-600',   left: '46%', top: '68%', w: 158 },
 ];
 
-const UNIFIED_CARDS = [
-  { id: 'inbox',  title: 'Unified Inbox',      Icon: Inbox,      metric: '24 active',        accent: 'rose' },
-  { id: 'agent',  title: 'AI Agent',           Icon: Bot,        metric: 'Auto-replying',     accent: 'violet' },
-  { id: 'crm',    title: 'CRM Pipeline',       Icon: Layers,     metric: 'Deal moved → Won',  accent: 'emerald' },
-  { id: 'ana',    title: 'Live Analytics',     Icon: BarChart3,  metric: '+18% today',        accent: 'orange' },
-  { id: 'auto',   title: 'Automation Builder', Icon: Workflow,   metric: '6 flows live',      accent: 'rose' },
-  { id: 'score',  title: 'Lead Scoring',       Icon: TrendingUp, metric: 'Score 92',          accent: 'violet' },
-  { id: 'kb',     title: 'Knowledge Base',     Icon: FileText,   metric: '318 docs indexed',  accent: 'amber' },
+/* Curved dashed links between the cards above, in the same 0-100 space. */
+/* Cross-panel wiring for the compare visual, in the overlay's 0-100 space.
+   IN:每 scattered tool converging on the core. OUT: the core fanning to the
+   unified product. */
+const WIRES_IN = [
+  'M10,20 C26,20 34,34 43,45',
+  'M6,36  C20,38 32,42 43,48',
+  'M12,54 C24,54 34,52 43,51',
+  'M20,70 C30,68 38,60 43,54',
+  'M28,12 C36,20 40,32 44,43',
 ];
 
-const CARD_ACCENTS = {
-  rose:    { bg: 'bg-rose-50',    text: 'text-rose-600',    ring: 'ring-rose-200' },
-  violet:  { bg: 'bg-violet-50',  text: 'text-violet-600',  ring: 'ring-violet-200' },
-  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', ring: 'ring-emerald-200' },
-  orange:  { bg: 'bg-orange-50',  text: 'text-orange-600',  ring: 'ring-orange-200' },
-  amber:   { bg: 'bg-amber-50',   text: 'text-amber-600',   ring: 'ring-amber-200' },
-};
+const WIRES_OUT = [
+  'M56,46 C62,40 62,26 66,20',
+  'M56,49 C62,46 62,40 66,38',
+  'M56,52 C62,54 62,56 66,58',
+  'M56,55 C62,62 62,70 66,76',
+];
 
-/* Pain -> benefit pairs restating the two halves as business outcomes. */
+const BROKEN_LINKS = [
+  'M14,16 C30,8 46,10 56,10',
+  'M56,14 C48,26 40,30 30,42',
+  'M14,26 C22,34 24,38 28,44',
+  'M28,48 C40,46 52,44 60,44',
+  'M16,66 C28,60 36,54 44,50',
+  'M52,74 C48,62 46,56 44,50',
+];
+
+const FAILURE_TAGS = [
+  { label: 'Lost leads',     left: '62%', top: '26%' },
+  { label: 'No visibility',  left: '4%',  top: '52%' },
+  { label: 'Manual updates', left: '38%', top: '88%' },
+];
+
+/* The unified half — a compressed but honest render of the real app shell. */
+const DASH_NAV = [
+  { label: 'Dashboard',   Icon: LayoutGrid },
+  { label: 'Unified Inbox', Icon: Inbox, count: 24 },
+  { label: 'Contacts',    Icon: Users2 },
+  { label: 'AI Agents',   Icon: Bot },
+  { label: 'Campaigns',   Icon: Megaphone },
+  { label: 'Analytics',   Icon: BarChart3 },
+];
+
+const DASH_CHANNELS = [
+  { label: 'WhatsApp',  n: 148, dot: 'bg-emerald-500' },
+  { label: 'Instagram', n: 61,  dot: 'bg-pink-500'    },
+  { label: 'Messenger', n: 34,  dot: 'bg-blue-500'    },
+  { label: 'LinkedIn',  n: 27,  dot: 'bg-sky-600'     },
+  { label: 'Email',     n: 44,  dot: 'bg-violet-500'  },
+  { label: 'Voice',     n: 11,  dot: 'bg-rose-500'    },
+];
+
+const DASH_KPIS = [
+  { label: 'Total Conversations', value: 2649,    delta: '+16.6%', Icon: MessagesSquare, tone: 'bg-violet-100 text-violet-600'   },
+  { label: 'Revenue Impact',      value: 2458000, delta: '+32.4%', Icon: TrendingUp,     tone: 'bg-emerald-100 text-emerald-600', prefix: '₹' },
+  { label: 'Open Conversations',  value: 156,     delta: '+12.3%', Icon: Inbox,          tone: 'bg-blue-100 text-blue-600'       },
+  { label: 'Unreplied',           value: 24,      delta: '-8.7%',  Icon: Clock,          tone: 'bg-rose-100 text-rose-600'       },
+];
+
+const PERF_POINTS = [[0,44],[28,38],[56,40],[84,26],[112,30],[140,16],[168,20],[200,8]];
+const PERF_LINE = `M${PERF_POINTS.map((p) => p.join(',')).join(' L')}`;
+
+/* pct/offset are pathLength-100 units, so the ring reads as percentages. */
+const DONUT = [
+  { label: 'WhatsApp',  pct: 42, offset: 0,  color: '#10b981' },
+  { label: 'Instagram', pct: 20, offset: 42, color: '#ec4899' },
+  { label: 'Email',     pct: 18, offset: 62, color: '#8b5cf6' },
+  { label: 'Others',    pct: 20, offset: 80, color: '#3b82f6' },
+];
+
+const AGENT_ROWS = [
+  { agent: 'Marketing Agent', note: 'Sent broadcast · New Product Launch', status: 'Completed', dot: 'bg-violet-500',  tone: 'bg-emerald-50 text-emerald-700' },
+  { agent: 'Sales Agent',     note: 'Qualified lead from WhatsApp',            status: 'Qualified', dot: 'bg-emerald-500', tone: 'bg-violet-50 text-violet-700'   },
+  { agent: 'Support Agent',   note: 'Resolved conversation automatically',     status: 'Resolved',  dot: 'bg-blue-500',    tone: 'bg-blue-50 text-blue-700'       },
+  { agent: 'Voice Agent',     note: 'Completed outbound call',                 status: 'Completed', dot: 'bg-rose-500',    tone: 'bg-emerald-50 text-emerald-700' },
+];
+
+/**
+ * Counts a number up once its section scrolls into view. Uses rAF rather than
+ * a CSS keyframe because the value itself has to change, not just a style, and
+ * an interval would drift against the frame clock on slower devices.
+ */
+function CountUp({ to, run, delay = 0, duration = 1400 }) {
+  const [value, setValue] = useState(0);
+
+  useEffect(() => {
+    if (!run) return undefined;
+    let frame;
+    let start;
+    const timer = setTimeout(() => {
+      const tick = (now) => {
+        if (start === undefined) start = now;
+        const p = Math.min((now - start) / duration, 1);
+        // ease-out so it decelerates into the final figure
+        setValue(Math.round(to * (1 - Math.pow(1 - p, 3))));
+        if (p < 1) frame = requestAnimationFrame(tick);
+      };
+      frame = requestAnimationFrame(tick);
+    }, delay);
+    return () => { clearTimeout(timer); if (frame) cancelAnimationFrame(frame); };
+  }, [run, to, delay, duration]);
+
+  return <>{value.toLocaleString('en-IN')}</>;
+}
+
 const PAINS = [
   { title: 'Hours of manual work', body: 'Wasted switching between multiple tools', tag: 'High effort',    Icon: Clock,      tone: 'bg-rose-50 text-rose-600'   },
   { title: 'Missed opportunities', body: 'Leads get lost or answered far too late', tag: 'Low conversion', Icon: Eye,        tone: 'bg-orange-50 text-orange-600' },
@@ -746,49 +837,6 @@ const TRUST_STRIP = [
   { title: 'Trusted by 60+ teams', body: 'Across industries and continents',                       Icon: Users2,     tone: 'bg-emerald-50 text-emerald-600' },
   { title: '4.9/5 CSAT',           body: 'From our customers',                                     Icon: Star,       tone: 'bg-amber-50 text-amber-600'     },
 ];
-
-const WIN_METRICS = [
-  { label: 'Response Time', from: 'Hours',   to: 'Seconds' },
-  { label: 'Setup Time',    from: '6 Weeks', to: 'A Few Hours' },
-  { label: 'Channels Live', from: '1',       to: '7 Connected' },
-];
-
-function MetricMorphCard({ label, from, to, trigger, delay = 0 }) {
-  const [morphed, setMorphed] = useState(false);
-  useEffect(() => {
-    if (!trigger) return;
-    const t = setTimeout(() => setMorphed(true), 900 + delay);
-    return () => clearTimeout(t);
-  }, [trigger, delay]);
-
-  return (
-    <motion.div
-      variants={fadeUp}
-      custom={delay / 120}
-      className={`rounded-2xl border p-6 text-center transition-all duration-700 ${
-        morphed
-          ? 'border-emerald-200 bg-emerald-50/40 shadow-[0_0_36px_-10px_rgba(16,185,129,0.4)]'
-          : 'border-slate-200 bg-white shadow-sm'
-      }`}
-    >
-      <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-3">{label}</p>
-      <div className="relative h-9">
-        <AnimatePresence mode="wait">
-          {!morphed ? (
-            <motion.p key="from" exit={{ y: -22, opacity: 0 }} transition={{ duration: 0.4 }} className="text-2xl font-black text-slate-400 line-through decoration-slate-300">
-              {from}
-            </motion.p>
-          ) : (
-            <motion.p key="to" initial={{ y: 22, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} className="text-2xl font-black text-emerald-600">
-              {to}
-            </motion.p>
-          )}
-        </AnimatePresence>
-      </div>
-      <div className={`mt-3 mx-auto h-1 w-10 rounded-full transition-colors duration-700 ${morphed ? 'bg-emerald-400' : 'bg-slate-200'}`} />
-    </motion.div>
-  );
-}
 
 function WhyWinsSection() {
   const containerRef = useRef(null);
@@ -859,98 +907,266 @@ function WhyWinsSection() {
 
         {/* ── the transformation visual ── */}
         <div
-          className="relative grid lg:grid-cols-[1fr_auto_1fr] gap-6 lg:gap-2 items-center transition-transform duration-300 ease-out"
+          className="relative grid lg:grid-cols-[1fr_auto_1fr] gap-6 lg:gap-4 items-center transition-transform duration-300 ease-out"
           style={{ transform: `perspective(1600px) rotateX(${tilt.y}deg) rotateY(${tilt.x}deg)` }}
         >
-          {/* LEFT — fragmented legacy tools */}
-          <div className="relative h-[420px]">
-            <svg className="absolute inset-0 w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-              {[['12,14', '45,10'], ['45,10', '48,54'], ['12,14', '20,50'], ['20,50', '48,54'], ['22,82', '50,84'], ['48,54', '50,84']].map(([a, b], i) => {
-                const [x1, y1] = a.split(',');
-                const [x2, y2] = b.split(',');
-                return (
-                  <line
-                    key={i}
-                    x1={x1} y1={y1} x2={x2} y2={y2}
-                    stroke="#cbd5e1" strokeWidth="0.4" strokeDasharray="1.5 1.5"
-                    className="animate-break-blink" style={{ animationDelay: `${i * 0.5}s` }}
-                  />
-                );
-              })}
+          {/* Wiring across the whole width: scattered tools funnel INTO the core
+              in red, the core fans OUT to the product in violet. One overlay
+              spanning all three columns — an SVG inside a column could not
+              cross the grid gap. Hidden below lg, where the grid stacks and the
+              left-to-right reading no longer holds. */}
+          <svg
+            className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full lg:block"
+            viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"
+          >
+            <defs>
+              <marker id="wireInHead" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto">
+                <path d="M0,0 L6,3 L0,6 z" fill="#fb7185" />
+              </marker>
+              <marker id="wireOutHead" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto">
+                <path d="M0,0 L6,3 L0,6 z" fill="#8b5cf6" />
+              </marker>
+            </defs>
+
+            {WIRES_IN.map((d, i) => (
+              <path
+                key={`in-${i}`} d={d} fill="none" stroke="#fb7185" strokeWidth="0.32"
+                strokeDasharray="1.4 1.6" markerEnd="url(#wireInHead)"
+                className="animate-dash-flow" style={{ animationDelay: `${i * 0.35}s`, opacity: 0.75 }}
+              />
+            ))}
+            {WIRES_OUT.map((d, i) => (
+              <path
+                key={`out-${i}`} d={d} fill="none" stroke="#8b5cf6" strokeWidth="0.32"
+                strokeDasharray="1.4 1.6" markerEnd="url(#wireOutHead)"
+                className="animate-dash-flow" style={{ animationDelay: `${i * 0.3}s`, opacity: 0.8 }}
+              />
+            ))}
+          </svg>
+          {/* ══ LEFT — scattered tools, broken wiring ══ */}
+          <div className="relative min-h-[440px] rounded-3xl border border-slate-200 bg-white/70 p-4 shadow-sm backdrop-blur-sm">
+            {/* broken connector web — dashes travel, then the link drops out */}
+            <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              {BROKEN_LINKS.map((d, i) => (
+                <path
+                  key={i} d={d} fill="none" stroke="#fda4af" strokeWidth="0.35"
+                  strokeDasharray="1.6 1.6" className="animate-break-blink"
+                  style={{ animationDelay: `${i * 0.45}s` }}
+                />
+              ))}
             </svg>
 
             {LEGACY_APPS.map((app, i) => (
               <motion.div
                 key={app.id}
-                initial={{ opacity: 0, scale: 0.85 }}
+                initial={{ opacity: 0, scale: 0.9 }}
                 animate={isInView ? { opacity: 1, scale: 1 } : {}}
-                transition={{ duration: 0.5, delay: i * 0.08 }}
-                className="absolute animate-float rounded-2xl border border-slate-200 bg-white/90 backdrop-blur-md shadow-md p-3.5"
-                style={{ left: app.left, top: app.top, width: app.w, transform: `rotate(${app.rot}deg)`, animationDuration: `${4.5 + i * 0.4}s`, animationDelay: `${i * 0.35}s` }}
+                transition={{ duration: 0.45, delay: i * 0.07 }}
+                className="absolute animate-float rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_8px_24px_-12px_rgba(15,23,42,0.25)]"
+                style={{
+                  left: app.left, top: app.top, width: app.w,
+                  animationDuration: `${4.6 + i * 0.35}s`, animationDelay: `${i * 0.3}s`,
+                }}
               >
-                <div className="flex items-center gap-2">
-                  <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-slate-50 ${app.ring}`}>
-                    {app.spinner ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <app.Icon className="h-3.5 w-3.5" />}
+                <div className="flex items-start gap-2">
+                  <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-white ${app.brand}`}>
+                    <app.Icon className="h-3.5 w-3.5" />
                   </span>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-700 truncate">{app.label}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{app.sub}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12px] font-bold text-slate-800">{app.label}</p>
+                    {app.line1 && <p className="mt-0.5 truncate text-[10px] text-slate-500">{app.line1}</p>}
+                    {app.line2 && <p className="truncate text-[10px] text-slate-400">{app.line2}</p>}
                   </div>
                   {app.badge && (
-                    <span className="ml-auto shrink-0 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white animate-pulse">
+                    <span className="grid h-4 min-w-4 shrink-0 place-items-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white animate-soft-throb">
                       {app.badge}
                     </span>
                   )}
-                  {app.warn && <AlertTriangle className="ml-auto h-3.5 w-3.5 text-red-500 shrink-0" />}
+                  {app.warn && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-500 animate-soft-throb" />}
                 </div>
               </motion.div>
             ))}
-          </div>
 
-          {/* CENTER — glowing AI core */}
-          <div className="relative mx-auto h-[220px] w-[220px] shrink-0 grid place-items-center">
-            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-rose-400/25 via-fuchsia-400/15 to-orange-300/25 blur-2xl animate-pulse-ring" />
-            <div className="absolute inset-3 rounded-full border border-dashed border-rose-300/60 animate-[spin_16s_linear_infinite]" />
-            <div className="absolute inset-8 rounded-full border border-dashed border-orange-300/50 animate-[spin_22s_linear_infinite_reverse]" />
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="absolute inset-0 animate-[spin_10s_linear_infinite]" style={{ animationDelay: `${i * -1.7}s` }}>
-                <span className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-rose-400 shadow-[0_0_8px_2px_rgba(244,63,94,0.5)]" />
-              </div>
+            {/* the costs, called out in red like the reference */}
+            {FAILURE_TAGS.map((t, i) => (
+              <span
+                key={t.label}
+                className="absolute inline-flex items-center gap-1 rounded-md border border-rose-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-rose-600 shadow-sm animate-soft-throb"
+                style={{ left: t.left, top: t.top, animationDelay: `${i * 0.6}s` }}
+              >
+                <X className="h-2.5 w-2.5" /> {t.label}
+              </span>
             ))}
-            <div className="relative h-24 w-24 rounded-full bg-gradient-to-br from-rose-500 via-fuchsia-500 to-orange-400 shadow-[0_0_50px_-6px_rgba(244,63,94,0.7)] grid place-items-center animate-pulse-ring">
-              <Cpu className="h-8 w-8 text-white" />
-            </div>
-            <span className="absolute -bottom-2 rounded-full bg-white border border-rose-100 px-3 py-1 text-[10px] font-bold text-rose-600 shadow-sm">AI Core</span>
           </div>
 
-          {/* RIGHT — unified Orbq dashboard, assembling */}
-          <div className="relative">
-            <div className="grid grid-cols-2 gap-3">
-              {UNIFIED_CARDS.map((card, i) => {
-                const accent = CARD_ACCENTS[card.accent];
-                return (
-                  <motion.div
-                    key={card.id}
-                    initial={{ opacity: 0, x: 24, scale: 0.92 }}
-                    animate={isInView ? { opacity: 1, x: 0, scale: 1 } : {}}
-                    transition={{ duration: 0.5, delay: 0.3 + i * 0.09, ease: [0.22, 1, 0.36, 1] }}
-                    className={`rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 ${card.id === 'kb' ? 'col-span-2' : ''}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${accent.bg} ${accent.text}`}>
-                        <card.Icon className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-800 truncate">{card.title}</p>
-                        <p className={`text-[10px] font-semibold truncate ${accent.text}`}>{card.metric}</p>
-                      </div>
-                      <span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                    </div>
-                  </motion.div>
-                );
-              })}
+          {/* ══ CENTER — the Orbq core ══ */}
+          <div className="relative mx-auto grid w-[230px] place-items-center py-6">
+            <div className="relative grid h-[190px] w-[190px] place-items-center">
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-violet-500/25 via-fuchsia-500/15 to-blue-500/25 blur-3xl animate-pulse-ring" />
+              <div className="absolute inset-2 rounded-full border border-dashed border-violet-300/60 animate-[spin_18s_linear_infinite]" />
+              <div className="absolute inset-7 rounded-full border border-dashed border-blue-300/50 animate-[spin_26s_linear_infinite_reverse]" />
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="absolute inset-0 animate-[spin_11s_linear_infinite]" style={{ animationDelay: `${i * -1.8}s` }}>
+                  <span className="absolute left-1/2 top-1 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-violet-400 shadow-[0_0_10px_2px_rgba(139,92,246,0.6)]" />
+                </div>
+              ))}
+              {/* The mark IS the core. No gradient disc behind it: the supplied
+                  PNG carries its own background, so a disc rendered as a white
+                  box around the logo. The glow sits behind the image instead. */}
+              <div className="relative grid h-[128px] w-[128px] place-items-center">
+                <span className="absolute inset-0 rounded-full bg-violet-500/25 blur-2xl animate-halo" />
+                <img
+                  src="/orbq-icon.png"
+                  alt="Orbq"
+                  className="relative h-28 w-28 object-contain drop-shadow-[0_8px_28px_rgba(139,92,246,0.55)] animate-float"
+                  style={{ animationDuration: '5s' }}
+                />
+              </div>
             </div>
+
+            <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-violet-700 shadow-sm">
+              <Sparkles className="h-3 w-3" /> AI powered by Orbq
+            </span>
+            <p className="mt-2 text-center text-base font-black text-slate-900">Orbq AI</p>
+            <p className="text-center text-[11px] font-semibold leading-tight text-slate-500">
+              Understands. Qualifies.<br />Automates. Converts.
+            </p>
           </div>
+
+          {/* ══ RIGHT — the unified product ══ */}
+          <motion.div
+            initial={{ opacity: 0, x: 26 }}
+            animate={isInView ? { opacity: 1, x: 0 } : {}}
+            transition={{ duration: 0.6, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_50px_-20px_rgba(79,70,229,0.35)]"
+          >
+            <span className="pointer-events-none absolute inset-y-0 -left-1/3 z-20 w-1/3 skew-x-12 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-sheen" />
+
+            <div className="flex text-[9px]">
+              {/* mini sidebar */}
+              <div className="w-[104px] shrink-0 border-r border-slate-100 bg-slate-50/70 p-2">
+                <div className="mb-2 flex items-center gap-1">
+                  <img src="/orbq-icon.png" alt="" className="h-4 w-4 object-contain" />
+                  <span className="text-[10px] font-black text-slate-900">Orbq</span>
+                </div>
+                <p className="mb-1 text-[7px] font-bold uppercase tracking-wider text-slate-400">Platform</p>
+                {DASH_NAV.map((n, i) => (
+                  <div key={n.label} className={`mb-px flex items-center gap-1 rounded px-1 py-[3px] ${i === 0 ? 'bg-violet-100 font-bold text-violet-700' : 'text-slate-500'}`}>
+                    <n.Icon className="h-2.5 w-2.5 shrink-0" />
+                    <span className="truncate">{n.label}</span>
+                    {n.count && <span className="ml-auto text-[7px] text-slate-400">{n.count}</span>}
+                  </div>
+                ))}
+                <p className="mb-1 mt-2 text-[7px] font-bold uppercase tracking-wider text-slate-400">Channels</p>
+                {DASH_CHANNELS.map((c) => (
+                  <div key={c.label} className="mb-px flex items-center gap-1 px-1 py-[2px] text-slate-500">
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${c.dot}`} />
+                    <span className="truncate">{c.label}</span>
+                    <span className="ml-auto text-[7px] text-slate-400">{c.n}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* main panel */}
+              <div className="min-w-0 flex-1 p-2.5">
+                <div className="mb-2 flex items-center gap-1.5">
+                  <div className="flex flex-1 items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 text-slate-400">
+                    <Search className="h-2.5 w-2.5" /> <span className="text-[8px]">Search leads, contacts, conversations…</span>
+                  </div>
+                  <span className="grid h-4 w-4 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-rose-500 text-[7px] font-bold text-white">AK</span>
+                </div>
+
+                <p className="text-[11px] font-black text-slate-900">Good morning, Arjun 👋</p>
+                <p className="mb-2 text-[8px] text-slate-400">Here&apos;s what&apos;s happening in your conversations today.</p>
+
+                {/* KPI row — numbers count up when the section enters view */}
+                <div className="mb-2 grid grid-cols-4 gap-1.5">
+                  {DASH_KPIS.map((k, i) => (
+                    <div key={k.label} className="rounded-lg border border-slate-100 bg-white p-1.5 shadow-sm">
+                      <div className="flex items-center gap-1">
+                        <span className={`grid h-3 w-3 place-items-center rounded ${k.tone}`}><k.Icon className="h-2 w-2" /></span>
+                        <span className="truncate text-[7px] text-slate-400">{k.label}</span>
+                      </div>
+                      <p className="mt-0.5 text-[12px] font-black tabular-nums text-slate-900">
+                        {k.prefix}<CountUp to={k.value} run={isInView} delay={200 + i * 120} />
+                      </p>
+                      <p className="text-[7px] font-bold text-emerald-600">{k.delta}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-[1.6fr_1fr] gap-1.5">
+                  {/* performance line chart — draws itself in */}
+                  <div className="rounded-lg border border-slate-100 p-1.5">
+                    <p className="mb-1 text-[8px] font-bold text-slate-700">Performance Overview</p>
+                    <svg viewBox="0 0 200 56" className="h-14 w-full" aria-hidden="true">
+                      <defs>
+                        <linearGradient id="perfFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.35" />
+                          <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <path d={`${PERF_LINE} L200,56 L0,56 Z`} fill="url(#perfFill)" />
+                      <path d={PERF_LINE} fill="none" stroke="#7c3aed" strokeWidth="1.6"
+                        strokeDasharray="400" strokeDashoffset="400"
+                        style={{ animation: 'drawPath 2.4s cubic-bezier(0.22,1,0.36,1) 0.4s forwards' }} />
+                      {PERF_POINTS.map((p, i) => (
+                        <circle key={i} cx={p[0]} cy={p[1]} r="1.6" fill="#7c3aed"
+                          className="animate-halo" style={{ animationDelay: `${1 + i * 0.12}s` }} />
+                      ))}
+                    </svg>
+                  </div>
+
+                  {/* channel donut */}
+                  <div className="rounded-lg border border-slate-100 p-1.5">
+                    <p className="mb-1 text-[8px] font-bold text-slate-700">Top Channels</p>
+                    <div className="flex items-center gap-1.5">
+                      <svg viewBox="0 0 42 42" className="h-12 w-12 -rotate-90" aria-hidden="true">
+                        {DONUT.map((d, i) => (
+                          <circle
+                            key={d.label} cx="21" cy="21" r="15.9" fill="none"
+                            stroke={d.color} strokeWidth="6"
+                            strokeDasharray={`${d.pct} ${100 - d.pct}`} strokeDashoffset={-d.offset}
+                            pathLength="100"
+                            style={{ animation: `growBar 0.9s ease-out ${0.5 + i * 0.15}s both` }}
+                          />
+                        ))}
+                      </svg>
+                      <div className="min-w-0 space-y-px">
+                        {DONUT.map((d) => (
+                          <div key={d.label} className="flex items-center gap-1 text-[7px] text-slate-500">
+                            <span className="h-1.5 w-1.5 rounded-full" style={{ background: d.color }} />
+                            <span className="truncate">{d.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* live agent activity — rows tick in one by one */}
+                <div className="mt-1.5 rounded-lg border border-slate-100 p-1.5">
+                  <p className="mb-1 flex items-center gap-1 text-[8px] font-bold text-slate-700">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> AI Agent Activity
+                  </p>
+                  {AGENT_ROWS.map((r, i) => (
+                    <motion.div
+                      key={r.agent}
+                      initial={{ opacity: 0, x: 8 }}
+                      animate={isInView ? { opacity: 1, x: 0 } : {}}
+                      transition={{ duration: 0.4, delay: 0.9 + i * 0.18 }}
+                      className="mb-px flex items-center gap-1"
+                    >
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${r.dot}`} />
+                      <span className="truncate text-[8px] font-semibold text-slate-700">{r.agent}</span>
+                      <span className="truncate text-[7px] text-slate-400">{r.note}</span>
+                      <span className={`ml-auto shrink-0 rounded px-1 text-[7px] font-bold ${r.tone}`}>{r.status}</span>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </motion.div>
         </div>
 
         {/* ── pain -> benefit: the two halves restated as outcomes ── */}
@@ -1000,13 +1216,6 @@ function WhyWinsSection() {
               ))}
             </div>
           </div>
-        </div>
-
-        {/* ── metrics row: morph on scroll-into-view ── */}
-        <div className="grid sm:grid-cols-3 gap-5 mt-8">
-          {WIN_METRICS.map((m, i) => (
-            <MetricMorphCard key={m.label} {...m} trigger={isInView} delay={i * 150} />
-          ))}
         </div>
 
         {/* ── trust strip ── */}

@@ -8,7 +8,7 @@ import { useMarketingPerformance } from '@/lib/queries/marketingAgent';
 const RANGES = [7, 30, 90];
 
 const ARTIFACT_META = [
-  { key: 'content_runs', label: 'Content Runs', icon: Sparkles, tone: 'text-blue-600', bg: 'bg-blue-50' },
+  { key: 'content_runs', label: 'Content Runs', icon: Sparkles, tone: 'text-violet-600', bg: 'bg-violet-50' },
   { key: 'seo_briefs', label: 'SEO Briefs', icon: Search, tone: 'text-emerald-600', bg: 'bg-emerald-50' },
   { key: 'personas', label: 'Persona Sets', icon: UserRound, tone: 'text-violet-600', bg: 'bg-violet-50' },
   { key: 'campaign_plans', label: 'Campaign Plans', icon: CalendarClock, tone: 'text-amber-600', bg: 'bg-amber-50' },
@@ -73,7 +73,7 @@ export default function PerformancePanel() {
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6">
         <div className="flex items-center gap-2.5 mb-1">
-          <div className="p-2 rounded-xl bg-gradient-to-br from-sky-50 to-blue-100 text-sky-600">
+          <div className="p-2 rounded-xl bg-gradient-to-br from-sky-50 to-violet-100 text-sky-600">
             <Activity size={15} />
           </div>
           <div>
