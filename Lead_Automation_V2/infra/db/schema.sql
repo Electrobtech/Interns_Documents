@@ -498,6 +498,156 @@ CREATE TABLE IF NOT EXISTS google_oauth_configs (
   UNIQUE (organization_id)
 );
 
+-- ---------- Email (Gmail) — see migrations/013_email_integration.sql and
+-- services/email-service. Full-fidelity mailbox data lives in these
+-- dedicated tables; a summarized copy is also written into the shared
+-- conversations/messages tables above (channel_type='email') so a
+-- connected mailbox shows up in the Unified Inbox like every other
+-- channel. ----------
+CREATE TABLE IF NOT EXISTS email_accounts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  provider          TEXT NOT NULL DEFAULT 'gmail',
+  email             TEXT NOT NULL,
+  access_token      TEXT,
+  refresh_token     TEXT,
+  token_expires_at  TIMESTAMPTZ,
+  scope             TEXT,
+  connected         BOOLEAN NOT NULL DEFAULT true,
+  connected_by      UUID REFERENCES users(id),
+  history_id        TEXT,
+  watch_expires_at  TIMESTAMPTZ,
+  last_synced_at    TIMESTAMPTZ,
+  last_sync_error   TEXT,
+  signature_html    TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, email)
+);
+
+CREATE TABLE IF NOT EXISTS email_threads (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  email_account_id   UUID REFERENCES email_accounts(id) ON DELETE CASCADE,
+  thread_id          TEXT NOT NULL,
+  conversation_id    UUID REFERENCES conversations(id) ON DELETE SET NULL,
+  subject            TEXT,
+  participants       TEXT[] DEFAULT '{}',
+  last_message_time  TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (email_account_id, thread_id)
+);
+
+CREATE TABLE IF NOT EXISTS email_messages (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  email_account_id  UUID REFERENCES email_accounts(id) ON DELETE CASCADE,
+  thread_id         UUID REFERENCES email_threads(id) ON DELETE CASCADE,
+  message_id        TEXT NOT NULL,
+  rfc822_message_id TEXT,
+  in_reply_to       TEXT,
+  from_email        TEXT,
+  to_email          TEXT[] DEFAULT '{}',
+  cc_email          TEXT[] DEFAULT '{}',
+  subject           TEXT,
+  body              TEXT,
+  html_body         TEXT,
+  snippet           TEXT,
+  direction         TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'received',
+  label_ids         TEXT[] DEFAULT '{}',
+  has_attachments   BOOLEAN NOT NULL DEFAULT false,
+  received_at       TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (email_account_id, message_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_email_messages_thread ON email_messages (thread_id, received_at);
+
+CREATE TABLE IF NOT EXISTS email_attachments (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  message_id          UUID REFERENCES email_messages(id) ON DELETE CASCADE,
+  filename            TEXT,
+  mime_type           TEXT,
+  size                INT,
+  gmail_attachment_id TEXT,
+  url                 TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_email_attachments_message ON email_attachments (message_id);
+
+-- ---------------------------------------------------------------------
+-- Google Calendar integration (services/calendar-service) — see
+-- infra/db/migrations/016_calendar_integration.sql for the full
+-- rationale/comments; kept in sync here for fresh installs.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS calendar_accounts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  google_email      TEXT,
+  access_token      TEXT,
+  refresh_token     TEXT,
+  token_expires_at  TIMESTAMPTZ,
+  scope             TEXT,
+  connected         BOOLEAN NOT NULL DEFAULT true,
+  connected_by      UUID REFERENCES users(id),
+  last_error        TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id)
+);
+
+CREATE TABLE IF NOT EXISTS calendar_events (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  google_event_id     TEXT NOT NULL,
+  title               TEXT NOT NULL,
+  description         TEXT,
+  starts_at           TIMESTAMPTZ NOT NULL,
+  ends_at             TIMESTAMPTZ NOT NULL,
+  location            TEXT,
+  attendee_emails     TEXT[],
+  contact_id          UUID REFERENCES contacts(id) ON DELETE SET NULL,
+  campaign_id         UUID REFERENCES campaigns(id) ON DELETE SET NULL,
+  automation_node_id  TEXT,
+  status              TEXT NOT NULL DEFAULT 'confirmed',
+  html_link           TEXT,
+  created_by          UUID REFERENCES users(id),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_calendar_events_org_time ON calendar_events (organization_id, starts_at);
+CREATE INDEX IF NOT EXISTS ix_calendar_events_contact ON calendar_events (contact_id);
+CREATE INDEX IF NOT EXISTS ix_calendar_events_campaign ON calendar_events (campaign_id);
+
+-- ---------- SMS (receive-only, via forwarder app) — see
+-- migrations/015_sms_forwarder_devices.sql and services/integration-service
+-- routes/smsWebhook.js + smsDevices.js. Each row is one Android phone
+-- running a third-party forwarding app (e.g. SMS Forwarder) that POSTs
+-- inbound texts to a per-device webhook URL; the token in that URL is the
+-- only credential. Inbound texts land in the shared contacts/conversations/
+-- messages tables above (channel_type='sms') like every other channel. ----------
+CREATE TABLE IF NOT EXISTS sms_devices (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  label             TEXT NOT NULL,             -- e.g. "Front desk phone", "Rep #2 SIM"
+  phone_number      TEXT,                       -- optional, cosmetic — not used for delivery
+  webhook_token     TEXT NOT NULL UNIQUE,        -- 64-char random hex; the URL IS the credential
+  connected         BOOLEAN NOT NULL DEFAULT true,
+  last_message_at   TIMESTAMPTZ,
+  message_count     INTEGER NOT NULL DEFAULT 0,
+  last_raw_payload  JSONB,                       -- most recent payload received — critical for
+                                                   -- debugging field-name mismatches
+  created_by        UUID REFERENCES users(id),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_sms_devices_org ON sms_devices (organization_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_sms_devices_token ON sms_devices (webhook_token);
+
 -- ---------- Ecommerce & Revenue ----------
 CREATE TABLE IF NOT EXISTS ecommerce_orders (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -738,6 +888,52 @@ CREATE TABLE IF NOT EXISTS linkedin_campaign_metrics (
   leads           INT NOT NULL DEFAULT 0,
   UNIQUE (user_id, campaign_urn, date)
 );
+
+CREATE TABLE IF NOT EXISTS linkedin_conversion_config (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id               TEXT NOT NULL UNIQUE,
+  conversion_rule_urn   TEXT NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS linkedin_conversion_events (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id               TEXT NOT NULL,
+  event_id              TEXT NOT NULL,
+  conversion_rule_urn   TEXT NOT NULL,
+  email_hash            TEXT NOT NULL,
+  value_cents           BIGINT,
+  currency_code         TEXT,
+  lead_id               UUID,
+  status                TEXT NOT NULL DEFAULT 'sent',
+  error_detail          TEXT,
+  sent_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_linkedin_conversion_events_user_sent ON linkedin_conversion_events (user_id, sent_at DESC);
+
+CREATE TABLE IF NOT EXISTS linkedin_posts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id           TEXT NOT NULL,
+  post_urn          TEXT NOT NULL,
+  author_urn        TEXT NOT NULL,
+  as_organization   BOOLEAN NOT NULL DEFAULT false,
+  text              TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'published',
+  media_urn         TEXT,
+  media_type        TEXT,
+  metrics           JSONB NOT NULL DEFAULT '{}',
+  comments_cache    JSONB NOT NULL DEFAULT '[]',
+  comments_synced_at TIMESTAMPTZ,
+  last_synced_at    TIMESTAMPTZ,
+  published_at      TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, post_urn)
+);
+
+CREATE INDEX IF NOT EXISTS idx_linkedin_posts_user_created ON linkedin_posts (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS linkedin_organizations (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

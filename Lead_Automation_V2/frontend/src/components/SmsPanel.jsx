@@ -1,12 +1,51 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   Smartphone, Plus, X, Copy, Check, RefreshCw, Trash2, Loader2, ChevronDown, ChevronUp, Info,
+  MessageSquare, User, ExternalLink, ArrowLeft, Lock, Unlock, AlertCircle,
 } from 'lucide-react';
 import { useApi } from '@/lib/useApi';
 import { useToast, ToastStack } from '@/components/Toast';
 
 const inputCls = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand';
+
+// Same admin-password gate used for Instagram/Facebook/WhatsApp unlocking
+// (see UnlockPasswordPrompt in ConnectionsPanel.jsx) — kept as a small local
+// copy here so this panel stays self-contained.
+function UnlockPasswordPrompt({ onConfirm, onCancel, unlocking, error }) {
+  const [password, setPassword] = useState('');
+  return (
+    <form
+      onSubmit={(e) => { e.preventDefault(); onConfirm(password); }}
+      className="mt-2 space-y-2 bg-amber-50 border border-amber-200 rounded-lg p-3"
+    >
+      <p className="text-xs text-amber-700">Enter the admin password to unlock this device.</p>
+      <input
+        type="password"
+        autoFocus
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Admin password"
+        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
+      />
+      {error && (
+        <p className="text-xs text-red-600 flex items-center gap-1"><AlertCircle size={12} /> {error}</p>
+      )}
+      <div className="flex gap-2">
+        <button type="submit" disabled={unlocking || !password}
+          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-100 disabled:opacity-60">
+          {unlocking ? <Loader2 size={12} className="animate-spin" /> : <Unlock size={12} />}
+          {unlocking ? 'Unlocking…' : 'Confirm unlock'}
+        </button>
+        <button type="button" onClick={onCancel} disabled={unlocking}
+          className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50">
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
 
 /**
  * SMS / RCS > Channels panel.
@@ -32,6 +71,50 @@ export default function SmsPanel() {
   const [label, setLabel] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [unlockPromptId, setUnlockPromptId] = useState('');
+  const [unlockError, setUnlockError] = useState('');
+  const [unlockingId, setUnlockingId] = useState('');
+
+  useEffect(() => {
+    call('/auth/profile').then((p) => setIsAdmin(p?.role === 'admin')).catch(() => {});
+  }, [call]);
+
+  // SMS conversations pulled straight from the same /conversations
+  // endpoint the Unified Inbox uses (filtered to channel=sms), so this
+  // page shows the actual message threads too, not just device/webhook
+  // status.
+  const [conversations, setConversations] = useState([]);
+  const [conversationsLoading, setConversationsLoading] = useState(true);
+  const [openConversationId, setOpenConversationId] = useState('');
+  const [thread, setThread] = useState(null);
+  const [threadLoading, setThreadLoading] = useState(false);
+
+  const loadConversations = useCallback(() => {
+    setConversationsLoading(true);
+    call('/conversations?channel=sms')
+      .then((rows) => setConversations(Array.isArray(rows) ? rows : []))
+      .catch(() => setConversations([]))
+      .finally(() => setConversationsLoading(false));
+  }, [call]);
+
+  useEffect(() => { loadConversations(); }, [loadConversations]);
+
+  useEffect(() => {
+    const t = setInterval(loadConversations, 20_000);
+    return () => clearInterval(t);
+  }, [loadConversations]);
+
+  function openThread(id) {
+    setOpenConversationId(id);
+    setThread(null);
+    setThreadLoading(true);
+    call(`/conversations/${id}`)
+      .then(setThread)
+      .catch((err) => toast.error(err.message || 'Could not load this conversation.'))
+      .finally(() => setThreadLoading(false));
+  }
 
   const load = useCallback(() => {
     setLoading(true);
@@ -83,6 +166,24 @@ export default function SmsPanel() {
     } catch (err) {
       toast.error(err.message || 'Could not regenerate the token.');
     } finally { setBusyId(''); }
+  }
+
+  async function handleUnlock(device, password) {
+    setUnlockingId(device.id);
+    setUnlockError('');
+    try {
+      const updated = await call(`/sms/devices/${device.id}/unlock`, {
+        method: 'POST',
+        body: { password },
+      });
+      setDevices((prev) => prev.map((d) => (d.id === device.id ? updated : d)));
+      setUnlockPromptId('');
+      toast.success('Device unlocked.');
+    } catch (err) {
+      setUnlockError(err.data?.error || err.message || 'Could not unlock this device.');
+    } finally {
+      setUnlockingId('');
+    }
   }
 
   async function handleDelete(device) {
@@ -146,7 +247,14 @@ export default function SmsPanel() {
                   <div className="flex items-center gap-3">
                     <span className={`w-2 h-2 rounded-full shrink-0 ${d.connected ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                     <div>
-                      <p className="text-sm font-medium text-slate-700">{d.label}</p>
+                      <p className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
+                        {d.label}
+                        {d.locked && (
+                          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-600">
+                            <Lock size={10} /> Locked
+                          </span>
+                        )}
+                      </p>
                       <p className="text-[11px] text-slate-400">
                         {d.phone_number ? `${d.phone_number} · ` : ''}
                         {d.last_message_at ? `last message ${new Date(d.last_message_at).toLocaleString()}` : 'no messages yet'}
@@ -159,16 +267,42 @@ export default function SmsPanel() {
                       className="flex items-center gap-1 text-xs font-medium border border-slate-300 rounded-lg px-3 py-1.5 text-slate-600 hover:text-brand">
                       {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />} Webhook & debug
                     </button>
-                    <button onClick={() => handleRegenerate(d)} disabled={busyId === d.id}
-                      className="flex items-center gap-1.5 text-xs font-medium border border-slate-300 rounded-lg px-3 py-1.5 text-slate-600 hover:text-brand disabled:opacity-60">
-                      <RefreshCw size={13} className={busyId === d.id ? 'animate-spin' : ''} /> Regenerate
-                    </button>
-                    <button onClick={() => handleDelete(d)} disabled={busyId === d.id}
-                      className="flex items-center gap-1.5 text-xs font-medium border border-slate-300 rounded-lg px-3 py-1.5 text-slate-500 hover:text-red-500 disabled:opacity-60">
-                      <Trash2 size={13} /> Remove
-                    </button>
+                    {d.locked ? (
+                      isAdmin && (
+                        <button onClick={() => { setUnlockPromptId(unlockPromptId === d.id ? '' : d.id); setUnlockError(''); }}
+                          className="flex items-center gap-1.5 text-xs font-medium border border-amber-300 rounded-lg px-3 py-1.5 text-amber-700 hover:bg-amber-50">
+                          <Unlock size={13} /> Unlock
+                        </button>
+                      )
+                    ) : (
+                      <>
+                        <button onClick={() => handleRegenerate(d)} disabled={busyId === d.id}
+                          className="flex items-center gap-1.5 text-xs font-medium border border-slate-300 rounded-lg px-3 py-1.5 text-slate-600 hover:text-brand disabled:opacity-60">
+                          <RefreshCw size={13} className={busyId === d.id ? 'animate-spin' : ''} /> Regenerate
+                        </button>
+                        <button onClick={() => handleDelete(d)} disabled={busyId === d.id}
+                          className="flex items-center gap-1.5 text-xs font-medium border border-slate-300 rounded-lg px-3 py-1.5 text-slate-500 hover:text-red-500 disabled:opacity-60">
+                          <Trash2 size={13} /> Remove
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
+
+                {d.locked && !isAdmin && (
+                  <p className="mt-2 text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+                    This device is locked to keep it from being changed by mistake. Ask an account admin if it needs to be edited or removed.
+                  </p>
+                )}
+
+                {d.locked && isAdmin && unlockPromptId === d.id && (
+                  <UnlockPasswordPrompt
+                    onConfirm={(password) => handleUnlock(d, password)}
+                    onCancel={() => { setUnlockPromptId(''); setUnlockError(''); }}
+                    unlocking={unlockingId === d.id}
+                    error={unlockError}
+                  />
+                )}
 
                 {expanded && (
                   <div className="mt-3 space-y-3 bg-slate-50 rounded-lg p-3">
@@ -203,6 +337,83 @@ export default function SmsPanel() {
           })}
         </div>
       )}
+
+      {/* SMS Messages — same conversations the Unified Inbox shows,
+          filtered to this channel, so they're visible here too. */}
+      <div className="bg-white border border-slate-200 rounded-xl">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <p className="font-semibold text-sm flex items-center gap-1.5">
+            <MessageSquare size={15} className="text-brand" /> Messages
+          </p>
+          {openConversationId && (
+            <button onClick={() => setOpenConversationId('')}
+              className="flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-brand">
+              <ArrowLeft size={13} /> Back to list
+            </button>
+          )}
+        </div>
+
+        {openConversationId ? (
+          <div className="p-4 space-y-3">
+            {threadLoading && <p className="text-sm text-slate-400">Loading conversation…</p>}
+            {!threadLoading && thread && (
+              <>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">{thread.contact_name || thread.contact_external_id || 'Unknown sender'}</p>
+                    {thread.contact_external_id && <p className="text-[11px] text-slate-400">{thread.contact_external_id}</p>}
+                  </div>
+                  <Link href={`/app/inbox/${thread.id}`}
+                    className="flex items-center gap-1 text-xs font-medium border border-slate-300 rounded-lg px-3 py-1.5 text-slate-600 hover:text-brand">
+                    <ExternalLink size={13} /> Open in Unified Inbox
+                  </Link>
+                </div>
+                <div className="space-y-2 max-h-96 overflow-y-auto bg-slate-50 rounded-lg p-3">
+                  {(thread.messages || []).length === 0 && (
+                    <p className="text-xs text-slate-400">No messages yet.</p>
+                  )}
+                  {(thread.messages || []).map((m) => (
+                    <div key={m.id} className={`flex ${m.direction === 'inbound' ? 'justify-start' : 'justify-end'}`}>
+                      <div className={`max-w-[75%] rounded-lg px-3 py-1.5 text-sm ${
+                        m.direction === 'inbound' ? 'bg-white border border-slate-200 text-slate-700' : 'bg-brand text-white'
+                      }`}>
+                        <p className="whitespace-pre-line">{m.body}</p>
+                        <p className={`text-[10px] mt-0.5 ${m.direction === 'inbound' ? 'text-slate-400' : 'text-white/70'}`}>
+                          {new Date(m.created_at).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        ) : conversationsLoading ? (
+          <div className="p-4 text-sm text-slate-400">Loading messages…</div>
+        ) : conversations.length === 0 ? (
+          <div className="p-6 text-center text-sm text-slate-400">
+            No SMS messages yet — once a device receives a text, it'll show up here.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {conversations.map((c) => (
+              <button key={c.id} onClick={() => openThread(c.id)}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50/60 transition-colors">
+                <div className="w-8 h-8 rounded-full bg-slate-100 grid place-items-center shrink-0">
+                  <User size={14} className="text-slate-400" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-700 truncate">{c.contact_name || c.contact_phone || 'Unknown sender'}</p>
+                  <p className="text-xs text-slate-400 truncate">{c.last_message_preview || 'No messages'}</p>
+                </div>
+                <p className="text-[11px] text-slate-400 shrink-0">
+                  {c.last_message_at ? new Date(c.last_message_at).toLocaleString() : ''}
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Add phone modal */}
       {addOpen && (
