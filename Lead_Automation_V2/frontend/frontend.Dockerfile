@@ -18,6 +18,13 @@ RUN npm install
 # Copy all source files
 COPY . .
 
+# NEXT_PUBLIC_* vars are inlined by Next.js at build time, not read at
+# container start, so setting it only in docker-compose's `environment:` block
+# left the build falling back to the code's hardcoded http://localhost:8080.
+# Passed in as a build arg instead (see docker-compose.yml `build.args`).
+ARG NEXT_PUBLIC_API_URL=http://localhost:8080
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Build the Next.js application.
 # next/font/google downloads font CSS at build time using Node's own fetch,
 # which npm's strict-ssl setting doesn't cover — behind a TLS-inspecting

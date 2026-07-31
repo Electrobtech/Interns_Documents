@@ -99,7 +99,8 @@ const routes = [
   // services/linkedin-service/src/index.js).
   { path: '/api/v1/integrations/linkedin', target: LINKEDIN },
   { path: '/auth',                target: AUTH },
-  { path: '/company',             target: AUTH }, // Company Registration wizard: companyController.js + gstController.js
+  { path: '/company',             target: AUTH },
+  { path: '/super-admin',         target: AUTH }, // Platform Super Admin API: superAdminController.js — separate requireSuperAdmin auth, not tenant `authenticate` // Company Registration wizard: companyController.js + gstController.js
   { path: '/conversations',       target: INBOX },
   { path: '/socket.io',           target: INBOX, ws: true }, // live message delivery — see services/inbox-service/src/realtime.js
   { path: '/contacts',            target: CONTACT },

@@ -15,6 +15,18 @@ app.use(authenticate);
 const canWrite = requirePermission('campaigns:write');
 const canSend = requirePermission('campaigns:send');
 
+// FIX: Express 4 (this app uses ^4.19.2) does NOT automatically catch a
+// rejected promise thrown inside an `async (req, res) => {...}` route
+// handler — it becomes an unhandled promise rejection at the process level,
+// and Node 20 terminates the whole process on those by default. That's
+// exactly what happened here: a DB error in GET /campaigns/:id/recipients
+// (missing "rendered_message" column) crashed the entire campaign-service
+// container instead of just 500-ing that one request. Wrapping every async
+// route in this forwards the error to next(err) -> the error-handling
+// middleware at the bottom instead, so one bad request/query can never take
+// the whole service down again.
+const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
 // jsonb columns accept either a JSON string (from a textarea) or a JS object.
 const asJson = (v) => (v == null || v === '' ? null : typeof v === 'string' ? v : JSON.stringify(v));
 
@@ -24,15 +36,15 @@ app.get('/health', (_req, res) => res.json({ service: 'campaign', ok: true }));
 // is matched before any campaign :id routes below.
 app.use(productRoutes);
 
-app.get('/campaigns', async (req, res) => {
+app.get('/campaigns', ah(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT * FROM campaigns WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 200`,
     [req.user.organizationId]
   );
   res.json(rows);
-});
+}));
 
-app.post('/campaigns', canWrite, async (req, res) => {
+app.post('/campaigns', canWrite, ah(async (req, res) => {
   const { name, type, channel_type, message_body, cta, scheduled_at, status } = req.body;
   const { rows } = await pool.query(
     `INSERT INTO campaigns (organization_id, name, type, channel_type, message_body, cta, scheduled_at, status)
@@ -41,17 +53,17 @@ app.post('/campaigns', canWrite, async (req, res) => {
   );
   logAudit(req, 'campaign.create', { id: rows[0].id, name });
   res.status(201).json(rows[0]);
-});
+}));
 
-app.get('/campaigns/:id', async (req, res) => {
+app.get('/campaigns/:id', ah(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT * FROM campaigns WHERE id=$1 AND organization_id=$2`,
     [req.params.id, req.user.organizationId]
   );
   res.json(rows[0] || {});
-});
+}));
 
-app.put('/campaigns/:id', canWrite, async (req, res) => {
+app.put('/campaigns/:id', canWrite, ah(async (req, res) => {
   const { name, type, channel_type, message_body, cta, scheduled_at, status } = req.body;
   const { rows } = await pool.query(
     `UPDATE campaigns SET name=COALESCE($1,name), type=COALESCE($2,type),
@@ -63,21 +75,21 @@ app.put('/campaigns/:id', canWrite, async (req, res) => {
   );
   logAudit(req, 'campaign.update', { id: req.params.id, changes: { name, status } });
   res.json(rows[0] || {});
-});
+}));
 
-app.delete('/campaigns/:id', canWrite, async (req, res) => {
+app.delete('/campaigns/:id', canWrite, ah(async (req, res) => {
   await pool.query(`DELETE FROM campaigns WHERE id=$1 AND organization_id=$2`,
     [req.params.id, req.user.organizationId]);
   logAudit(req, 'campaign.delete', { id: req.params.id });
   res.json({ ok: true });
-});
+}));
 
 // Human-approval gate — a campaign sitting in 'needs_approval' cannot be sent
 // until a reviewer decides. Approving moves it to 'scheduled' if it already
 // has a scheduled_at, otherwise back to 'draft' (ready, but still requires
 // an explicit send/schedule action). Rejecting is a distinct terminal status
 // so the Approval Queue can show it was reviewed and declined, not just reset.
-app.post('/campaigns/:id/decision', canWrite, async (req, res) => {
+app.post('/campaigns/:id/decision', canWrite, ah(async (req, res) => {
   const { decision, note } = req.body;
   if (!['approved', 'rejected'].includes(decision)) {
     return res.status(400).json({ error: "decision must be 'approved' or 'rejected'" });
@@ -102,7 +114,7 @@ app.post('/campaigns/:id/decision', canWrite, async (req, res) => {
   );
   logAudit(req, `campaign.${decision}`, { id: campaign.id, name: campaign.name, note: note || null });
   res.json(rows[0]);
-});
+}));
 
 // ---------------------------------------------------------------------
 // Bulk Messaging / Broadcast Campaign
@@ -225,7 +237,7 @@ app.post('/campaigns/broadcast', canSend, async (req, res) => {
  * campaign row itself (returned by GET /campaigns/:id) is enough for the
  * live progress bar alone.
  */
-app.get('/campaigns/:id/recipients', async (req, res) => {
+app.get('/campaigns/:id/recipients', ah(async (req, res) => {
   const { rows: owned } = await pool.query(
     `SELECT id FROM campaigns WHERE id=$1 AND organization_id=$2`,
     [req.params.id, req.user.organizationId]
@@ -239,7 +251,7 @@ app.get('/campaigns/:id/recipients', async (req, res) => {
     [req.params.id]
   );
   res.json(rows);
-});
+}));
 
 // automation-service owns the channel Send API credentials + the Unified
 // Inbox transcript writes (messageRepository), so actually delivering a
@@ -255,7 +267,7 @@ const AUTOMATION_SERVICE_URL = process.env.AUTOMATION_SERVICE_URL || 'http://loc
 // failure (bad/missing number, expired token, a transcript write hiccup on
 // the automation-service side, etc) never aborts the rest of the run —
 // every outcome is caught and recorded rather than thrown.
-app.post('/campaigns/:id/send', canSend, async (req, res) => {
+app.post('/campaigns/:id/send', canSend, ah(async (req, res) => {
   const { rows } = await pool.query(
     `UPDATE campaigns SET status='sent' WHERE id=$1 AND organization_id=$2 RETURNING *`,
     [req.params.id, req.user.organizationId]
@@ -304,6 +316,17 @@ app.post('/campaigns/:id/send', canSend, async (req, res) => {
   }));
 
   res.json(campaign);
+}));
+
+// FIX: catches anything ah() forwards via next(err) — without this, Express's
+// own default error handler would still respond (it doesn't crash on its
+// own), but this gives consistent JSON error responses and, importantly,
+// logs the failure loudly so a schema/query bug like the one that caused
+// this outage is easy to spot in `docker compose logs campaign-service`.
+app.use((err, req, res, _next) => {
+  console.error('[campaign-service] unhandled route error:', err);
+  if (res.headersSent) return;
+  res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
 const PORT = process.env.CAMPAIGN_PORT || 4004;

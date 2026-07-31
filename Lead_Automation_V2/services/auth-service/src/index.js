@@ -7,6 +7,7 @@ const companyController = require('./controllers/companyController');
 const verificationController = require('./controllers/verificationController');
 const gstController = require('./controllers/gstController');
 const pinController = require('./controllers/pinController');
+const superAdminController = require('./controllers/superAdminController');
 
 const app = express();
 app.use(cors());
@@ -26,6 +27,12 @@ app.use(companyController);
 app.use(verificationController);
 app.use(gstController);
 app.use(pinController);
+
+// Platform Super Admin API (tenant governance, wallet billing, agent
+// performance, feature flags) — see controllers/superAdminController.js.
+// Auth'd separately via requireSuperAdmin, not the tenant `authenticate`
+// middleware below, so it's mounted independently of everything else here.
+app.use(superAdminController);
 
 // ---- Register (also creates an org on first signup) ----
 app.post('/auth/register', async (req, res) => {

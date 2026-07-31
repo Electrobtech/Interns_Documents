@@ -67,6 +67,7 @@ BEGIN
     'playbooks', 'conversation_sessions',
     'email_accounts', 'email_threads', 'email_messages',
     'sms_devices',
+    'wallets', 'wallet_transactions', 'feature_flags', 'attachments'
     'calendar_accounts', 'calendar_events'
   ]
   LOOP
@@ -167,6 +168,19 @@ CREATE POLICY tenant_isolation ON email_attachments
     )
   );
 
+-- ---------- platform_admins — not tenant-scoped at all ----------
+-- Super admin staff aren't inside any organization, so there's no
+-- organization_id to compare against app_current_org() here. The only
+-- legitimate access path is a platform-admin auth flow running under
+-- withSystemAccess() (see shared/src/superAdmin.js) — a normal
+-- tenant-scoped connection must never see this table.
+ALTER TABLE platform_admins ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platform_admins FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS bypass_only ON platform_admins;
+CREATE POLICY bypass_only ON platform_admins
+  USING      (app_rls_bypass())
+  WITH CHECK (app_rls_bypass());
+
 -- ---------- Deliberately NOT under RLS ----------
 -- roles / permissions / role_permissions
 --   Shared reference data, not tenant-owned.
@@ -193,6 +207,11 @@ CREATE POLICY tenant_isolation ON email_attachments
 --   or "client:organization_id" depending on limit_type) rather than a
 --   real organization_id column, so it can't be enforced with a plain
 --   equality/EXISTS predicate the way the tables above are.
+--
+-- platform_admins
+--   Not tenant-owned — see its own bypass-only policy above. Listed here
+--   too so this section stays a complete inventory of every table's RLS
+--   treatment at a glance.
 --
 -- These are known, intentional gaps — see docs/MULTI_TENANT_RLS.md.
 
