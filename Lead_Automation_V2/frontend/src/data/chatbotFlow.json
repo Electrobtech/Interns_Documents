@@ -4,7 +4,7 @@
     "root": {
       "id": "root",
       "title": "Welcome",
-      "message": "Hi! 👋 Welcome to ConnectSphere. What would you like to know?",
+      "message": "Hi! 👋 Welcome to Orbq. What would you like to know?",
       "quickReplies": [
         {
           "label": "Learn About the Platform",
@@ -44,8 +44,8 @@
     },
     "platform_overview": {
       "id": "platform_overview",
-      "title": "About ConnectSphere",
-      "message": "ConnectSphere is an AI-powered Lead Automation Platform that helps businesses capture, manage, nurture, and convert leads from multiple communication channels.",
+      "title": "About Orbq",
+      "message": "Orbq is an AI-powered Lead Automation Platform that helps businesses capture, manage, nurture, and convert leads from multiple communication channels.",
       "quickReplies": [
         {
           "label": "How does it work?",
@@ -60,7 +60,7 @@
           "next": "problems_solved"
         },
         {
-          "label": "Why choose ConnectSphere?",
+          "label": "Why choose Orbq?",
           "next": "why_choose"
         },
         {
@@ -107,7 +107,7 @@
     "who_uses_it": {
       "id": "who_uses_it",
       "title": "Who It's For",
-      "message": "D2C and e-commerce brands, SaaS companies, real estate and education consultancies, agencies juggling multiple client inboxes, and enterprises with high inbound volume across WhatsApp, Instagram, and email all run on ConnectSphere.",
+      "message": "D2C and e-commerce brands, SaaS companies, real estate and education consultancies, agencies juggling multiple client inboxes, and enterprises with high inbound volume across WhatsApp, Instagram, and email all run on Orbq.",
       "quickReplies": [
         {
           "label": "Back",
@@ -120,7 +120,7 @@
     "problems_solved": {
       "id": "problems_solved",
       "title": "Problems Solved",
-      "message": "Leads get lost across scattered tools, first response takes hours instead of seconds, teams have no unified view of a conversation, CRM entry is manual, and after-hours inquiries go unanswered. ConnectSphere fixes all five.",
+      "message": "Leads get lost across scattered tools, first response takes hours instead of seconds, teams have no unified view of a conversation, CRM entry is manual, and after-hours inquiries go unanswered. Orbq fixes all five.",
       "quickReplies": [
         {
           "label": "Back",
@@ -132,7 +132,7 @@
     },
     "why_choose": {
       "id": "why_choose",
-      "title": "Why ConnectSphere",
+      "title": "Why Orbq",
       "message": "Teams switch because first response drops from hours to seconds, setup takes a few hours instead of six weeks, and every channel — not just one — reports into a single pipeline.",
       "quickReplies": [
         {
@@ -195,7 +195,7 @@
     "lead_capture": {
       "id": "lead_capture",
       "title": "Lead Capture",
-      "message": "ConnectSphere listens across every channel your leads actually use and pulls every conversation into one unified inbox the moment it arrives.",
+      "message": "Orbq listens across every channel your leads actually use and pulls every conversation into one unified inbox the moment it arrives.",
       "quickReplies": [
         {
           "label": "WhatsApp",
@@ -355,7 +355,7 @@
     "ig_capture": {
       "id": "ig_capture",
       "title": "Lead Capture Forms",
-      "message": "Bio-link and ad-driven forms feed leads straight into ConnectSphere, pre-tagged with the campaign they came from.",
+      "message": "Bio-link and ad-driven forms feed leads straight into Orbq, pre-tagged with the campaign they came from.",
       "quickReplies": [
         {
           "label": "Back",
@@ -977,7 +977,7 @@
     "crm": {
       "id": "crm",
       "title": "CRM",
-      "message": "ConnectSphere sits in front of your existing CRM — HubSpot, Salesforce, Zoho, and more — instantly capturing, qualifying, and syncing leads with full chat transcripts, no manual entry.",
+      "message": "Orbq sits in front of your existing CRM — HubSpot, Salesforce, Zoho, and more — instantly capturing, qualifying, and syncing leads with full chat transcripts, no manual entry.",
       "quickReplies": [
         {
           "label": "Bi-Directional Sync",
@@ -1002,7 +1002,7 @@
     "crm_sync": {
       "id": "crm_sync",
       "title": "Bi-Directional Sync",
-      "message": "Updates flow both ways — a status change in your CRM reflects back in ConnectSphere, and vice versa, so nothing goes stale.",
+      "message": "Updates flow both ways — a status change in your CRM reflects back in Orbq, and vice versa, so nothing goes stale.",
       "quickReplies": [
         {
           "label": "Back",
@@ -1365,7 +1365,7 @@
     "integrations": {
       "id": "integrations",
       "title": "Integrations",
-      "message": "ConnectSphere plugs into the tools your team already runs on — CRMs, comms channels, and workflow tools — instead of asking you to replace them.",
+      "message": "Orbq plugs into the tools your team already runs on — CRMs, comms channels, and workflow tools — instead of asking you to replace them.",
       "quickReplies": [
         {
           "label": "CRM Integrations",
@@ -1488,7 +1488,7 @@
     "demo": {
       "id": "demo",
       "title": "Book a Demo",
-      "message": "Great choice! Book a live walkthrough and we'll show ConnectSphere running on your actual use case — channels, CRM, and all.",
+      "message": "Great choice! Book a live walkthrough and we'll show Orbq running on your actual use case — channels, CRM, and all.",
       "quickReplies": [
         {
           "label": "Back",
@@ -1497,7 +1497,7 @@
       ],
       "cta": {
         "label": "Book a Demo",
-        "url": "mailto:sales@connectsphere.ai?subject=Demo%20Request",
+        "url": "mailto:sales@orbq.ai?subject=Demo%20Request",
         "external": true
       },
       "backNode": "root"
@@ -1514,7 +1514,7 @@
       ],
       "cta": {
         "label": "Email Sales",
-        "url": "mailto:sales@connectsphere.ai",
+        "url": "mailto:sales@orbq.ai",
         "external": true
       },
       "backNode": "root"
@@ -1543,7 +1543,7 @@
       ],
       "cta": {
         "label": "Contact Support",
-        "url": "mailto:support@connectsphere.ai",
+        "url": "mailto:support@orbq.ai",
         "external": true
       },
       "backNode": "root"

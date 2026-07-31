@@ -94,7 +94,7 @@ export default function ChatAssistant() {
               transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
               className="max-w-[220px] rounded-2xl rounded-br-md border border-violet-100 bg-white px-3.5 py-2.5 text-left text-xs font-semibold text-slate-700 shadow-lg shadow-violet-500/10"
             >
-              Questions about ConnectSphere? Tap to explore. 👋
+              Questions about Orbq? Tap to explore. 👋
             </motion.button>
           )}
         </AnimatePresence>
@@ -146,7 +146,7 @@ export default function ChatAssistant() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[15px] font-bold leading-tight" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
-                    ConnectSphere Guide
+                    Orbq Guide
                   </p>
                 </div>
               </div>

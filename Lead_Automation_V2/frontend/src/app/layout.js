@@ -15,10 +15,10 @@ const manrope = Manrope({
 });
 
 export const metadata = {
-  title: 'ConnectSphere — Omnichannel Lead Automation Platform',
+  title: 'Orbq — Omnichannel Lead Automation Platform',
   description: 'Capture, qualify, route and nurture leads from WhatsApp, Instagram, LinkedIn, Email, SMS and Voice in one unified AI-powered workspace.',
   icons: {
-    icon: '/logo-icon.jpg',
+    icon: '/orbq-icon.png',
   }
 };
 

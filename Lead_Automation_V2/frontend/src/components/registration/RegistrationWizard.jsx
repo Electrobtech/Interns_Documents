@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Loader2, Rocket } from 'lucide-react';
+import Image from 'next/image';
 import { api } from '@/lib/api';
 import { setToken } from '@/lib/auth';
 import { useToast, ToastStack } from '@/components/Toast';
@@ -186,10 +187,7 @@ export default function RegistrationWizard() {
       <header className="relative z-10 border-b border-rose-100 bg-white/70 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <a href="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-rose-600 to-violet-600 text-white grid place-items-center shadow-lg shadow-violet-500/30">
-              <Rocket size={15} />
-            </div>
-            <span className="text-sm font-black text-slate-900" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>ConnectSphere</span>
+            <Image src="/orbq-logo.png" alt="Orbq" width={128} height={36} className="h-9 w-auto object-contain" priority />
           </a>
           <span className="text-xs text-slate-500">
             Already have an account?{' '}

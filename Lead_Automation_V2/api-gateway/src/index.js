@@ -105,6 +105,8 @@ const routes = [
   { path: '/contacts',            target: CONTACT },
   { path: '/leads',               target: CONTACT },
   { path: '/campaigns',           target: CAMPAIGN },
+  { path: '/products',            target: CAMPAIGN }, // offers the marketing agent sells against
+
   { path: '/ai-agents',           target: AI },
   { path: '/orders',              target: ECOMMERCE },
   { path: '/carts',               target: ECOMMERCE },

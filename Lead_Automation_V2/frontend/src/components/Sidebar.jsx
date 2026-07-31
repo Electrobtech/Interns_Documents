@@ -73,16 +73,12 @@ export default function Sidebar() {
       {/* Brand */}
       <div className="px-4 py-4 border-b border-slate-100 shrink-0 flex items-center gap-3">
         <Link href="/app" className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 ring-1 ring-violet-100 shadow-sm bg-white">
-            <Image src="/logo-icon.jpg" alt="ConnectSphere" width={36} height={36} className="w-full h-full object-cover" />
-          </div>
-          {!collapsed && (
-            <div className="min-w-0">
-              <div className="font-black text-slate-800 text-sm leading-tight truncate" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>
-                ConnectSphere
-              </div>
-              <div className="text-[9px] tracking-widest text-slate-400 uppercase truncate">Electrobtech</div>
+          {collapsed ? (
+            <div className="w-9 h-9 rounded-xl overflow-hidden shrink-0 ring-1 ring-violet-100 shadow-sm bg-white">
+              <Image src="/orbq-icon.png" alt="Orbq" width={36} height={36} className="w-full h-full object-contain" />
             </div>
+          ) : (
+            <Image src="/orbq-logo.png" alt="Orbq" width={128} height={36} className="h-9 w-auto object-contain" priority />
           )}
         </Link>
         {!collapsed && (

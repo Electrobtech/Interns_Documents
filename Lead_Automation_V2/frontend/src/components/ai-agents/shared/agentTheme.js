@@ -3,7 +3,7 @@
 //
 // Previously each agent invented its own palette (Marketing=blue, Sales=emerald,
 // Support=violet), so the section read as three different products. We now share
-// the ConnectSphere violet/rose identity everywhere and give each agent only a
+// the Orbq violet/rose identity everywhere and give each agent only a
 // small ACCENT (header icon tile + online dot) for recognisability — the chrome
 // (nav, active states, primary buttons, banner gradient) is identical.
 //

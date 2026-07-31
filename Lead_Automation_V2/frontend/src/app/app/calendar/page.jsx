@@ -156,7 +156,7 @@ export default function CalendarPage() {
         <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
           <p className="text-xs text-slate-600">
-            Events you add are saved to ConnectSphere only. Connect Google Calendar to also send real
+            Events you add are saved to Orbq only. Connect Google Calendar to also send real
             invites and reminders to attendees.
           </p>
         </div>

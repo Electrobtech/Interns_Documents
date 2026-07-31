@@ -57,3 +57,7 @@ services/automation-service/public/uploads/
 htmlcov/
 coverage/
 test-results/
+
+# Local npm cache produced by Docker builds — never source.
+.npm-cache/
+**/.npm-cache/

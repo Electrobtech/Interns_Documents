@@ -75,7 +75,7 @@ export default function AEOPanel() {
               value={copy}
               onChange={(e) => setCopy(e.target.value)}
               rows={4}
-              placeholder="Paste marketing copy or a topic, e.g. 'Why ConnectSphere is the best WhatsApp lead automation for SMBs'"
+              placeholder="Paste marketing copy or a topic, e.g. 'Why Orbq is the best WhatsApp lead automation for SMBs'"
               className="input-premium w-full resize-none"
             />
             <button disabled={optimize.isPending || !copy.trim()} className="btn-primary">

@@ -129,10 +129,10 @@ export default function Login() {
         {/* Logo header inside the card */}
         <div className="mb-8 flex flex-col items-center justify-center gap-2 text-center">
           <Link href="/">
-            <Image src="/logo-full.png" alt="ConnectSphere — Lead Automation Application" width={280} height={70} className="object-contain" priority />
+            <Image src="/orbq-logo.png" alt="Orbq — Lead Automation Application" width={280} height={70} className="object-contain" priority />
           </Link>
           <h1 className="text-2xl font-black text-slate-900 mt-5" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>Sign In</h1>
-          <p className="text-xs text-slate-400 mt-1">Welcome back to ConnectSphere</p>
+          <p className="text-xs text-slate-400 mt-1">Welcome back to Orbq</p>
         </div>
 
         {mode === 'password' ? (

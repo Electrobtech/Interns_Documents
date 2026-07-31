@@ -415,3 +415,47 @@ h1, h2, h3, h4, h5, h6 {
     @apply px-4 py-3 text-slate-700;
   }
 }
+
+/* ─── Compare section ("From Chaos to Clarity") ──────────────────────────
+   Deliberately CSS, not framer-motion: these elements sit inside
+   variants-driven RevealSection wrappers, and parent variant propagation
+   overrides a child's own `animate` prop (the same trap that froze the
+   voice-agent waveform bars). */
+
+/* Headline words pop in one after another. */
+@keyframes popWord {
+  0%   { opacity: 0; transform: translateY(14px) scale(0.86); }
+  60%  { opacity: 1; transform: translateY(0)    scale(1.06); }
+  100% { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.animate-pop-word { animation: popWord 0.62s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* "Old way" icons twitch — restlessness, the feeling of scattered tools. */
+@keyframes wobble {
+  0%, 88%, 100% { transform: rotate(0deg); }
+  91%           { transform: rotate(-7deg); }
+  94%           { transform: rotate(6deg); }
+  97%           { transform: rotate(-3deg); }
+}
+.animate-wobble { animation: wobble 4s ease-in-out infinite; }
+
+/* "Orbq way" icons breathe with a soft halo — calm and alive. */
+@keyframes haloPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.0); transform: scale(1); }
+  50%      { box-shadow: 0 0 0 7px rgba(139, 92, 246, 0.10); transform: scale(1.06); }
+}
+.animate-halo { animation: haloPulse 2.8s ease-in-out infinite; }
+
+/* Light sweeps across the Orbq panel, like a screen refreshing. */
+@keyframes sheen {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(220%); }
+}
+.animate-sheen { animation: sheen 4.5s ease-in-out infinite; }
+
+/* Red "problem" badges throb gently so the eye lands on the cost. */
+@keyframes softThrob {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.animate-soft-throb { animation: softThrob 2.2s ease-in-out infinite; }

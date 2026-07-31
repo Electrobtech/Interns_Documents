@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const productRoutes = require('./products');
 const cors = require('cors');
 const { pool, authenticate, requirePermission, logAudit } = require('@lead/shared');
 const { enqueueBroadcast } = require('./services/bulkCampaignQueue');
@@ -18,6 +19,10 @@ const canSend = requirePermission('campaigns:send');
 const asJson = (v) => (v == null || v === '' ? null : typeof v === 'string' ? v : JSON.stringify(v));
 
 app.get('/health', (_req, res) => res.json({ service: 'campaign', ok: true }));
+
+// Products / offers — what the company sells. Mounted here so /products
+// is matched before any campaign :id routes below.
+app.use(productRoutes);
 
 app.get('/campaigns', async (req, res) => {
   const { rows } = await pool.query(
