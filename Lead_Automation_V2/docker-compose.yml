@@ -100,6 +100,7 @@ services:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
     ports: ["4004:4004"]
 
   # AI Agent service - Python/FastAPI for Marketing + Sales + Support agents
@@ -184,6 +185,7 @@ services:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
     depends_on:
       postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
     ports: ["4008:4008"]
 
   # LinkedIn service - handles LinkedIn integration and API
@@ -359,6 +361,11 @@ services:
     build:
       context: ./frontend
       dockerfile: frontend.Dockerfile
+      args:
+        # FIX: without this, NEXT_PUBLIC_API_URL below (a *runtime* env var)
+        # never reaches `npm run build`, since Next.js inlines NEXT_PUBLIC_*
+        # vars at build time. See frontend.Dockerfile's matching ARG/ENV fix.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
     container_name: frontend
     env_file: .env
     environment:

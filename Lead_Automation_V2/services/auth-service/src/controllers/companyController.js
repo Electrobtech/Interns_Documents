@@ -12,7 +12,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
-const { pool, sign, authenticate, withSystemAccess } = require('@lead/shared');
+const { pool, sign, authenticate, withSystemAccess, permissionsForRoleId } = require('@lead/shared');
 const {
   validateCompanyRegistration,
   ALLOWED_UPLOAD_MIME,
@@ -127,7 +127,12 @@ async function registerCompany(req, res, { owner, company, contact, address, ver
 
     await pool.query('COMMIT');
 
-    const token = sign({ userId, organizationId, role: 'owner' });
+    // FIX: previously signed with no `permissions` claim at all, so anyone
+    // who registered and used this token immediately (without a separate
+    // /auth/login round trip) had an empty perms array and got 403'd on
+    // every requirePermission()-gated route (campaigns:send, etc).
+    const permissions = await permissionsForRoleId(roleRow.rows[0].id);
+    const token = sign({ userId, organizationId, role: 'owner', permissions });
     res.status(201).json({ token, organizationId, userId });
   } catch (e) {
     await pool.query('ROLLBACK');

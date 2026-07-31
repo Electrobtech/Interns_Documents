@@ -332,49 +332,31 @@ CREATE INDEX IF NOT EXISTS ix_email_attachments_message ON email_attachments (me
 
 -- ---------- Campaigns ----------
 CREATE TABLE IF NOT EXISTS campaigns (
-  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id      UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  name                 TEXT NOT NULL,
-  type                 TEXT DEFAULT 'broadcast',
-  channel_type         TEXT,
-  message_body         TEXT,
-  cta                  JSONB,
-  scheduled_at         TIMESTAMPTZ,
-  status               TEXT DEFAULT 'draft',    -- draft | scheduled | sent (bulk pipeline adds queued/processing/completed/failed — see campaign_recipients below, 020_bulk_campaigns.sql)
-  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
-  recipient_source     TEXT,                     -- 'csv' | 'manual' | 'segment' (020_bulk_campaigns.sql)
-  send_mode            TEXT DEFAULT 'immediate',  -- 'immediate' | 'scheduled'
-  throttle_per_minute  INT DEFAULT 60,
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  type            TEXT DEFAULT 'broadcast',
+  channel_type    TEXT,
+  message_body    TEXT,
+  cta             JSONB,
+  scheduled_at    TIMESTAMPTZ,
+  status          TEXT DEFAULT 'draft',    -- draft | scheduled | sent | needs_approval | rejected | queued | processing | completed | failed
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Bulk/broadcast SMS & RCS support (020_bulk_campaigns.sql) — additive,
+  -- NULL/defaulted for the original one-shot campaigns.send flow.
+  -- flow_playbook_id is added further down via ALTER TABLE, once
+  -- `playbooks` itself exists (playbooks is created later in this file;
+  -- 020_bulk_campaigns.sql could add it as a plain REFERENCES column
+  -- because it ran as a later ALTER against an already-live database
+  -- where playbooks already existed — a fresh single-pass schema.sql
+  -- load doesn't have that luxury).
+  recipient_source     TEXT,                 -- 'csv' | 'manual' | 'segment'
+  send_mode            TEXT DEFAULT 'immediate', -- 'immediate' | 'scheduled'
+  throttle_per_minute  INT DEFAULT 60,       -- SMS/min rate cap for this broadcast
   total_recipients     INT DEFAULT 0,
   sent_count           INT DEFAULT 0,
   failed_count         INT DEFAULT 0
 );
-
--- Bulk Messaging / Broadcast Campaign — one row per recipient of a
--- POST /campaigns/broadcast run (services/campaign-service/src/index.js),
--- processed by bulkCampaignQueue.js/bulkCampaignWorker.js.
--- (020_bulk_campaigns.sql, 021_campaign_recipient_message.sql)
-CREATE TABLE IF NOT EXISTS campaign_recipients (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  campaign_id       UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-  contact_id        UUID REFERENCES contacts(id) ON DELETE SET NULL,
-  phone             TEXT NOT NULL,
-  name              TEXT,
-  variables         JSONB NOT NULL DEFAULT '{}',
-  status            TEXT NOT NULL DEFAULT 'pending', -- pending | queued | sent | failed
-  error             TEXT,
-  attempts          INT NOT NULL DEFAULT 0,
-  job_id            TEXT,
-  rendered_message  TEXT,
-  sent_at           TIMESTAMPTZ,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS ix_campaign_recipients_campaign_status
-  ON campaign_recipients (campaign_id, status);
-CREATE INDEX IF NOT EXISTS ix_campaign_recipients_campaign_phone
-  ON campaign_recipients (campaign_id, phone);
 
 CREATE TABLE IF NOT EXISTS campaign_audiences (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -389,6 +371,38 @@ CREATE TABLE IF NOT EXISTS campaign_logs (
   event           TEXT,                    -- delivered | opened | clicked | replied | converted
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Per-recipient bulk-broadcast tracking (020_bulk_campaigns.sql) — a
+-- broadcast of thousands needs per-row retry/error visibility that the
+-- aggregate campaign_logs event stream doesn't give.
+CREATE TABLE IF NOT EXISTS campaign_recipients (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id     UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  contact_id      UUID REFERENCES contacts(id) ON DELETE SET NULL, -- null when the row came from a raw CSV/manual entry with no matching contact
+  phone           TEXT NOT NULL,
+  name            TEXT,
+  variables       JSONB NOT NULL DEFAULT '{}',  -- mapped CSV-column -> flow-parameter values for this recipient
+  status          TEXT NOT NULL DEFAULT 'pending', -- pending | queued | sent | failed
+  error           TEXT,
+  attempts        INT NOT NULL DEFAULT 0,
+  job_id          TEXT,                          -- BullMQ job id, for cross-referencing worker logs
+  -- FIX: bulkCampaignWorker.js writes this on every send attempt (success or
+  -- failure) and campaign-service's GET /campaigns/:id/recipients selects it,
+  -- but it was missing here entirely — every job failed with
+  -- 'column "rendered_message" does not exist' and crashed the worker/process.
+  rendered_message TEXT,
+  sent_at         TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_campaign_recipients_campaign_status
+  ON campaign_recipients (campaign_id, status);
+
+-- Fast dedupe / lookup by phone within a single campaign (e.g. a CSV with a
+-- repeated number, or checking "did this number already get queued").
+CREATE INDEX IF NOT EXISTS ix_campaign_recipients_campaign_phone
+  ON campaign_recipients (campaign_id, phone);
 
 -- ---------- Reviews & Social ----------
 CREATE TABLE IF NOT EXISTS reviews (
@@ -753,6 +767,13 @@ CREATE INDEX IF NOT EXISTS idx_playbooks_org_status ON playbooks(organization_id
 CREATE INDEX IF NOT EXISTS idx_playbooks_org_type_status ON playbooks(organization_id, playbook_type, status);
 CREATE INDEX IF NOT EXISTS idx_playbooks_channels_gin ON playbooks USING GIN (channels);
 
+-- campaigns.flow_playbook_id (020_bulk_campaigns.sql), added here rather
+-- than inline on campaigns' own CREATE TABLE further up because playbooks
+-- didn't exist yet at that point in a single-pass load. Type is TEXT, not
+-- UUID, to match playbooks.id above (playbook ids are human-authored
+-- slugs/flow-builder ids, not generated UUIDs).
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS flow_playbook_id TEXT REFERENCES playbooks(id);
+
 CREATE TABLE IF NOT EXISTS conversation_sessions (
   id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   playbook_id           TEXT NOT NULL REFERENCES playbooks(id) ON DELETE CASCADE,
@@ -952,3 +973,82 @@ CREATE TABLE IF NOT EXISTS linkedin_sync_logs (
 CREATE INDEX IF NOT EXISTS idx_linkedin_approvals_user_status ON linkedin_approvals (user_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_linkedin_sync_logs_user_created ON linkedin_sync_logs (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_linkedin_campaign_metrics_lookup ON linkedin_campaign_metrics (user_id, campaign_urn, date);
+-- =====================================================================
+-- Platform Super Admin: multi-tenant governance + wallet billing
+-- (folded in from 022_super_admin_billing.sql so a fresh non-Docker
+-- setup via scripts/setup-db.sh — which only loads schema.sql, not the
+-- migrations/ folder — gets these tables too. See that migration file
+-- for the full design rationale.)
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS platform_admins (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name          TEXT NOT NULL,
+  email         TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'active', -- active | disabled
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS wallets (
+  organization_id       UUID PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+  balance               NUMERIC(14,2) NOT NULL DEFAULT 0,
+  lifetime_deposited    NUMERIC(14,2) NOT NULL DEFAULT 0,
+  lifetime_spent        NUMERIC(14,2) NOT NULL DEFAULT 0,
+  low_balance_threshold NUMERIC(14,2) NOT NULL DEFAULT 100,
+  credit_rates          JSONB NOT NULL DEFAULT '{"whatsapp_message": 1, "workflow_execution": 1}'::jsonb,
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS wallet_transactions (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  type              TEXT NOT NULL CHECK (type IN ('RECHARGE', 'USAGE_DEDUCTION', 'ADJUSTMENT')),
+  amount            NUMERIC(14,2) NOT NULL,
+  balance_after     NUMERIC(14,2) NOT NULL,
+  reference_id      TEXT,
+  description       TEXT,
+  action_key        TEXT,
+  created_by_user   UUID REFERENCES users(id),
+  created_by_admin  UUID REFERENCES platform_admins(id),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_wallet_tx_org_created ON wallet_transactions (organization_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS feature_flags (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  flag_key        TEXT NOT NULL,
+  enabled         BOOLEAN NOT NULL DEFAULT false,
+  updated_by_admin UUID REFERENCES platform_admins(id),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, flag_key)
+);
+
+CREATE TABLE IF NOT EXISTS attachments (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  owner_type      TEXT NOT NULL,
+  owner_id        UUID NOT NULL,
+  file_url        TEXT NOT NULL,
+  mime_type       TEXT,
+  size_bytes      INT,
+  uploaded_by     UUID REFERENCES users(id),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_attachments_owner ON attachments (organization_id, owner_type, owner_id);
+
+CREATE OR REPLACE FUNCTION create_wallet_for_new_org() RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO wallets (organization_id) VALUES (NEW.id)
+  ON CONFLICT (organization_id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_create_wallet_for_new_org ON organizations;
+CREATE TRIGGER trg_create_wallet_for_new_org
+  AFTER INSERT ON organizations
+  FOR EACH ROW EXECUTE FUNCTION create_wallet_for_new_org();
