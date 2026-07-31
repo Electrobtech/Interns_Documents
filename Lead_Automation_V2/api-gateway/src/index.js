@@ -90,6 +90,7 @@ const routes = [
   { path: '/credentials',     target: INTEGRATION }, // manual API key / App ID / App Secret entry (routes/credentials.js)
   { path: '/auth',            target: AUTH },
   { path: '/company',         target: AUTH }, // Company Registration wizard: companyController.js + gstController.js
+  { path: '/super-admin',     target: AUTH }, // Platform Super Admin API: superAdminController.js — separate requireSuperAdmin auth, not tenant `authenticate`
   { path: '/conversations',   target: INBOX },
   { path: '/socket.io',       target: INBOX, ws: true }, // live message delivery — see services/inbox-service/src/realtime.js
   { path: '/contacts',        target: CONTACT },

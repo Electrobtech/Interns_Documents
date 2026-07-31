@@ -4,6 +4,25 @@
 -- Safe to run on a fresh database (created by scripts/setup-db.sh / compose).
 -- =====================================================================
 
+-- FIX: previously there was NO seed row for platform_admins at all — the
+-- only way to get super-admin access was to manually run
+-- scripts/create-super-admin.js from the host after the database was up,
+-- which is easy to miss and looks identical to "Invalid credentials" in the
+-- UI either way. This gives every fresh database a default super admin so
+-- docker compose up alone is enough to reach /super-admin/login.
+--
+-- Login: superadmin@platform.local / SuperAdmin@123
+-- CHANGE THIS PASSWORD before using this anywhere but local dev — rotate it
+-- by re-running scripts/create-super-admin.js with the same email (it does
+-- an ON CONFLICT (email) DO UPDATE of the password) e.g.:
+--   DATABASE_URL=postgres://lead:leadpass@localhost:5435/lead_automation \
+--     node scripts/create-super-admin.js --name "Super Admin" \
+--     --email superadmin@platform.local --password 'YourNewPassword!'
+INSERT INTO platform_admins (name, email, password_hash, status) VALUES
+  ('Super Admin', 'superadmin@platform.local',
+   '$2b$10$PRZwYb9.tQaZN3pohz7PQ.w3c.b6CaLoqKRNxROMDjs29THEYmPJe', 'active')
+ON CONFLICT (email) DO NOTHING;
+
 INSERT INTO roles (name, description) VALUES
   ('owner',   'Tenant owner — full access, billing, and org settings'),
   ('admin',   'Full access'),
@@ -32,6 +51,15 @@ ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r CROSS JOIN permissions p WHERE r.name = 'admin'
+ON CONFLICT DO NOTHING;
+
+-- FIX: 'owner' (the role every self-registered tenant gets via
+-- POST /auth/register/company) previously had NO rows here at all, so
+-- every owner-role JWT carried an empty `permissions` array and every
+-- requirePermission()-gated route (campaigns:send, team:manage, etc.)
+-- returned 403 for them. Owner gets the same full permission set as admin.
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r CROSS JOIN permissions p WHERE r.name = 'owner'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_id, permission_id)
