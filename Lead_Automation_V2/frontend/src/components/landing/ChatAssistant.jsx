@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, X, ArrowLeft, ExternalLink, Send } from 'lucide-react';
+import { MessageSquare, X, ArrowLeft, ExternalLink, Send, RotateCcw } from 'lucide-react';
 import FLOW from '../../data/chatbotFlow.json';
 
 export default function ChatAssistant() {
@@ -61,6 +61,13 @@ export default function ChatAssistant() {
   const goBack = useCallback(() => {
     setPathStack((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
     setThread((prev) => (prev.length > 1 ? prev.slice(0, -2) : prev));
+  }, []);
+
+  // Start the tree over without closing the panel — clears the transcript and
+  // the visited path together so Back can't step into a stale history.
+  const restart = useCallback(() => {
+    setPathStack([FLOW.rootNode]);
+    setThread([{ role: 'bot', text: FLOW.nodes[FLOW.rootNode].message, nodeId: FLOW.rootNode }]);
   }, []);
 
   const handleReply = useCallback((reply) => {
@@ -149,6 +156,15 @@ export default function ChatAssistant() {
                     Orbq Guide
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={restart}
+                  title="Start over"
+                  aria-label="Start the conversation over"
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-white/80 transition-colors hover:bg-white/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/50"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
               </div>
             </div>
 

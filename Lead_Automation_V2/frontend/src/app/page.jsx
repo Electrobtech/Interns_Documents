@@ -1913,6 +1913,22 @@ export default function Landing() {
                 Evaluates user intent and matches lead profiles against custom parameters. Scores leads automatically and triggers live alerts or CRM routes.
               </p>
 
+              {/* Capability chips — same pattern as the other agent cards. */}
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {[
+                  { label: 'Intent Detection', Icon: ScanSearch },
+                  { label: 'Lead Scoring', Icon: BarChart3 },
+                  { label: 'CRM Routing', Icon: Route },
+                ].map(({ label, Icon }) => (
+                  <span
+                    key={label}
+                    className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700"
+                  >
+                    <Icon className="h-2.5 w-2.5" /> {label}
+                  </span>
+                ))}
+              </div>
+
               {/* Dynamic Lead Scoring Widget */}
               <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -2015,6 +2031,25 @@ export default function Landing() {
                   </div>
                 </div>
               </div>
+
+              {/* Live activity — without this the card's `justify-between`
+                  leaves ~200px of dead space above the widget. */}
+              <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-2.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Pipeline Activity</p>
+                {[
+                  { label: 'Hot leads routed', meta: '12 today · owner alerted', dot: 'bg-emerald-500' },
+                  { label: 'Awaiting qualification', meta: '7 in queue', dot: 'bg-amber-500' },
+                  { label: 'Synced to CRM', meta: '34 records updated', dot: 'bg-emerald-500' },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-start gap-2">
+                    <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${row.dot}`} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-700 truncate">{row.label}</p>
+                      <p className="text-[10px] text-slate-400 font-semibold truncate">{row.meta}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </motion.div>
 
             {/* Support Agent Card */}
@@ -2028,6 +2063,42 @@ export default function Landing() {
                 <p className="mt-3 text-sm text-slate-500 leading-relaxed font-semibold">
                   Handles post-sale inquiries, searches vector store libraries for product queries, and triggers manual team redirects if it detects unhappy customer sentiment.
                 </p>
+              
+              {/* Capability chips — same pattern as the Marketing card, so all
+                  four read as one family rather than one rich card beside three
+                  sparse ones. */}
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {[
+                  { label: 'Knowledge Search (RAG)', Icon: Layers },
+                  { label: 'Sentiment Watch', Icon: Cpu },
+                  { label: 'Auto-Escalation', Icon: UserCheck },
+                ].map(({ label, Icon }) => (
+                  <span
+                    key={label}
+                    className="inline-flex items-center gap-1 rounded-full border border-fuchsia-200 bg-fuchsia-50 px-2 py-0.5 text-[10px] font-bold text-fuchsia-700"
+                  >
+                    <Icon className="h-2.5 w-2.5" /> {label}
+                  </span>
+                ))}
+              </div>
+
+              {/* Live activity — fills the gap `justify-between` opened up. */}
+              <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-2.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Resolution Snapshot</p>
+                {[
+                  { label: 'Answered from knowledge base', meta: '318 docs indexed · cited', dot: 'bg-emerald-500' },
+                  { label: 'Escalated to a human', meta: '2 negative-sentiment threads', dot: 'bg-amber-500' },
+                  { label: 'Awaiting customer reply', meta: '5 threads · follow-up queued', dot: 'bg-emerald-500' },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-start gap-2">
+                    <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${row.dot}`} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-700 truncate">{row.label}</p>
+                      <p className="text-[10px] text-slate-400 font-semibold truncate">{row.meta}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
               </div>
 
               {/* Support mockup widget */}
@@ -2055,6 +2126,24 @@ export default function Landing() {
                 <p className="mt-3 text-sm text-slate-500 leading-relaxed font-semibold">
                   Picks up inbound calls in real time with sub-second latency, qualifies the caller against the same rules your other agents use, then books the callback or warm-transfers to a human.
                 </p>
+              {/* Capability chips — same pattern as the Marketing card, so all
+                  four read as one family rather than one rich card beside three
+                  sparse ones. */}
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {[
+                  { label: 'Real-time Speech', Icon: Headset },
+                  { label: 'Call Qualification', Icon: UserCheck },
+                  { label: 'Callback Booking', Icon: Pin },
+                ].map(({ label, Icon }) => (
+                  <span
+                    key={label}
+                    className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700"
+                  >
+                    <Icon className="h-2.5 w-2.5" /> {label}
+                  </span>
+                ))}
+              </div>
+
               </div>
 
               {/* Live call widget */}
@@ -2085,6 +2174,25 @@ export default function Landing() {
                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
                   Intent captured — callback booked for 4:30 PM
                 </div>
+              </div>
+
+              {/* Live activity — without this the card's `justify-between`
+                  leaves ~200px of dead space above the widget. */}
+              <div className="mt-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-2.5">
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Call Activity</p>
+                {[
+                  { label: 'Calls answered', meta: '18 today · avg 0.4s pickup', dot: 'bg-emerald-500' },
+                  { label: 'Callbacks booked', meta: '6 slots confirmed', dot: 'bg-emerald-500' },
+                  { label: 'Warm-transferred', meta: '3 routed to a human', dot: 'bg-amber-500' },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-start gap-2">
+                    <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${row.dot}`} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-700 truncate">{row.label}</p>
+                      <p className="text-[10px] text-slate-400 font-semibold truncate">{row.meta}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </motion.div>
 
