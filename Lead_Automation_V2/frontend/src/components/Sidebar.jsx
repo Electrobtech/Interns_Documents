@@ -41,7 +41,7 @@ const CHANNELS = [
   { label: 'Instagram', icon: Instagram,     href: '/app/channels/instagram', expandable: true  },
   { label: 'Messenger', icon: MessageSquare, href: '/app/channels/messenger', expandable: false },
   { label: 'LinkedIn',  icon: Linkedin,      href: '/app/channels/linkedin',  expandable: false },
-  { label: 'SMS / RCS', icon: Smartphone,    href: '/app/channels/sms',       expandable: false },
+  { label: 'SMS / RCS', icon: Smartphone,    href: '/app/channels/sms',       expandable: true  },
   { label: 'Web Chat',  icon: Globe,         href: '/app/channels/webchat',   expandable: false },
   { label: 'Voice Call',icon: Phone,         href: '/app/channels/voice',     expandable: false },
   { label: 'Email',     icon: Mail,          href: '/app/channels/email',     expandable: false },
