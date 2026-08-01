@@ -53,6 +53,25 @@ async def get_contacts(organization_id: uuid.UUID, limit: int = 200) -> list[dic
         return None
 
 
+async def get_leads(organization_id: uuid.UUID, limit: int = 300) -> list[dict] | None:
+    """Best-effort fetch of CRM leads (contact-service owns /leads). Returns
+    None on any failure â€” the Cold Lead Revival Radar degrades to reasoning
+    from contacts alone rather than hard-failing."""
+    settings = get_settings()
+    token = sign_service_token(organization_id)
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.CONTACT_SERVICE_URL}/leads",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            resp.raise_for_status()
+            return resp.json()[:limit]
+    except Exception:
+        logger.warning("lead_service_fetch_failed (non-fatal)", exc_info=True)
+        return None
+
+
 async def create_campaign(organization_id: uuid.UUID, *, name: str, type_: str, channel_type: str, message_body: str, status: str = "draft") -> dict:
     """Not best-effort — the caller (convert-plan-item route) needs a real
     result or a real error to show the user."""

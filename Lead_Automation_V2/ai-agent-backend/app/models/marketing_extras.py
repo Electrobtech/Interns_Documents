@@ -56,3 +56,27 @@ class CompetitorReport(Base):
     subject: Mapped[str] = mapped_column(String, nullable=False)
     output: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AeoOptimization(Base):
+    """Growth expansion — a saved Answer-Engine-Optimization run (input copy +
+    optimized output + citability score)."""
+    __tablename__ = "aeo_optimizations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    input_text: Mapped[str] = mapped_column(Text, nullable=False)
+    output: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CtwaAdPackage(Base):
+    """Growth expansion — a saved Click-to-WhatsApp ad package (Meta ad creative
+    + WhatsApp instant greeting/qualifiers)."""
+    __tablename__ = "ctwa_ad_packages"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    offer_brief: Mapped[str] = mapped_column(Text, nullable=False)
+    output: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

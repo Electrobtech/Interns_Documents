@@ -9,7 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.marketing_extras import (
-    CampaignPlan, CompetitorReport, IcpPersona, SeoContentBrief,
+    AeoOptimization, CampaignPlan, CompetitorReport, CtwaAdPackage,
+    IcpPersona, SeoContentBrief,
 )
 
 
@@ -109,6 +110,46 @@ class CompetitorReportRepository:
             select(CompetitorReport)
             .where(CompetitorReport.organization_id == organization_id)
             .order_by(CompetitorReport.created_at.desc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+
+class AeoRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def save(self, organization_id: uuid.UUID, input_text: str, output: dict) -> AeoOptimization:
+        row = AeoOptimization(organization_id=organization_id, input_text=input_text, output=output)
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def recent(self, organization_id: uuid.UUID, limit: int = 30) -> list[AeoOptimization]:
+        stmt = (
+            select(AeoOptimization)
+            .where(AeoOptimization.organization_id == organization_id)
+            .order_by(AeoOptimization.created_at.desc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+
+class CtwaRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def save(self, organization_id: uuid.UUID, offer_brief: str, output: dict) -> CtwaAdPackage:
+        row = CtwaAdPackage(organization_id=organization_id, offer_brief=offer_brief, output=output)
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def recent(self, organization_id: uuid.UUID, limit: int = 30) -> list[CtwaAdPackage]:
+        stmt = (
+            select(CtwaAdPackage)
+            .where(CtwaAdPackage.organization_id == organization_id)
+            .order_by(CtwaAdPackage.created_at.desc())
             .limit(limit)
         )
         return list((await self._session.execute(stmt)).scalars().all())
