@@ -713,34 +713,6 @@ const LEGACY_APPS = [
   { id: 'msg',   label: 'Messenger',     line1: 'New message',           line2: '7m ago',                          badge: 6,  Icon: MessagesSquare, brand: 'bg-blue-600',   left: '46%', top: '68%', w: 158 },
 ];
 
-/* Curved dashed links between the cards above, in the same 0-100 space. */
-/* Cross-panel wiring for the compare visual, in the overlay's 0-100 space.
-   IN:每 scattered tool converging on the core. OUT: the core fanning to the
-   unified product. */
-const WIRES_IN = [
-  'M10,20 C26,20 34,34 43,45',
-  'M6,36  C20,38 32,42 43,48',
-  'M12,54 C24,54 34,52 43,51',
-  'M20,70 C30,68 38,60 43,54',
-  'M28,12 C36,20 40,32 44,43',
-];
-
-const WIRES_OUT = [
-  'M56,46 C62,40 62,26 66,20',
-  'M56,49 C62,46 62,40 66,38',
-  'M56,52 C62,54 62,56 66,58',
-  'M56,55 C62,62 62,70 66,76',
-];
-
-const BROKEN_LINKS = [
-  'M14,16 C30,8 46,10 56,10',
-  'M56,14 C48,26 40,30 30,42',
-  'M14,26 C22,34 24,38 28,44',
-  'M28,48 C40,46 52,44 60,44',
-  'M16,66 C28,60 36,54 44,50',
-  'M52,74 C48,62 46,56 44,50',
-];
-
 const FAILURE_TAGS = [
   { label: 'Lost leads',     left: '62%', top: '26%' },
   { label: 'No visibility',  left: '4%',  top: '52%' },
@@ -910,52 +882,8 @@ function WhyWinsSection() {
           className="relative grid lg:grid-cols-[1fr_auto_1fr] gap-6 lg:gap-4 items-center transition-transform duration-300 ease-out"
           style={{ transform: `perspective(1600px) rotateX(${tilt.y}deg) rotateY(${tilt.x}deg)` }}
         >
-          {/* Wiring across the whole width: scattered tools funnel INTO the core
-              in red, the core fans OUT to the product in violet. One overlay
-              spanning all three columns — an SVG inside a column could not
-              cross the grid gap. Hidden below lg, where the grid stacks and the
-              left-to-right reading no longer holds. */}
-          <svg
-            className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full lg:block"
-            viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"
-          >
-            <defs>
-              <marker id="wireInHead" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto">
-                <path d="M0,0 L6,3 L0,6 z" fill="#fb7185" />
-              </marker>
-              <marker id="wireOutHead" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto">
-                <path d="M0,0 L6,3 L0,6 z" fill="#8b5cf6" />
-              </marker>
-            </defs>
-
-            {WIRES_IN.map((d, i) => (
-              <path
-                key={`in-${i}`} d={d} fill="none" stroke="#fb7185" strokeWidth="0.32"
-                strokeDasharray="1.4 1.6" markerEnd="url(#wireInHead)"
-                className="animate-dash-flow" style={{ animationDelay: `${i * 0.35}s`, opacity: 0.75 }}
-              />
-            ))}
-            {WIRES_OUT.map((d, i) => (
-              <path
-                key={`out-${i}`} d={d} fill="none" stroke="#8b5cf6" strokeWidth="0.32"
-                strokeDasharray="1.4 1.6" markerEnd="url(#wireOutHead)"
-                className="animate-dash-flow" style={{ animationDelay: `${i * 0.3}s`, opacity: 0.8 }}
-              />
-            ))}
-          </svg>
-          {/* ══ LEFT — scattered tools, broken wiring ══ */}
+          {/* ══ LEFT — scattered tools ══ */}
           <div className="relative min-h-[440px] rounded-3xl border border-slate-200 bg-white/70 p-4 shadow-sm backdrop-blur-sm">
-            {/* broken connector web — dashes travel, then the link drops out */}
-            <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-              {BROKEN_LINKS.map((d, i) => (
-                <path
-                  key={i} d={d} fill="none" stroke="#fda4af" strokeWidth="0.35"
-                  strokeDasharray="1.6 1.6" className="animate-break-blink"
-                  style={{ animationDelay: `${i * 0.45}s` }}
-                />
-              ))}
-            </svg>
-
             {LEGACY_APPS.map((app, i) => (
               <motion.div
                 key={app.id}
