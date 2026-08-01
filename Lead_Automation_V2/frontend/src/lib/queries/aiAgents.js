@@ -170,12 +170,18 @@ export function useUpdateHandoff() {
    routes — the panels differ in how they frame the brief and render the
    result, not in what the backend does. */
 
-// Scores how well a lead fits the ICP. Backed by POST /ai-agents/sales/run,
-// whose SalesRunOut already carries lead_score and the qualification reason.
+// POST /ai-agents/sales/fit-score — { org_size, budget, channel } ->
+// { score, tier, tier_reason, factors, recommended_action }.
+//
+// Not /sales/run: that endpoint requires a free-text `brief` (so this 422'd
+// with "Unprocessable Entity") and returns lead_score, not the score/tier
+// shape these panels render. Fit scoring is also rule-based rather than an
+// LLM call, because the panel re-scores on every pill change and has to be
+// instant and repeatable.
 export function useScoreLeadFit() {
   const { call } = useApi();
   return useMutation({
-    mutationFn: (body) => call('/ai-agents/sales/run', { method: 'POST', body }),
+    mutationFn: (body) => call('/ai-agents/sales/fit-score', { method: 'POST', body }),
   });
 }
 
