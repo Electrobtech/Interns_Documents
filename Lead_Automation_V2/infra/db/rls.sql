@@ -68,6 +68,7 @@ BEGIN
     'email_accounts', 'email_threads', 'email_messages',
     'sms_devices',
     'wallets', 'wallet_transactions', 'feature_flags', 'attachments'
+    'calendar_accounts', 'calendar_events'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);

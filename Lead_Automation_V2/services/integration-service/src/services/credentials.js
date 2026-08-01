@@ -149,10 +149,24 @@ async function unlockConnection(organizationId, provider) {
   return rowCount > 0;
 }
 
+/**
+ * Password gate for unlocking a locked Meta/WhatsApp connection, on top of
+ * the existing requireRole('admin') check on the route itself — being an
+ * admin is not sufficient by itself, they must also know this password.
+ * TEMPORARY: hardcoded placeholder value, overridable via env var so it can
+ * be swapped for something real without a code change later.
+ */
+const UNLOCK_PASSWORD = process.env.INTEGRATIONS_UNLOCK_PASSWORD || '123';
+
+function verifyUnlockPassword(password) {
+  return typeof password === 'string' && password === UNLOCK_PASSWORD;
+}
+
 module.exports = {
   getConnectedCredentials,
   getCredentialsByMetaId,
   getConnectionLockState,
   lockConnection,
   unlockConnection,
+  verifyUnlockPassword,
 };

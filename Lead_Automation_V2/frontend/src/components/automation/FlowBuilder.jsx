@@ -1,12 +1,36 @@
 'use client';
 import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
-  ChevronLeft, Check, Plus, Trash2, ZoomIn, ZoomOut, Maximize2,
-  Undo2, Redo2, Search, MessageSquare, GitBranch, Headset, FileText, X, Copy,
-  Loader2, AlertCircle, Download, CloudOff, Play, Pause,
+  ChevronLeft,
+  Check,
+  Plus,
+  Trash2,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Undo2,
+  Redo2,
+  Search,
+  MessageSquare,
+  GitBranch,
+  Headset,
+  FileText,
+  X,
+  Copy,
+  Loader2,
+  AlertCircle,
+  Download,
+  CloudOff,
+  Play,
+  Pause,
+  Clock,
 } from "lucide-react";
 import { apiUpload } from "@/lib/api";
 import { getToken } from "@/lib/auth";
+import { DateTimePicker } from "@/components/calendar/DateTimePicker";
+import { apiUpload } from "@/lib/api";
+import { getToken } from "@/lib/auth";
+import { DateTimePicker } from "@/components/calendar/DateTimePicker";
 
 /* ------------------------------------------------------------------ */
 /* Document upload — client-side rules for the Message Node's
@@ -40,6 +64,7 @@ const tokens = {
   message: { bg: "#FEF3E2", fg: "#C2760B" },
   branch: { bg: "#E4F5EA", fg: "#1E8A4C" },
   handoff: { bg: "#E5F0FB", fg: "#1D6FC4" },
+  delay: { bg: "#F3E8FD", fg: "#8B3FD1" },
   accent: "#1D6FC4",
   danger: "#D9503F",
 };
@@ -93,7 +118,7 @@ export function seedGraph() {
    layout thrashing. Card height is a fixed estimate (documented tradeoff:
    long body text can visually overflow the box; fine for a v1 tool).   */
 /* ------------------------------------------------------------------ */
-const CARD_HEIGHT = { message: 88, answer_branch: 56, handoff: 88 };
+const CARD_HEIGHT = { message: 88, answer_branch: 56, handoff: 88, delay: 118 };
 
 function topAnchor(node) {
   return { x: node.position.x + NODE_WIDTH / 2, y: node.position.y };
@@ -330,6 +355,7 @@ function NodeCard({ node, selected, isEntry, onSetEntry, onMouseDownDrag, onUpda
   const header =
     node.type === "message" ? { icon: <MessageSquare size={13} />, tone: tokens.message, label: "Message" }
     : node.type === "answer_branch" ? { icon: <GitBranch size={13} />, tone: tokens.branch, label: "Conditional Branching" }
+    : node.type === "delay" ? { icon: <Clock size={13} />, tone: tokens.delay, label: "Delay" }
     : { icon: <Headset size={13} />, tone: tokens.handoff, label: "Handoff" };
 
   return (
@@ -446,6 +472,10 @@ function NodeCard({ node, selected, isEntry, onSetEntry, onMouseDownDrag, onUpda
             <Plus size={11} /> Add branch
           </button>
         )}
+
+        {node.type === "delay" && (
+          <DelayNodeEditor data={node.data} onUpdate={onUpdate} />
+        )}
       </div>
 
       {/* output handle for single-output types */}
@@ -489,12 +519,114 @@ function NodeCard({ node, selected, isEntry, onSetEntry, onMouseDownDrag, onUpda
 }
 
 /* ------------------------------------------------------------------ */
+/* Delay node editor — toggle between a relative wait ("3 days") and an
+   absolute date/time (via the shared DateTimePicker, same component used
+   by the campaigns "Schedule send" field and the contacts "Book a
+   meeting" dialog). Only one of data.seconds / data.scheduledAt is kept —
+   switching modes clears the other so exportFlowJson never has to guess
+   which one currently applies. See workflowEngine.js's
+   scheduleDelayedContinuation() for how the engine consumes this.        */
+/* ------------------------------------------------------------------ */
+const DELAY_UNITS = [
+  { key: "minutes", label: "min", seconds: 60 },
+  { key: "hours", label: "hrs", seconds: 3600 },
+  { key: "days", label: "days", seconds: 86400 },
+];
+
+function DelayNodeEditor({ data, onUpdate }) {
+  const mode = data.scheduledAt ? "date" : "duration";
+  // Pick the coarsest unit that divides evenly, purely for a nicer default
+  // display (e.g. 259200s shows as "3 days" rather than "4320 min").
+  const initialUnit = (() => {
+    const secs = data.seconds ?? 3600;
+    for (const u of [...DELAY_UNITS].reverse()) {
+      if (secs % u.seconds === 0) return u.key;
+    }
+    return "minutes";
+  })();
+  const [unit, setUnit] = useState(initialUnit);
+  const unitInfo = DELAY_UNITS.find((u) => u.key === unit) || DELAY_UNITS[1];
+  const amount = mode === "duration" ? Math.max(1, Math.round((data.seconds ?? 3600) / unitInfo.seconds)) : 1;
+
+  function setDuration(nextAmount, nextUnitKey) {
+    const u = DELAY_UNITS.find((x) => x.key === nextUnitKey) || unitInfo;
+    onUpdate({ ...data, seconds: Math.max(1, Number(nextAmount) || 1) * u.seconds, scheduledAt: null });
+  }
+
+  return (
+    <div onMouseDown={(e) => e.stopPropagation()}>
+      <div className="flex gap-1 mb-2">
+        {[
+          { key: "duration", label: "Wait duration" },
+          { key: "date", label: "Specific date" },
+        ].map((m) => (
+          <button
+            key={m.key}
+            onClick={() => {
+              if (m.key === "duration") onUpdate({ ...data, scheduledAt: null, seconds: data.seconds ?? 3600 });
+              else onUpdate({ ...data, scheduledAt: data.scheduledAt || new Date(Date.now() + 86400000).toISOString(), seconds: null });
+            }}
+            className="text-[9px] px-1.5 py-0.5 rounded-full uppercase font-semibold"
+            style={{
+              background: mode === m.key ? tokens.delay.bg : "transparent",
+              color: mode === m.key ? tokens.delay.fg : tokens.muted,
+              border: `1px solid ${mode === m.key ? tokens.delay.fg : tokens.cardBorder}`,
+            }}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {mode === "duration" ? (
+        <div className="flex items-center gap-1.5">
+          <input
+            type="number"
+            min={1}
+            value={amount}
+            onChange={(e) => setDuration(e.target.value, unit)}
+            className="w-14 text-[11px] px-1.5 py-1 rounded-md border"
+            style={{ borderColor: tokens.cardBorder }}
+          />
+          <div className="flex gap-1">
+            {DELAY_UNITS.map((u) => (
+              <button
+                key={u.key}
+                onClick={() => { setUnit(u.key); setDuration(amount, u.key); }}
+                className="text-[9px] px-1.5 py-0.5 rounded-md"
+                style={{
+                  background: unit === u.key ? tokens.delay.fg : "transparent",
+                  color: unit === u.key ? "#fff" : tokens.muted,
+                  border: `1px solid ${unit === u.key ? tokens.delay.fg : tokens.cardBorder}`,
+                }}
+              >
+                {u.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <DateTimePicker
+          value={data.scheduledAt || ""}
+          onChange={(v) => onUpdate({ ...data, scheduledAt: v, seconds: null })}
+          minDate={new Date()}
+          placeholder="Pick resume date"
+          showFreeBusy={false}
+          className="w-full text-[11px] h-8"
+        />
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Add-node popover shown at an open output anchor                     */
 /* ------------------------------------------------------------------ */
 function AddNodePopover({ anchor, onPick, onClose }) {
   const options = [
     { type: "message", label: "Message", icon: <MessageSquare size={13} />, tone: tokens.message },
     { type: "answer_branch", label: "Conditional Branch", icon: <GitBranch size={13} />, tone: tokens.branch },
+    { type: "delay", label: "Delay", icon: <Clock size={13} />, tone: tokens.delay },
     { type: "handoff", label: "Handoff", icon: <Headset size={13} />, tone: tokens.handoff },
   ];
   return (
@@ -575,6 +707,17 @@ export function exportFlowJson(graph, title) {
         },
       };
     }
+    if (n.type === "delay") {
+      const edge = graph.edges.find((e) => e.sourceNodeId === n.id);
+      return {
+        id: n.id, type: "delay", position: n.position,
+        data: {
+          seconds: n.data.scheduledAt ? null : (n.data.seconds ?? 3600),
+          scheduledAt: n.data.scheduledAt || null,
+          nextNodeId: edge?.targetNodeId ?? null,
+        },
+      };
+    }
     return { id: n.id, type: "handoff", position: n.position, data: { team: n.data.team, nextNodeId: null } };
   });
 
@@ -635,6 +778,16 @@ export function importFlowJson(playbook) {
         if (b.nextNodeId) {
           edges.push({ id: `e_${n.id}_${b.id}`, sourceNodeId: n.id, sourceBranchId: b.id, targetNodeId: b.nextNodeId });
         }
+      }
+    } else if (n.type === "delay") {
+      nodes.push({
+        id: n.id,
+        type: "delay",
+        position,
+        data: { seconds: n.data.scheduledAt ? null : (n.data.seconds ?? 3600), scheduledAt: n.data.scheduledAt || null },
+      });
+      if (n.data.nextNodeId) {
+        edges.push({ id: `e_${n.id}`, sourceNodeId: n.id, sourceBranchId: null, targetNodeId: n.data.nextNodeId });
       }
     } else {
       // handoff
@@ -909,6 +1062,7 @@ export default function FlowBuilder({ initialGraph, initialTitle, syncStatus = "
       data:
         type === "message" ? { messageType: "text", body: "New message", waitForReply: false }
         : type === "answer_branch" ? { branches: [{ id: `b_${Date.now()}`, label: "Option A" }] }
+        : type === "delay" ? { seconds: 3600, scheduledAt: null }
         : { team: "New team" },
     };
     commit({
@@ -934,7 +1088,7 @@ export default function FlowBuilder({ initialGraph, initialTitle, syncStatus = "
           const hasEdge = graph.edges.some((e) => e.sourceNodeId === n.id && e.sourceBranchId === b.id);
           if (!hasEdge) list.push({ sourceNodeId: n.id, sourceBranchId: b.id, anchor: branchBottomAnchor(n, i) });
         });
-      } else if (n.type === "message") {
+      } else if (n.type === "message" || n.type === "delay") {
         const hasEdge = graph.edges.some((e) => e.sourceNodeId === n.id);
         if (!hasEdge) list.push({ sourceNodeId: n.id, sourceBranchId: null, anchor: bottomAnchor(n) });
       }
