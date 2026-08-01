@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { pool, authenticate, requirePermission, logAudit } = require('@lead/shared');
+const importRoutes = require('./importRoutes');
 
 const app = express();
 app.use(cors());
@@ -11,6 +12,11 @@ const canWrite = requirePermission('contacts:write');
 const canDelete = requirePermission('contacts:delete');
 
 app.get('/health', (_req, res) => res.json({ service: 'contact', ok: true }));
+
+// CSV/XLSX import. Mounted before the /contacts/:id routes below so
+// /contacts/import is not swallowed by :id, and it parses its own
+// multipart body via multer (express.json above ignores multipart).
+app.use(importRoutes);
 
 app.get('/contacts', async (req, res) => {
   // ?tag=vip lets the Bulk Campaign tab's "Contact Segment" dropdown

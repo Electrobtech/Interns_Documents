@@ -66,6 +66,7 @@ services:
     build:
       context: .
       dockerfile: services/auth-service/Dockerfile
+      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -83,6 +84,7 @@ services:
     build:
       context: .
       dockerfile: services/contact-service/Dockerfile
+      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -95,6 +97,7 @@ services:
     build:
       context: .
       dockerfile: services/campaign-service/Dockerfile
+      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -108,6 +111,7 @@ services:
     build:
       context: .
       dockerfile: ai-agent-backend/Dockerfile
+      network: host
     container_name: ai-agent-service
     env_file: .env
     environment:
@@ -138,6 +142,7 @@ services:
     build:
       context: .
       dockerfile: services/ecommerce-service/Dockerfile
+      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -150,6 +155,7 @@ services:
     build:
       context: .
       dockerfile: services/review-service/Dockerfile
+      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -162,6 +168,7 @@ services:
     build:
       context: .
       dockerfile: services/analytics-service/Dockerfile
+      network: host
     container_name: analytics-service
     env_file: .env
     environment:
@@ -178,6 +185,7 @@ services:
     build:
       context: .
       dockerfile: services/integration-service/Dockerfile
+      network: host
     container_name: integration-service
     env_file: .env
     environment:
@@ -193,6 +201,7 @@ services:
     build:
       context: .
       dockerfile: services/linkedin-service/Dockerfile
+      network: host
     container_name: linkedin-service
     env_file: .env
     environment:
@@ -223,6 +232,7 @@ services:
     build:
       context: .
       dockerfile: services/team-service/Dockerfile
+      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -235,6 +245,7 @@ services:
     build:
       context: .
       dockerfile: services/automation-service/Dockerfile
+      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -249,6 +260,7 @@ services:
     build:
       context: .
       dockerfile: services/notification-service/Dockerfile
+      network: host
     env_file: .env
     ports: ["4012:4012"]
 
@@ -257,6 +269,7 @@ services:
     build:
       context: .
       dockerfile: services/email-service/Dockerfile
+      network: host
     container_name: email-service
     env_file: .env
     environment:
@@ -292,6 +305,7 @@ services:
     build:
       context: .
       dockerfile: services/inbox-service/Dockerfile
+      network: host
     container_name: inbox-service
     env_file: .env
     environment:
@@ -313,6 +327,7 @@ services:
     build:
       context: .
       dockerfile: api-gateway/Dockerfile
+      network: host
     env_file: .env
     environment:
       # These target names/ports match each service's own container_name
@@ -361,10 +376,11 @@ services:
     build:
       context: ./frontend
       dockerfile: frontend.Dockerfile
+      network: host
       args:
-        # FIX: without this, NEXT_PUBLIC_API_URL below (a *runtime* env var)
-        # never reaches `npm run build`, since Next.js inlines NEXT_PUBLIC_*
-        # vars at build time. See frontend.Dockerfile's matching ARG/ENV fix.
+        # NEXT_PUBLIC_API_URL below is a *runtime* env var, but Next.js inlines
+        # NEXT_PUBLIC_* at build time, so it must also be passed as a build arg.
+        # See frontend.Dockerfile's matching ARG/ENV.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
     container_name: frontend
     env_file: .env

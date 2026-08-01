@@ -1,8 +1,8 @@
 import RegistrationWizard from '@/components/registration/RegistrationWizard';
 
 export const metadata = {
-  title: 'Register Your Company — Lead Automation',
-  description: 'Create your company workspace on Lead Automation.',
+  title: 'Register Your Company — Orbq',
+  description: 'Create your company workspace on Orbq.',
 };
 
 // Public route (outside the `(app)` authenticated layout group, same as

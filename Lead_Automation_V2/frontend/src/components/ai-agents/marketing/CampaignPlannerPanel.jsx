@@ -27,7 +27,7 @@ function ConvertRow({ planId, itemIndex, item }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 px-2.5 py-1 rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors"
+        className="text-[11px] font-semibold text-violet-600 hover:text-violet-700 px-2.5 py-1 rounded-lg border border-violet-200 hover:bg-violet-50 transition-colors"
       >
         Convert to campaign
       </button>

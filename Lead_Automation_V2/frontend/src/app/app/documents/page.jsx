@@ -10,7 +10,7 @@ import {
 } from '@/lib/queries/aiAgents';
 
 const AGENT_CFG = {
-  marketing: { label: 'Marketing', icon: Megaphone,  tone: 'text-blue-600 bg-blue-50'       },
+  marketing: { label: 'Marketing', icon: Megaphone,  tone: 'text-violet-600 bg-violet-50'       },
   sales:     { label: 'Sales',     icon: TrendingUp,  tone: 'text-emerald-600 bg-emerald-50' },
   support:   { label: 'Support',   icon: Headphones,  tone: 'text-violet-600 bg-violet-50'   },
 };
@@ -78,7 +78,7 @@ function UploadPanel() {
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5">
       <div className="flex items-center gap-2.5 mb-1">
-        <div className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600">
+        <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-rose-100 text-violet-600">
           <Upload size={15} />
         </div>
         <div>
@@ -108,7 +108,7 @@ function UploadPanel() {
         className={`
           flex flex-col items-center justify-center gap-2 py-10 rounded-xl border-2 border-dashed cursor-pointer
           transition-all duration-150
-          ${dragging ? 'border-blue-400 bg-blue-50/60' : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50/60'}
+          ${dragging ? 'border-violet-400 bg-violet-50/60' : 'border-slate-200 hover:border-violet-300 hover:bg-slate-50/60'}
         `}
       >
         <div className="p-3 rounded-xl bg-slate-100">
@@ -269,7 +269,7 @@ export default function DocumentsPage() {
       {/* header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600 shadow-sm">
+          <div className="p-2.5 rounded-2xl bg-gradient-to-br from-violet-50 to-rose-100 text-violet-600 shadow-sm">
             <FileText size={20} />
           </div>
           <div>
@@ -286,7 +286,7 @@ export default function DocumentsPage() {
 
           {/* summary cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard icon={FileText} label="Sources" value={stats.total} tone="bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600" />
+            <StatCard icon={FileText} label="Sources" value={stats.total} tone="bg-gradient-to-br from-violet-50 to-rose-100 text-violet-600" />
             <StatCard icon={Database} label="Chunks" value={stats.chunks} tone="bg-gradient-to-br from-emerald-50 to-teal-100 text-emerald-600" />
             <StatCard icon={Loader2} label="Processing" value={stats.processing} tone="bg-gradient-to-br from-amber-50 to-orange-100 text-amber-600" />
             <StatCard icon={XCircle} label="Failed" value={stats.failed} tone="bg-gradient-to-br from-red-50 to-rose-100 text-red-600" />
@@ -357,7 +357,7 @@ export default function DocumentsPage() {
                     const st = STATUS_META[s.status] || STATUS_META.processing;
                     const StIcon = st.icon;
                     return (
-                      <tr key={s.id} className={`cursor-pointer ${selectedId === s.id ? 'bg-blue-50/50' : ''}`} onClick={() => setSelectedId(s.id)}>
+                      <tr key={s.id} className={`cursor-pointer ${selectedId === s.id ? 'bg-violet-50/50' : ''}`} onClick={() => setSelectedId(s.id)}>
                         <td className="px-4 py-3 min-w-0 max-w-[220px]">
                           <p className="text-sm font-semibold text-slate-800 truncate">{s.name}</p>
                         </td>
@@ -377,7 +377,7 @@ export default function DocumentsPage() {
                         <td className="px-4 py-3 text-right">
                           <button
                             onClick={(e) => { e.stopPropagation(); setSelectedId(s.id); }}
-                            className="p-1.5 rounded-lg text-slate-300 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                            className="p-1.5 rounded-lg text-slate-300 hover:text-violet-600 hover:bg-violet-50 transition-all"
                             title="View"
                           >
                             <Eye size={14} />

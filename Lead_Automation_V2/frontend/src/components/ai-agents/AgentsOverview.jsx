@@ -15,9 +15,9 @@ const AGENT_CONFIG = {
   marketing: {
     label: 'Marketing Agent',
     color: '#2563eb',
-    gradient: 'from-blue-500 to-indigo-600',
-    iconBg: 'bg-gradient-to-br from-blue-50 to-indigo-100',
-    iconColor: 'text-blue-600',
+    gradient: 'from-violet-500 to-purple-600',
+    iconBg: 'bg-gradient-to-br from-violet-50 to-purple-100',
+    iconColor: 'text-violet-600',
     description: 'Attracts & nurtures leads',
   },
   sales: {
@@ -111,7 +111,7 @@ export default function AgentsOverview({ compact = false }) {
           <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 animate-slide-up delay-150">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-purple-100 text-violet-600">
                   <Bot size={16} />
                 </div>
                 <div>
@@ -280,7 +280,7 @@ export default function AgentsOverview({ compact = false }) {
                 key={r.id}
                 className="group flex items-start gap-3 px-3 py-3 rounded-xl hover:bg-slate-50 transition-colors duration-100"
               >
-                <div className="p-1.5 rounded-lg bg-blue-50 text-blue-500 shrink-0 mt-0.5">
+                <div className="p-1.5 rounded-lg bg-violet-50 text-violet-500 shrink-0 mt-0.5">
                   <Zap size={12} />
                 </div>
                 <div className="min-w-0 flex-1">

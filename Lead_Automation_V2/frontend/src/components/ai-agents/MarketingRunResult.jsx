@@ -20,7 +20,7 @@ function isEmpty(v) {
 function Chip({ children, tone = 'slate', onClick, title }) {
   const tones = {
     slate:   'bg-slate-100 text-slate-600',
-    blue:    'bg-blue-50 text-blue-700',
+    blue:    'bg-violet-50 text-violet-700',
     emerald: 'bg-emerald-50 text-emerald-700',
     amber:   'bg-amber-50 text-amber-700',
     violet:  'bg-violet-50 text-violet-700',
@@ -184,7 +184,7 @@ function PostReplyControl({ reply }) {
   );
 }
 
-function SectionCard({ icon: Icon, title, accent = 'from-blue-50 to-indigo-100', iconColor = 'text-blue-600', children, empty }) {
+function SectionCard({ icon: Icon, title, accent = 'from-violet-50 to-purple-100', iconColor = 'text-violet-600', children, empty }) {
   if (empty) return null;
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5">
@@ -272,11 +272,11 @@ export default function MarketingRunResult({ out, contacts = [], onGenerateIdea,
           {out.content_assets?.email_subject && (
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <Mail size={11} className="text-blue-500" />
+                <Mail size={11} className="text-violet-500" />
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Email Campaign</p>
               </div>
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
-                <p className="text-xs font-bold text-blue-700 mb-1.5">Subject: {out.content_assets.email_subject}</p>
+              <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-4 border border-violet-100">
+                <p className="text-xs font-bold text-violet-700 mb-1.5">Subject: {out.content_assets.email_subject}</p>
                 <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">{out.content_assets.email_body}</p>
               </div>
             </div>
@@ -424,12 +424,12 @@ export default function MarketingRunResult({ out, contacts = [], onGenerateIdea,
 
       {/* Next Best Actions */}
       <SectionCard icon={ListChecks} title="Next Best Actions"
-        accent="from-blue-50 to-indigo-100" iconColor="text-blue-600"
+        accent="from-violet-50 to-purple-100" iconColor="text-violet-600"
         empty={isEmpty(out.next_best_actions)}>
         <ul className="space-y-2">
           {(out.next_best_actions || []).map((a, i) => (
             <li key={i} className="flex items-start gap-3 text-sm text-slate-600">
-              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-bold mt-0.5">{i + 1}</span>
+              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center text-[10px] font-bold mt-0.5">{i + 1}</span>
               {a}
             </li>
           ))}
@@ -453,7 +453,7 @@ export default function MarketingRunResult({ out, contacts = [], onGenerateIdea,
       {/* Sources footer */}
       {out.knowledge_sources_used?.length > 0 && (
         <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 rounded-xl border border-slate-100">
-          <Database size={12} className="text-blue-400 shrink-0" />
+          <Database size={12} className="text-violet-400 shrink-0" />
           <p className="text-[11px] text-slate-400">
             Grounded in <span className="font-semibold text-slate-600">{out.knowledge_sources_used.length}</span>{' '}
             knowledge source{out.knowledge_sources_used.length === 1 ? '' : 's'}

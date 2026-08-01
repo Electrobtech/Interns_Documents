@@ -129,10 +129,10 @@ export default function Login() {
         {/* Logo header inside the card */}
         <div className="mb-8 flex flex-col items-center justify-center gap-2 text-center">
           <Link href="/">
-            <Image src="/logo-full.png" alt="ConnectSphere — Lead Automation Application" width={280} height={70} className="object-contain" priority />
+            <Image src="/orbq-logo.png" alt="Orbq — Lead Automation Application" width={280} height={70} className="object-contain" priority />
           </Link>
           <h1 className="text-2xl font-black text-slate-900 mt-5" style={{ fontFamily: 'Manrope, system-ui, sans-serif' }}>Sign In</h1>
-          <p className="text-xs text-slate-400 mt-1">Welcome back to ConnectSphere</p>
+          <p className="text-xs text-slate-400 mt-1">Welcome back to Orbq</p>
         </div>
 
         {mode === 'password' ? (
@@ -163,7 +163,7 @@ export default function Login() {
               </div>
             )}
 
-            <button disabled={busy} className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-500/20 transition-all duration-150 hover:shadow-rose-500/35 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
+            <button disabled={busy} className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 transition-all duration-150 hover:shadow-violet-500/35 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0">
               {busy ? 'Signing in…' : 'Sign In'} {!busy && <ArrowRight size={14} />}
             </button>
 
@@ -216,7 +216,7 @@ export default function Login() {
 
             <button
               disabled={busy || lockoutMinutes > 0 || pin.length !== PIN_LENGTH}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-500/20 transition-all duration-150 hover:shadow-rose-500/35 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 transition-all duration-150 hover:shadow-violet-500/35 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
             >
               {busy ? 'Verifying…' : 'Sign In'} {!busy && <ArrowRight size={14} />}
             </button>
@@ -269,7 +269,7 @@ export default function Login() {
 
             <button
               disabled={busy || newPin.length !== PIN_LENGTH || confirmNewPin.length !== PIN_LENGTH || !resetPassword}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-500/20 transition-all duration-150 hover:shadow-rose-500/35 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 transition-all duration-150 hover:shadow-violet-500/35 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
             >
               {busy ? 'Updating…' : 'Set New PIN & Continue'} {!busy && <ArrowRight size={14} />}
             </button>

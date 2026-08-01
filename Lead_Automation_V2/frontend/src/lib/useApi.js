@@ -1,6 +1,6 @@
 'use client';
 import { useCallback } from 'react';
-import { api } from './api';
+import { api, apiUpload } from './api';
 import { getToken, logout } from './auth';
 
 // Token-aware wrapper around `api()`. Components call `call(path, opts)` and never
@@ -26,5 +26,23 @@ export function useApi() {
       throw e;
     }
   }, []);
-  return { call };
+
+  // Same contract as `call`, for multipart/form-data bodies (file uploads).
+  // apiUpload sets no Content-Type so the browser can add the multipart
+  // boundary itself.
+  const upload = useCallback(async (path, formData) => {
+    try {
+      return await apiUpload(path, formData, { token: getToken() });
+    } catch (e) {
+      const isAuthError =
+        e.status === 401 ||
+        /invalid token|missing token|token missing|unauthorized/i.test(e.message || '');
+      if (isAuthError) {
+        logout();
+      }
+      throw e;
+    }
+  }, []);
+
+  return { call, upload };
 }

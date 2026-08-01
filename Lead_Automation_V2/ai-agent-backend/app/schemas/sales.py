@@ -39,3 +39,19 @@ class SalesRunSummary(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class FitScoreIn(BaseModel):
+    """Deliberately not free text: the Fit Scorer panel re-scores on every pill
+    change, so this has to be a cheap deterministic call, not an LLM run."""
+    org_size: str | None = None   # small | medium | enterprise
+    budget: str | None = None     # low | medium | high
+    channel: str | None = None    # email | whatsapp | linkedin
+
+
+class FitScoreOut(BaseModel):
+    score: int = 0
+    tier: str = "cold"            # hot | warm | cold
+    tier_reason: str = ""
+    factors: list[Any] = Field(default_factory=list)
+    recommended_action: str = ""

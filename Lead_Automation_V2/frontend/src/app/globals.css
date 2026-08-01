@@ -98,11 +98,31 @@ h1, h2, h3, h4, h5, h6 {
   to { stroke-dashoffset: 0; }
 }
 
-/* Flowing dashed wire animation */
-@keyframes dashFlow {
-  0% { stroke-dashoffset: 36; }
-  100% { stroke-dashoffset: 0; }
+/* Comparison bars. Final width comes from an inline --bar-w custom property,
+   so one keyframe drives every bar at its own length. */
+@keyframes growBar {
+  from { width: 0%; }
+  to   { width: var(--bar-w, 100%); }
 }
+.animate-grow-bar { animation: growBar 1.3s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Small horizontal nudge on the before -> after arrows. */
+@keyframes nudgeX {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(3px); }
+}
+.animate-nudge-x { animation: nudgeX 1.4s ease-in-out infinite; }
+
+/* Broken connector lines between fragmented legacy-tool windows: fade almost
+   out then back, reading as a flaky link rather than a steady wire. */
+@keyframes breakBlink {
+  0%, 100% { opacity: 0.55; }
+  45%      { opacity: 0.55; }
+  55%      { opacity: 0.06; }
+  70%      { opacity: 0.06; }
+  80%      { opacity: 0.55; }
+}
+.animate-break-blink { animation: breakBlink 3.2s ease-in-out infinite; }
 
 /* Premium Light Lavender Integration Card */
 .integration-card-lavender {
@@ -119,7 +139,23 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 15px 35px -5px rgba(99, 102, 241, 0.18), 0 8px 16px -2px rgba(139, 92, 246, 0.12) !important;
 }
 
-/* Traveling pulse along a connector line — horizontal + vertical variants */
+/* Voice-agent live-call bars. CSS rather than framer-motion: these sit inside
+   a variants-driven RevealSection, and parent variant propagation overrides a
+   child's own `animate` prop, leaving the bars frozen at transform:none. */
+/* Travelling pulse along the AI-engine connector curves. A short dash with a
+   long gap, scrolled by dashoffset, reads as one packet moving down the wire. */
+@keyframes dashFlow {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -1000; }
+}
+.animate-dash-flow { animation: dashFlow 5s linear infinite; }
+
+@keyframes waveform {
+  0%, 100% { transform: scaleY(0.25); }
+  50%      { transform: scaleY(1); }
+}
+.animate-waveform { animation: waveform 0.9s ease-in-out infinite; }
+
 @keyframes flowX {
   0% { left: -8%; opacity: 0; }
   12% { opacity: 1; }
@@ -280,13 +316,13 @@ h1, h2, h3, h4, h5, h6 {
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn px-4 py-2.5 text-white focus:ring-blue-500;
-    background: linear-gradient(135deg, #2563eb, #3b82f6);
-    box-shadow: 0 1px 3px rgb(37 99 235 / 0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+    @apply btn px-4 py-2.5 text-white focus:ring-violet-500;
+    background: linear-gradient(135deg, #e11d48, #c026d3, #7c3aed);
+    box-shadow: 0 1px 3px rgb(124 58 237 / 0.4), inset 0 1px 0 rgba(255,255,255,0.15);
   }
   .btn-primary:hover:not(:disabled) {
-    background: linear-gradient(135deg, #1d4ed8, #2563eb);
-    box-shadow: 0 4px 12px rgb(37 99 235 / 0.4);
+    background: linear-gradient(135deg, #be123c, #a21caf, #6d28d9);
+    box-shadow: 0 4px 14px rgb(124 58 237 / 0.45);
     transform: translateY(-1px);
   }
   .btn-emerald {
@@ -319,10 +355,10 @@ h1, h2, h3, h4, h5, h6 {
   .input-premium {
     @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800
            placeholder:text-slate-400 outline-none transition-all duration-150
-           focus:border-blue-400 focus:ring focus:ring-blue-100
+           focus:border-violet-400 focus:ring focus:ring-violet-100
            hover:border-slate-300;
   }
-  .input-premium:focus { box-shadow: 0 0 0 3px rgb(59 130 246 / 0.12); }
+  .input-premium:focus { box-shadow: 0 0 0 3px rgb(124 58 237 / 0.12); }
 
   /* Section divider */
   .section-divider {
@@ -379,3 +415,47 @@ h1, h2, h3, h4, h5, h6 {
     @apply px-4 py-3 text-slate-700;
   }
 }
+
+/* ─── Compare section ("From Chaos to Clarity") ──────────────────────────
+   Deliberately CSS, not framer-motion: these elements sit inside
+   variants-driven RevealSection wrappers, and parent variant propagation
+   overrides a child's own `animate` prop (the same trap that froze the
+   voice-agent waveform bars). */
+
+/* Headline words pop in one after another. */
+@keyframes popWord {
+  0%   { opacity: 0; transform: translateY(14px) scale(0.86); }
+  60%  { opacity: 1; transform: translateY(0)    scale(1.06); }
+  100% { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.animate-pop-word { animation: popWord 0.62s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* "Old way" icons twitch — restlessness, the feeling of scattered tools. */
+@keyframes wobble {
+  0%, 88%, 100% { transform: rotate(0deg); }
+  91%           { transform: rotate(-7deg); }
+  94%           { transform: rotate(6deg); }
+  97%           { transform: rotate(-3deg); }
+}
+.animate-wobble { animation: wobble 4s ease-in-out infinite; }
+
+/* "Orbq way" icons breathe with a soft halo — calm and alive. */
+@keyframes haloPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.0); transform: scale(1); }
+  50%      { box-shadow: 0 0 0 7px rgba(139, 92, 246, 0.10); transform: scale(1.06); }
+}
+.animate-halo { animation: haloPulse 2.8s ease-in-out infinite; }
+
+/* Light sweeps across the Orbq panel, like a screen refreshing. */
+@keyframes sheen {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(220%); }
+}
+.animate-sheen { animation: sheen 4.5s ease-in-out infinite; }
+
+/* Red "problem" badges throb gently so the eye lands on the cost. */
+@keyframes softThrob {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+.animate-soft-throb { animation: softThrob 2.2s ease-in-out infinite; }

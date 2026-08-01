@@ -85,15 +85,32 @@ export function useCreateLead() {
   });
 }
 
+// GET /conversations/:id — conversation + messages + the contact/lead columns
+// the Unified Inbox context rail needs (see services/inbox-service).
+export function useConversation(conversationId) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['conversations', 'detail', conversationId],
+    queryFn: () => call(`/conversations/${conversationId}`),
+    enabled: !!conversationId,
+    refetchInterval: 15_000,
+  });
+}
+
 // POST /conversations/:id/reply — { content } — used by "Send via Unified
 // Inbox" actions on AI-drafted follow-ups/replies.
 export function useSendReply() {
   const { call } = useApi();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ conversationId, content }) =>
-      call(`/conversations/${conversationId}/reply`, { method: 'POST', body: { content } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations', 'list'] }),
+    // inbox-service reads req.body.body — sending { content } inserted a NULL
+    // message body. Accepts either name from callers and normalises here.
+    mutationFn: ({ conversationId, body, content }) =>
+      call(`/conversations/${conversationId}/reply`, { method: 'POST', body: { body: body ?? content } }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['conversations', 'list'] });
+      qc.invalidateQueries({ queryKey: ['conversations', 'detail', vars.conversationId] });
+    },
   });
 }
 
@@ -134,5 +151,44 @@ export function usePostReviewReply() {
   return useMutation({
     mutationFn: ({ id, reply }) => call(`/reviews/${id}`, { method: 'PUT', body: { reply } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reviews', 'list'] }),
+  });
+}
+
+// ─── Contact import (CSV / XLSX) ─────────────────────────────────────────
+// Two-step so the user confirms a column mapping before anything is written:
+// preview writes nothing, import commits. Both post multipart to
+// contact-service via apiUpload (fetch, not JSON) — see services/
+// contact-service/src/importRoutes.js.
+
+function importFormData(file, opts = {}) {
+  const fd = new FormData();
+  fd.append('file', file);
+  if (opts.sheetName) fd.append('sheetName', opts.sheetName);
+  if (opts.mapping) fd.append('mapping', JSON.stringify(opts.mapping));
+  if (opts.defaultSource) fd.append('defaultSource', opts.defaultSource);
+  if (opts.onDuplicate) fd.append('onDuplicate', opts.onDuplicate);
+  if (opts.unmappedToNotes === false) fd.append('unmappedToNotes', 'false');
+  if (opts.tagWithSheetName === false) fd.append('tagWithSheetName', 'false');
+  return fd;
+}
+
+// POST /contacts/import/preview — dry run: sheets, detected mapping, stats
+export function usePreviewContactImport() {
+  const { upload } = useApi();
+  return useMutation({
+    mutationFn: ({ file, ...opts }) => upload('/contacts/import/preview', importFormData(file, opts)),
+  });
+}
+
+// POST /contacts/import — commits the rows
+export function useRunContactImport() {
+  const { upload } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, ...opts }) => upload('/contacts/import', importFormData(file, opts)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contacts'] });
+      qc.invalidateQueries({ queryKey: ['leads'] });
+    },
   });
 }

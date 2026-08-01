@@ -46,12 +46,12 @@ function PersonaCard({ persona, i }) {
       {asList(p.preferred_channels).length > 0 && (
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
-            <Megaphone size={11} className="text-blue-500" />
+            <Megaphone size={11} className="text-violet-500" />
             <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Preferred Channels</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {asList(p.preferred_channels).map((x, idx) => (
-              <span key={idx} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 capitalize">
+              <span key={idx} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 capitalize">
                 {typeof x === 'string' ? x : JSON.stringify(x)}
               </span>
             ))}

@@ -10,6 +10,8 @@ import {
 } from '@/lib/queries/aiAgents';
 import { useConversations, useSendReply, useFindConversationByName } from '@/lib/queries/crm';
 import KpiCard from './KpiCard';
+import WorkspaceHeader from './shared/WorkspaceHeader';
+import RAGAuditorPanel from './support/RAGAuditorPanel';
 import KnowledgeUploadPanel from './KnowledgeUploadPanel';
 
 /* ── helpers ─────────────────────────────────────────────── */
@@ -127,25 +129,12 @@ export default function SupportWorkspace() {
   return (
     <div className="space-y-6 animate-fade-in">
 
-      {/* ── Hero banner ─────────────────────────────────── */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-violet-600 via-violet-700 to-purple-700 p-6 shadow-violet">
-        <div className="absolute inset-0 opacity-10"
-          style={{ backgroundImage: 'radial-gradient(circle at 70% 30%, white 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-pink-400 to-violet-400" />
-        <div className="relative flex items-center gap-4">
-          <div className="p-3 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30">
-            <Headphones size={22} className="text-white" />
-          </div>
-          <div>
-            <h3 className="font-bold text-white text-lg">Support Agent</h3>
-            <p className="text-violet-200 text-sm mt-0.5">Resolve issues, retain customers, and escalate intelligently</p>
-          </div>
-          <div className="ml-auto hidden sm:flex items-center gap-2 bg-white/10 rounded-xl px-3 py-1.5 border border-white/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
-            <span className="text-white text-xs font-medium">Agent Online</span>
-          </div>
-        </div>
-      </div>
+      <WorkspaceHeader
+        agent="support"
+        icon={Headphones}
+        title="Support Agent"
+        subtitle="Resolve issues, retain customers, and escalate intelligently"
+      />
 
       {/* ── KPI row ─────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -160,6 +149,9 @@ export default function SupportWorkspace() {
           </div>
         ))}
       </div>
+
+      {/* Knowledge RAG Auditor — coverage gaps, citation counts, staleness */}
+      <RAGAuditorPanel />
 
       {/* ── Escalation alerts ───────────────────────────── */}
       {escalations.length > 0 && (

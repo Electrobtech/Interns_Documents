@@ -2,12 +2,12 @@
 
 const TONE_CONFIG = {
   brand: {
-    iconBg: 'bg-gradient-to-br from-blue-50 to-indigo-100',
-    iconColor: 'text-blue-600',
-    accent: 'bg-blue-600',
-    glow: 'hover:shadow-brand',
-    border: 'hover:border-blue-200',
-    valueSub: 'text-blue-600',
+    iconBg: 'bg-gradient-to-br from-violet-50 to-fuchsia-100',
+    iconColor: 'text-violet-600',
+    accent: 'bg-violet-600',
+    glow: 'hover:shadow-violet',
+    border: 'hover:border-violet-200',
+    valueSub: 'text-violet-600',
   },
   emerald: {
     iconBg: 'bg-gradient-to-br from-emerald-50 to-teal-100',
@@ -59,7 +59,7 @@ export default function KpiCard({ icon: Icon, label, value, sublabel, tone = 'br
 
       {/* Subtle background glow on hover */}
       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse at top left, rgba(37,99,235,0.03) 0%, transparent 60%)' }} />
+        style={{ background: 'radial-gradient(ellipse at top left, rgba(124,58,237,0.04) 0%, transparent 60%)' }} />
 
       <div className="relative flex items-start gap-4">
         {Icon && (

@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     CONTACT_SERVICE_URL: str = "http://contact-service:4003"
     CAMPAIGN_SERVICE_URL: str = "http://campaign-service:4004"
 
+    # ── RAG retrieval ──────────────────────────────────────────────────────────
+    # Cross-encoder rerank costs one extra LLM call per retrieval, so it is
+    # opt-in. Off: RRF fusion + MMR only (no extra latency). On: the top
+    # RAG_RERANK_CANDIDATES fused chunks are re-scored by the LLM.
+    RAG_LLM_RERANK: bool = False
+    RAG_RERANK_CANDIDATES: int = 12
+
 
 @lru_cache
 def get_settings() -> Settings:

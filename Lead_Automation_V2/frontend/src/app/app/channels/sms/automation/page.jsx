@@ -17,7 +17,7 @@ export default function SmsAutomationPage() {
       <div className="px-6 pt-6 pb-0 flex items-start justify-between gap-4 shrink-0">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">
               <Smartphone size={15} />
             </div>
             <h2 className="text-lg font-bold text-slate-800">SMS Automation</h2>
@@ -38,7 +38,7 @@ export default function SmsAutomationPage() {
           </Link>
           <Link
             href="/app/channels/sms/automation"
-            className="px-1 pb-2 -mb-px border-b-2 border-blue-600 text-blue-600 font-medium flex items-center gap-1.5"
+            className="px-1 pb-2 -mb-px border-b-2 border-violet-600 text-violet-600 font-medium flex items-center gap-1.5"
           >
             <Bot size={14} /> Automation
           </Link>

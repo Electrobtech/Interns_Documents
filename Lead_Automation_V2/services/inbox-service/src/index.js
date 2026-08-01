@@ -49,10 +49,27 @@ app.get('/conversations/:id', async (req, res) => {
   // since contact_name was never present on this response at all. The list
   // endpoint above already joined contacts correctly; this brings the
   // single-conversation view in line with it.
+  // Contact and lead columns come along so the Unified Inbox's context rail
+  // can render who this is without a second round trip. Only real columns —
+  // there is no company/deal-value field on contacts, so the UI shows what
+  // exists rather than inventing it. The lead join takes the most recent lead
+  // row for the contact (a contact can be re-qualified over time).
   const conv = await pool.query(
-    `SELECT c.*, ct.name AS contact_name, ct.external_id AS contact_external_id
+    `SELECT c.*,
+            ct.name AS contact_name, ct.external_id AS contact_external_id,
+            ct.email AS contact_email, ct.phone AS contact_phone,
+            ct.source AS contact_source, ct.tags AS contact_tags,
+            ct.notes AS contact_notes, ct.created_at AS contact_created_at,
+            l.score AS lead_score, l.stage AS lead_stage, l.priority AS lead_priority,
+            u.name AS assigned_to_name, u.email AS assigned_to_email
        FROM conversations c
        LEFT JOIN contacts ct ON ct.id = c.contact_id
+       LEFT JOIN users u ON u.id = c.assigned_to
+       LEFT JOIN LATERAL (
+         SELECT score, stage, priority FROM leads
+          WHERE contact_id = c.contact_id AND organization_id = c.organization_id
+          ORDER BY created_at DESC LIMIT 1
+       ) l ON TRUE
       WHERE c.id=$1 AND c.organization_id=$2`,
     [req.params.id, org]
   );

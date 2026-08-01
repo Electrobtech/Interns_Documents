@@ -8,6 +8,7 @@ from app.api.v1 import (
     knowledge,
     marketing,
     marketing_competitor,
+    marketing_growth,
     marketing_handoff,
     marketing_performance,
     marketing_persona,
@@ -33,6 +34,10 @@ router.include_router(marketing_seo.router, tags=["marketing"])
 router.include_router(marketing_persona.router, tags=["marketing"])
 router.include_router(marketing_planner.router, tags=["marketing"])
 router.include_router(marketing_competitor.router, tags=["marketing"])
+# AEO, anti-ban, click-to-WhatsApp and cold revival. This router existed
+# but was never registered, so all six of its routes 404'd — including the
+# ones the Marketing workspace panels call on mount.
+router.include_router(marketing_growth.router, tags=["marketing"])
 router.include_router(marketing_handoff.router, tags=["marketing"])
 router.include_router(marketing_performance.router, tags=["marketing"])
 router.include_router(sales.router, tags=["sales"])

@@ -33,7 +33,7 @@ function MarketingAgentPanel() {
       {/* form */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6">
         <div className="flex items-center gap-2.5 mb-1">
-          <div className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600">
+          <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-rose-100 text-violet-600">
             <Sparkles size={15} />
           </div>
           <div>
@@ -67,17 +67,17 @@ function MarketingAgentPanel() {
       {/* result */}
       <div className="space-y-4">
         {run.isPending && (
-          <div className="bg-white rounded-2xl border border-blue-100 shadow-card p-8 text-center animate-scale-in">
+          <div className="bg-white rounded-2xl border border-violet-100 shadow-card p-8 text-center animate-scale-in">
             <div className="relative inline-block mb-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-                <Sparkles size={22} className="text-blue-500 animate-pulse" />
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-50 to-rose-100 flex items-center justify-center">
+                <Sparkles size={22} className="text-violet-500 animate-pulse" />
               </div>
-              <div className="absolute inset-0 rounded-2xl animate-ping opacity-20 bg-blue-400" />
+              <div className="absolute inset-0 rounded-2xl animate-ping opacity-20 bg-violet-400" />
             </div>
             <p className="text-sm font-semibold text-slate-700">Analysing sentiment…</p>
             <div className="flex justify-center gap-1.5 mt-3">
               {[0,1,2].map((i) => (
-                <div key={i} className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce"
+                <div key={i} className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
                   style={{ animationDelay: `${i * 150}ms` }} />
               ))}
             </div>
@@ -106,7 +106,7 @@ function MarketingAgentPanel() {
             {out.review_replies?.length > 0 && (
               <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <MessageSquareReply size={14} className="text-blue-500" />
+                  <MessageSquareReply size={14} className="text-violet-500" />
                   <p className="text-xs font-bold text-slate-700 uppercase tracking-wide">Reply Drafts</p>
                 </div>
                 <div className="space-y-3">
@@ -143,7 +143,7 @@ function MarketingAgentPanel() {
                 <ul className="space-y-1.5">
                   {out.next_best_actions.map((a, i) => (
                     <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
-                      <span className="shrink-0 w-4 h-4 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-[9px] font-bold mt-0.5">{i+1}</span>
+                      <span className="shrink-0 w-4 h-4 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center text-[9px] font-bold mt-0.5">{i+1}</span>
                       {a}
                     </li>
                   ))}
@@ -166,7 +166,7 @@ function MarketingAgentPanel() {
       {/* recent runs */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-5">
         <div className="flex items-center gap-2.5 mb-4">
-          <div className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600">
+          <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-rose-100 text-violet-600">
             <Megaphone size={14} />
           </div>
           <div>
@@ -185,7 +185,7 @@ function MarketingAgentPanel() {
                   : 'bg-slate-100 text-slate-500';
                 return (
                   <div key={r.id}
-                    className="p-3 rounded-xl bg-slate-50 hover:bg-blue-50/40 border border-transparent hover:border-blue-100 transition-all">
+                    className="p-3 rounded-xl bg-slate-50 hover:bg-violet-50/40 border border-transparent hover:border-violet-100 transition-all">
                     <div className="flex items-center gap-2 mb-1">
                       {s && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full capitalize ${sentCls}`}>{s}</span>}
                       <span className="text-[10px] text-slate-400">{new Date(r.created_at).toLocaleDateString()}</span>

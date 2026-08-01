@@ -17,8 +17,8 @@ import HandoffQueue from '@/components/ai-agents/HandoffQueue';
 const AGENT_CONFIG = {
   marketing: {
     label: 'Marketing Agent', type: 'Marketing', icon: Megaphone,
-    iconBg: 'bg-gradient-to-br from-blue-50 to-indigo-100', iconColor: 'text-blue-600',
-    accent: 'from-blue-500 to-indigo-600', description: 'Attracts & nurtures leads',
+    iconBg: 'bg-gradient-to-br from-violet-50 to-purple-100', iconColor: 'text-violet-600',
+    accent: 'from-violet-500 to-purple-600', description: 'Attracts & nurtures leads',
   },
   sales: {
     label: 'Sales Agent', type: 'Sales', icon: TrendingUp,
@@ -54,7 +54,7 @@ function AgentRow({ agentKey, statusRow, runs, active, onSelect }) {
       onClick={() => onSelect(agentKey)}
       className={`
         w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150
-        ${active ? 'bg-blue-50 border border-blue-100' : 'border border-transparent hover:bg-slate-50'}
+        ${active ? 'bg-violet-50 border border-violet-100' : 'border border-transparent hover:bg-slate-50'}
       `}
     >
       <div className={`p-2 rounded-lg shrink-0 ${cfg.iconBg} ${cfg.iconColor}`}>
@@ -101,7 +101,7 @@ export default function AIAgentsPage() {
       {/* header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600 shadow-sm">
+          <div className="p-2.5 rounded-2xl bg-gradient-to-br from-violet-50 to-purple-100 text-violet-600 shadow-sm">
             <Bot size={20} />
           </div>
           <div>
@@ -114,7 +114,7 @@ export default function AIAgentsPage() {
           className={`
             flex items-center gap-2 text-xs font-semibold px-3.5 py-2.5 rounded-xl border transition-colors
             ${selected === 'handoff'
-              ? 'bg-blue-50 border-blue-200 text-blue-700'
+              ? 'bg-violet-50 border-violet-200 text-violet-700'
               : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}
           `}
         >
@@ -153,7 +153,7 @@ export default function AIAgentsPage() {
               onClick={() => setSelected('overview')}
               className={`
                 w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 mb-1
-                ${selected === 'overview' ? 'bg-blue-50 border border-blue-100' : 'border border-transparent hover:bg-slate-50'}
+                ${selected === 'overview' ? 'bg-violet-50 border border-violet-100' : 'border border-transparent hover:bg-slate-50'}
               `}
             >
               <div className="p-2 rounded-lg shrink-0 bg-slate-100 text-slate-500">

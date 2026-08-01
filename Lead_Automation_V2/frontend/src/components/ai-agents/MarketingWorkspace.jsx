@@ -3,21 +3,27 @@ import { useMemo, useState } from 'react';
 import {
   Megaphone, Sparkles, Users2, Database, FileText,
   AlertTriangle, Send, ChevronRight, Zap, LayoutDashboard, Search,
-  UserRound, CalendarClock, Target, BarChart3, UserCheck,
+  UserRound, CalendarClock, Target, BarChart3,
+  Bot, ShieldCheck, MessageCircle, Radar, Radio,
 } from 'lucide-react';
 import {
   useRunMarketingAgent, useMarketingRuns, useKnowledgeSources,
 } from '@/lib/queries/aiAgents';
 import { useLeads, useContacts, useCampaigns } from '@/lib/queries/crm';
-import KnowledgeUploadPanel from './KnowledgeUploadPanel';
+import WorkspaceHeader from './shared/WorkspaceHeader';
+import WorkspaceNav from './shared/WorkspaceNav';
 import MarketingRunResult from './MarketingRunResult';
 import MarketingOverview from './marketing/MarketingOverview';
 import SEOPanel from './marketing/SEOPanel';
+import AEOPanel from './marketing/AEOPanel';
+import AntiBanPanel from './marketing/AntiBanPanel';
+import ClickToWhatsAppPanel from './marketing/ClickToWhatsAppPanel';
+import ColdRevivalPanel from './marketing/ColdRevivalPanel';
 import PersonaPanel from './marketing/PersonaPanel';
 import CampaignPlannerPanel from './marketing/CampaignPlannerPanel';
+import BroadcastComposer from './marketing/BroadcastComposer';
 import CompetitorPanel from './marketing/CompetitorPanel';
 import PerformancePanel from './marketing/PerformancePanel';
-import SalesHandoffPanel from './marketing/SalesHandoffPanel';
 
 const CAMPAIGN_TYPES = ['Lead Generation', 'Product Launch', 'Re-engagement', 'Event Promotion', 'Brand Awareness'];
 const GOALS = ['Get more leads', 'Increase awareness', 'Drive conversions', 'Nurture existing leads'];
@@ -25,22 +31,59 @@ const GOALS = ['Get more leads', 'Increase awareness', 'Drive conversions', 'Nur
 const CHANNEL_COLORS = {
   whatsapp: 'bg-emerald-100 text-emerald-700',
   instagram: 'bg-pink-100 text-pink-700',
-  email: 'bg-blue-100 text-blue-700',
+  email: 'bg-violet-100 text-violet-700',
   sms: 'bg-amber-100 text-amber-700',
   default: 'bg-slate-100 text-slate-600',
 };
 
-const TABS = [
-  { key: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { key: 'content', label: 'Content Generator', icon: Sparkles },
-  { key: 'seo', label: 'SEO & Content Briefs', icon: Search },
-  { key: 'personas', label: 'Personas & ICP', icon: UserRound },
-  { key: 'planner', label: 'Campaign Planner', icon: CalendarClock },
-  { key: 'competitor', label: 'Competitor Intelligence', icon: Target },
-  { key: 'performance', label: 'Performance Analytics', icon: BarChart3 },
-  { key: 'handoff', label: 'Sales Handoff', icon: UserCheck },
-  { key: 'sources', label: 'Sources', icon: Database },
+// Two-tier navigation: 11 tools grouped into 6 logical categories so the
+// workspace reads as a structured toolkit instead of a flat pill soup.
+// Top tier = category; second tier = the tools inside the active category
+// (shown only when a category holds more than one tool).
+const NAV_GROUPS = [
+  {
+    key: 'overview', label: 'Overview', icon: LayoutDashboard,
+    items: [{ key: 'overview', label: 'Overview', icon: LayoutDashboard }],
+  },
+  {
+    key: 'create', label: 'Create', icon: Sparkles,
+    hint: 'Generate & optimize content',
+    items: [
+      { key: 'content', label: 'Content Generator', icon: Sparkles },
+      { key: 'seo', label: 'SEO & Briefs', icon: Search },
+      { key: 'aeo', label: 'AEO Citation Engine', icon: Bot },
+    ],
+  },
+  {
+    key: 'distribute', label: 'Distribute', icon: Send,
+    hint: 'Reach & re-engage leads',
+    items: [
+      { key: 'broadcast', label: 'Broadcast Composer', icon: Radio },
+      { key: 'ctwa', label: 'Click-to-WhatsApp Ads', icon: MessageCircle },
+      { key: 'planner', label: 'Campaign Planner', icon: CalendarClock },
+      { key: 'revival', label: 'Cold Lead Revival', icon: Radar },
+    ],
+  },
+  {
+    key: 'safeguard', label: 'Safeguard', icon: ShieldCheck,
+    hint: 'Deliverability protection',
+    items: [{ key: 'antiban', label: 'Meta Anti-Ban Check', icon: ShieldCheck }],
+  },
+  {
+    key: 'research', label: 'Research', icon: Target,
+    hint: 'Know your audience & rivals',
+    items: [
+      { key: 'personas', label: 'Personas & ICP', icon: UserRound },
+      { key: 'competitor', label: 'Competitor Intelligence', icon: Target },
+    ],
+  },
+  {
+    key: 'analyze', label: 'Analyze', icon: BarChart3,
+    hint: 'Measure performance',
+    items: [{ key: 'performance', label: 'Performance Analytics', icon: BarChart3 }],
+  },
 ];
+
 
 export default function MarketingWorkspace() {
   const [tab, setTab] = useState('overview');
@@ -101,44 +144,14 @@ export default function MarketingWorkspace() {
   return (
     <div className="space-y-6 animate-fade-in">
 
-      {/* Header banner */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 p-6 shadow-brand">
-        <div className="absolute inset-0 opacity-20"
-          style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-        <div className="absolute right-0 top-0 bottom-0 w-48 opacity-10"
-          style={{ background: 'radial-gradient(ellipse at right, white, transparent)' }} />
-        <div className="relative flex items-center gap-4">
-          <div className="p-3 rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30">
-            <Megaphone size={22} className="text-white" />
-          </div>
-          <div>
-            <h3 className="font-bold text-white text-lg">Marketing Agent</h3>
-            <p className="text-blue-200 text-sm mt-0.5">AI-powered campaigns grounded in your knowledge base</p>
-          </div>
-          <div className="ml-auto hidden sm:flex items-center gap-2 bg-white/10 rounded-xl px-3 py-1.5 border border-white/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-white text-xs font-medium">Agent Online</span>
-          </div>
-        </div>
-      </div>
+      <WorkspaceHeader
+        agent="marketing"
+        icon={Megaphone}
+        title="Marketing Agent"
+        subtitle="AI-powered campaigns grounded in your knowledge base"
+      />
 
-      {/* Sub-nav */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mb-1">
-        {TABS.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`
-              flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl border whitespace-nowrap transition-colors shrink-0
-              ${tab === key
-                ? 'bg-blue-50 border-blue-200 text-blue-700'
-                : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}
-            `}
-          >
-            <Icon size={13} /> {label}
-          </button>
-        ))}
-      </div>
+      <WorkspaceNav groups={NAV_GROUPS} active={tab} onSelect={setTab} />
 
       {tab === 'overview' && (
         <MarketingOverview
@@ -152,12 +165,15 @@ export default function MarketingWorkspace() {
       )}
 
       {tab === 'seo' && <SEOPanel />}
+      {tab === 'aeo' && <AEOPanel />}
+      {tab === 'antiban' && <AntiBanPanel />}
+      {tab === 'broadcast' && <BroadcastComposer />}
+      {tab === 'ctwa' && <ClickToWhatsAppPanel />}
+      {tab === 'revival' && <ColdRevivalPanel />}
       {tab === 'personas' && <PersonaPanel />}
       {tab === 'planner' && <CampaignPlannerPanel />}
       {tab === 'competitor' && <CompetitorPanel />}
       {tab === 'performance' && <PerformancePanel />}
-      {tab === 'handoff' && <SalesHandoffPanel />}
-      {tab === 'sources' && <KnowledgeUploadPanel agentType="marketing" />}
 
       {/* Content Generator */}
       {tab === 'content' && (
@@ -170,7 +186,7 @@ export default function MarketingWorkspace() {
             {/* Campaign Generator */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6">
               <div className="flex items-center gap-2.5 mb-1">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-600">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-purple-100 text-violet-600">
                   <Sparkles size={15} />
                 </div>
                 <div>
@@ -283,7 +299,7 @@ export default function MarketingWorkspace() {
                         </div>
                         <div className="progress-bar">
                           <div
-                            className="progress-fill bg-gradient-to-r from-blue-500 to-indigo-500"
+                            className="progress-fill bg-gradient-to-r from-violet-500 to-purple-500"
                             style={{ width: `${s.pct}%`, transitionDelay: `${i * 100}ms` }}
                           />
                         </div>
@@ -321,12 +337,12 @@ export default function MarketingWorkspace() {
 
           {/* AI Loading state */}
           {run.isPending && (
-            <div className="bg-white rounded-2xl border border-blue-100 shadow-card p-8 text-center animate-scale-in">
+            <div className="bg-white rounded-2xl border border-violet-100 shadow-card p-8 text-center animate-scale-in">
               <div className="relative inline-block mb-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-                  <Sparkles size={24} className="text-blue-500 animate-pulse" />
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-50 to-purple-100 flex items-center justify-center">
+                  <Sparkles size={24} className="text-violet-500 animate-pulse" />
                 </div>
-                <div className="absolute inset-0 rounded-2xl animate-ping opacity-20 bg-blue-400" />
+                <div className="absolute inset-0 rounded-2xl animate-ping opacity-20 bg-violet-400" />
               </div>
               <p className="text-sm font-semibold text-slate-700">Generating campaign…</p>
               <p className="text-xs text-slate-400 mt-1">Retrieving knowledge and composing content</p>
@@ -334,7 +350,7 @@ export default function MarketingWorkspace() {
                 {[0, 1, 2].map((i) => (
                   <div
                     key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce"
+                    className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce"
                     style={{ animationDelay: `${i * 150}ms` }}
                   />
                 ))}
@@ -386,17 +402,17 @@ export default function MarketingWorkspace() {
                 {(runs || []).slice(0, 6).map((r, i) => (
                   <div
                     key={r.id}
-                    className="group flex items-start gap-3 p-3 rounded-xl bg-slate-50 hover:bg-blue-50/50 border border-transparent hover:border-blue-100 transition-all duration-150 cursor-pointer animate-fade-in"
+                    className="group flex items-start gap-3 p-3 rounded-xl bg-slate-50 hover:bg-violet-50/50 border border-transparent hover:border-violet-100 transition-all duration-150 cursor-pointer animate-fade-in"
                     style={{ animationDelay: `${i * 50}ms` }}
                   >
                     <div className="p-1.5 rounded-lg bg-white shadow-sm shrink-0 mt-0.5">
-                      <Zap size={11} className="text-blue-500" />
+                      <Zap size={11} className="text-violet-500" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold text-slate-700 truncate leading-snug">{r.brief}</p>
                       <p className="text-[10px] text-slate-400 mt-0.5">{new Date(r.created_at).toLocaleString()}</p>
                     </div>
-                    <ChevronRight size={13} className="text-slate-300 shrink-0 mt-1 group-hover:text-blue-400 transition-colors" />
+                    <ChevronRight size={13} className="text-slate-300 shrink-0 mt-1 group-hover:text-violet-400 transition-colors" />
                   </div>
                 ))}
               </div>

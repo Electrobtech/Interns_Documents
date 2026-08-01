@@ -10,7 +10,7 @@ import {
 import KpiCard from '../KpiCard';
 
 const ACTIVITY_META = {
-  content: { icon: Sparkles, cls: 'text-blue-600', bg: 'bg-blue-50' },
+  content: { icon: Sparkles, cls: 'text-violet-600', bg: 'bg-violet-50' },
   seo: { icon: Search, cls: 'text-emerald-600', bg: 'bg-emerald-50' },
   persona: { icon: UserRound, cls: 'text-violet-600', bg: 'bg-violet-50' },
   plan: { icon: CalendarClock, cls: 'text-amber-600', bg: 'bg-amber-50' },
