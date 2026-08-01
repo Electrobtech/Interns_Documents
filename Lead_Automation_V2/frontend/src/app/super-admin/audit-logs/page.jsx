@@ -47,7 +47,11 @@ export default function AuditLogsPage() {
                     <td className="py-2 pr-4">{log.organization_name || '—'}</td>
                     <td className="py-2 pr-4 font-medium">{log.action}</td>
                     <td className="py-2 pr-4 text-slate-500">
-                      <code className="text-xs">{JSON.stringify(log.meta)}</code>
+                      {log.meta?.description ? (
+                        log.meta.description
+                      ) : (
+                        <code className="text-xs">{JSON.stringify(log.meta)}</code>
+                      )}
                     </td>
                   </tr>
                 ))}

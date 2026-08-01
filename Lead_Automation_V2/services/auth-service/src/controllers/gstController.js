@@ -43,7 +43,17 @@ router.post('/company/verify-gst', gstRateLimiter, async (req, res) => {
     // never into any message/URL this code builds) so an uncoded error
     // (e.g. a JSON-parse failure on a non-JSON 200 response) is still
     // diagnosable instead of collapsing to a bare 'UNKNOWN'.
-    console.error('[gst.verify] failed', { code: e.code || 'UNKNOWN', message: e.message });
+    console.error('[gst.verify] failed', {
+      code: e.code || 'UNKNOWN',
+      message: e.message,
+      // `fetch failed` from undici is just a wrapper — the real reason
+      // (DNS failure, ECONNREFUSED, TLS handshake error, etc.) lives on
+      // .cause and was previously being swallowed here, which is why this
+      // showed up as an unhelpful bare 'fetch failed' with no way to tell
+      // a DNS problem from a TLS problem from a firewall block.
+      cause: e.cause ? (e.cause.message || String(e.cause)) : undefined,
+      causeCode: e.cause?.code,
+    });
 
     if (e.code === 'GST_NOT_FOUND') {
       return res.status(404).json({ error: 'GST number not found. Please double-check and try again.' });
