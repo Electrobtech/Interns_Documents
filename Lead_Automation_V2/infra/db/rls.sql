@@ -67,7 +67,7 @@ BEGIN
     'playbooks', 'conversation_sessions',
     'email_accounts', 'email_threads', 'email_messages',
     'sms_devices',
-    'wallets', 'wallet_transactions', 'feature_flags', 'attachments'
+    'wallets', 'wallet_transactions', 'payments', 'feature_flags', 'attachments',
     'calendar_accounts', 'calendar_events'
   ]
   LOOP

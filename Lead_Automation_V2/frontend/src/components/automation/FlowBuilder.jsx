@@ -29,6 +29,7 @@ import { apiUpload } from "@/lib/api";
 import { getToken } from "@/lib/auth";
 import { DateTimePicker } from "@/components/calendar/DateTimePicker";
 
+
 /* ------------------------------------------------------------------ */
 /* Document upload — client-side rules for the Message Node's
    "document" badge. Kept in sync with the server-side check in

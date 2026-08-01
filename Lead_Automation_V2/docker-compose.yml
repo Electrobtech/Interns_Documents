@@ -137,6 +137,24 @@ services:
       ollama:   { condition: service_started }
     ports: ["4005:4005"]
 
+  # Billing service - Razorpay payment gateway: wallet recharge
+  # (campaigns/broadcasts), product-platform checkout, and walk-in POS
+  # (cash or QR/payment-link).
+  billing-service:
+    build:
+      context: .
+      dockerfile: services/billing-service/Dockerfile
+    env_file: .env
+    environment:
+      PORT: 4015
+      DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4015:4015"]
+
   # E-commerce service - integrates with e-commerce platforms
   ecommerce-service:
     build:
@@ -255,13 +273,17 @@ services:
     volumes:
       - automation_uploads:/app/services/automation-service/public/uploads
 
-  # Notification service - handles email, SMS, and push notifications
+    # Notification service - handles email, SMS, and push notifications
   notification-service:
     build:
       context: .
       dockerfile: services/notification-service/Dockerfile
       network: host
     env_file: .env
+    environment:
+      DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
     ports: ["4012:4012"]
 
   # Email service - Gmail integration (OAuth, sync, send/reply, attachments)
@@ -349,12 +371,14 @@ services:
       NOTIFICATION_SERVICE_URL: http://notification-service:4012
       EMAIL_SERVICE_URL:       http://email-service:4013
       CALENDAR_SERVICE_URL:    http://calendar-service:4014
+      BILLING_SERVICE_URL:     http://billing-service:4015
     depends_on:
       - auth-service
       - inbox-service
       - contact-service
       - campaign-service
       - ai-agent-service
+      - billing-service
       - ecommerce-service
       - review-service
       - analytics-service

@@ -76,19 +76,19 @@ export default function ConnectChannelsPage() {
               </p>
               <div className="flex gap-2">
                 {type === 'email' || type === 'sms' ? (
-                  // Email and SMS each connect via a real per-device flow
-                  // (Gmail OAuth mailboxes / forwarder-app phones) rather
-                  // than the generic fake on/off toggle every other
-                  // channel here uses — send them to the dedicated page
-                  // where that flow (and device list) actually lives.
-                  <Link href={`/app/channels/${type}`}
-                    className={`text-xs rounded-lg px-3 py-1.5 font-medium ${
-                      connected ? 'border border-slate-300 text-slate-600' : 'bg-brand text-white'}`}>
-                    {connected ? 'Open' : 'Connect'}
-                  </Link>
-                ) : (
-                  <>
-                    <button onClick={() => toggle(type, label)} disabled={busy === type}
+  // Email and SMS each connect via a real per-device flow
+  // (Gmail OAuth mailboxes / forwarder-app phones) rather
+  // than the generic fake on/off toggle every other
+  // channel here uses — send them to the dedicated page
+  // where that flow (and device/mailbox list) actually lives.
+  <Link href={`/app/channels/${type}`}
+    className={`text-xs rounded-lg px-3 py-1.5 font-medium ${
+      connected ? 'border border-slate-300 text-slate-600' : 'bg-brand text-white'}`}>
+    {connected ? 'Open' : 'Connect'}
+  </Link>
+) : (
+  <>
+    <button onClick={() => toggle(type, label)} disabled={busy === type}
                       className={`text-xs rounded-lg px-3 py-1.5 font-medium disabled:opacity-60 ${
                         connected ? 'border border-slate-300 text-slate-600' : 'bg-brand text-white'}`}>
                       {busy === type ? '…' : connected ? 'Disconnect' : 'Connect'}

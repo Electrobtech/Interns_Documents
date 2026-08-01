@@ -151,27 +151,6 @@ CREATE TABLE IF NOT EXISTS integrations (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Backs the 'sms' channel: one row per connected sending number/gateway,
--- rather than a single JSON blob on channels.credentials (019_sms_devices.sql).
-CREATE TABLE IF NOT EXISTS sms_devices (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  label             TEXT NOT NULL,               -- human-friendly name, e.g. "Front Desk Android"
-  phone_number      TEXT NOT NULL,                -- E.164, e.g. +91XXXXXXXXXX
-  provider          TEXT NOT NULL DEFAULT 'android_gateway', -- android_gateway | twilio | other
-  status            TEXT NOT NULL DEFAULT 'disconnected',    -- connected | disconnected | error
-  sender_id         TEXT,                          -- alphanumeric sender ID for transactional SMS, if the provider supports one
-  credentials       JSONB NOT NULL DEFAULT '{}'::jsonb,
-  connected_by      UUID REFERENCES users(id) ON DELETE SET NULL,
-  last_seen_at      TIMESTAMPTZ,
-  last_error        TEXT,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (organization_id, phone_number)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sms_devices_org_status ON sms_devices (organization_id, status);
-
 -- ---------- Contacts & Leads ----------
 CREATE TABLE IF NOT EXISTS contacts (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -214,6 +193,7 @@ CREATE TABLE IF NOT EXISTS conversations (
                         CHECK (handled_by IN ('bot','human')),
   external_contact_id TEXT,                    -- provider-side thread/sender id
   last_message_at     TIMESTAMPTZ DEFAULT now(),
+  last_read_at        TIMESTAMPTZ NOT NULL DEFAULT now(), -- bumped on open; see migrations/023_conversation_last_read_at.sql
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -643,6 +623,8 @@ CREATE TABLE IF NOT EXISTS sms_devices (
   message_count     INTEGER NOT NULL DEFAULT 0,
   last_raw_payload  JSONB,                       -- most recent payload received — critical for
                                                    -- debugging field-name mismatches
+  locked_at         TIMESTAMPTZ,
+  locked_by         UUID REFERENCES users(id) ON DELETE SET NULL,
   created_by        UUID REFERENCES users(id),
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -1018,6 +1000,38 @@ CREATE TABLE IF NOT EXISTS wallet_transactions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_wallet_tx_org_created ON wallet_transactions (organization_id, created_at DESC);
+
+-- Generic payment-gateway ledger (billing-service). Covers wallet top-ups
+-- (funds campaigns/broadcasts via wallet_transactions), product-platform
+-- checkout (ecommerce_orders), and staff-recorded walk-in sales — cash or
+-- a Razorpay Payment Link/QR — all in one place so there's a single
+-- reconciliation view instead of one per gateway flow.
+CREATE TABLE IF NOT EXISTS payments (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  purpose             TEXT NOT NULL CHECK (purpose IN ('WALLET_RECHARGE', 'ECOMMERCE_ORDER', 'WALKIN_SALE')),
+  reference_id        UUID,                    -- ecommerce_orders.id for ECOMMERCE_ORDER / WALKIN_SALE
+  contact_id          UUID REFERENCES contacts(id),
+  amount              NUMERIC(14,2) NOT NULL CHECK (amount > 0),
+  currency            TEXT NOT NULL DEFAULT 'INR',
+  method              TEXT,                    -- razorpay | cash | manual
+  status              TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'pending', 'paid', 'failed', 'refunded')),
+  gateway             TEXT DEFAULT 'razorpay',
+  gateway_order_id    TEXT,                    -- Razorpay order_id or payment_link_id
+  gateway_payment_id  TEXT,                    -- Razorpay payment_id, set once captured
+  gateway_signature   TEXT,
+  notes               JSONB,
+  created_by_user     UUID REFERENCES users(id),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payments_org_created ON payments (organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payments_gateway_order_id ON payments (gateway_order_id);
+-- Partial unique index (not a plain UNIQUE constraint) because most rows
+-- have gateway_payment_id = NULL until captured, and NULLs must not
+-- collide with each other under a normal UNIQUE.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_gateway_payment_id ON payments (gateway_payment_id) WHERE gateway_payment_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS feature_flags (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,5 +1,4 @@
 'use client';
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -7,31 +6,30 @@ import {
   LayoutDashboard, Inbox, Users, Bot, Megaphone, ShoppingCart,
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
   MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown, Bell,
-  FileText, Linkedin, PanelLeftClose, PanelLeftOpen, CalendarDays,
+  Zap, FileText, Linkedin,
 } from 'lucide-react';
+import { useUnreadCounts } from '@/lib/useUnreadCounts';
+
+// Sidebar hrefs are '/app/channels/<key>' — this matches inbox-service's
+// conversations.channel_type values (see GET /conversations/unread-summary)
+// so a channel's badge count can be looked up directly by its href.
+function channelKey(href) {
+  return href.split('/').pop();
+}
 
 const PLATFORM = [
-  { label: 'Dashboard',              icon: LayoutDashboard, href: '/app'                  },
-  { label: 'Unified Inbox',          icon: Inbox,           href: '/app/inbox'             },
-  { label: 'Contacts & Leads',       icon: Users,           href: '/app/contacts'          },
-  {
-    label: 'AI Agents', icon: Bot, href: '/app/ai-agents',
-    // Dedicated per-agent routes hang off the hub.
-    sub: [
-      ['Agents Hub',      '/app/ai-agents'],
-      ['Marketing Agent', '/app/marketing'],
-      ['Sales Agent',     '/app/sales'],
-      ['Support Agent',   '/app/support'],
-    ],
-  },
-  { label: 'Campaigns & Broadcasts', icon: Megaphone,       href: '/app/campaigns'         },
-  { label: 'Calendar',               icon: CalendarDays,    href: '/app/calendar'          },
-  { label: 'Ecommerce & Revenue',    icon: ShoppingCart,    href: '/app/ecommerce'         },
-  { label: 'Reviews & Social',       icon: Star,            href: '/app/reviews'           },
-  { label: 'Analytics & Insights',   icon: BarChart3,       href: '/app/analytics'         },
-  { label: 'Documents & Knowledge',  icon: FileText,        href: '/app/documents'         },
-  { label: 'Integrations & APIs',    icon: Plug,            href: '/app/integrations'      },
-  { label: 'Settings & Team',        icon: Settings,        href: '/app/settings'          },
+  { label: 'Dashboard',               icon: LayoutDashboard, href: '/app'                  },
+  { label: 'Unified Inbox',           icon: Inbox,           href: '/app/inbox'              },
+  { label: 'Contacts & Leads',        icon: Users,           href: '/app/contacts'           },
+  { label: 'AI Agents & Automation',  icon: Bot,             href: '/app/ai-agents'          },
+  { label: 'Campaigns & Broadcasts',  icon: Megaphone,       href: '/app/campaigns'          },
+  { label: 'Ecommerce & Revenue',    icon: ShoppingCart,    href: '/app/ecommerce'          },
+  { label: 'Reviews & Social',        icon: Star,            href: '/app/reviews'            },
+  { label: 'Analytics & Insights',    icon: BarChart3,       href: '/app/analytics'          },
+  { label: 'Documents & Knowledge',   icon: FileText,        href: '/app/documents'          },
+  { label: 'Integrations & APIs',     icon: Plug,            href: '/app/integrations'       },
+  { label: 'Settings & Team',         icon: Settings,        href: '/app/settings'           },
+  { label: 'Click Notification Demo', icon: Bell,            href: '/app/notification-demo' },
 ];
 
 // Channels with a Playbook Studio ("Automation" tab) get `expandable: true`,
@@ -64,6 +62,23 @@ export default function Sidebar() {
 
   const isActive = (href) =>
     href === '/app' ? pathname === '/app' : pathname === href || pathname.startsWith(href + '/');
+
+  const { byChannel, clearChannel } = useUnreadCounts();
+
+  // Opening a channel's section clears its badge in the sidebar right
+  // away — same feel as opening a chat in WhatsApp. The authoritative
+  // clear still happens server-side the moment an individual conversation
+  // thread is opened (inbox-service bumps last_read_at there); this just
+  // keeps the sidebar in sync without waiting on that per-thread fetch.
+  const prevChannelRef = useRef(null);
+  useEffect(() => {
+    const current = CHANNELS.find((c) => pathname.startsWith(c.href));
+    const key = current ? channelKey(current.href) : null;
+    if (key && key !== prevChannelRef.current) {
+      clearChannel(key);
+    }
+    prevChannelRef.current = key;
+  }, [pathname, clearChannel]);
 
   return (
     <aside
@@ -98,22 +113,15 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-        {!collapsed
-          ? <p className="px-3 pt-1 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Platform</p>
-          : <div className="h-2" />}
-        {PLATFORM.map((item) =>
-          item.sub && !collapsed
-            ? <ExpandableNavItem key={item.href} item={item} pathname={pathname} isActive={isActive(item.href)} />
-            : <NavItem key={item.href} item={item} isActive={isActive(item.href)} collapsed={collapsed} />
-        )}
-
-        {!collapsed
-          ? <p className="px-3 pt-5 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Channels</p>
-          : <div className="my-3 mx-auto w-6 h-px bg-slate-200" />}
+        <p className="px-3 pt-1 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Platform</p>
+        {PLATFORM.map((item) => (
+          <NavItem key={item.href} item={item} isActive={isActive(item.href)} />
+        ))}
+        <p className="px-3 pt-5 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Channels</p>
         {CHANNELS.map((item) =>
-          item.expandable && !collapsed
+          item.expandable
             ? <ExpandableNavItem key={item.href} item={item} pathname={pathname} isActive={isActive(item.href)} />
-            : <NavItem key={item.href} item={item} isActive={isActive(item.href)} collapsed={collapsed} />
+            : <NavItem key={item.href} item={item} isActive={isActive(item.href)} />
         )}
       </nav>
 
@@ -131,7 +139,7 @@ export default function Sidebar() {
   );
 }
 
-function NavItem({ item, isActive, collapsed }) {
+function NavItem({ item, isActive }) {
   const { label, icon: Icon, href } = item;
   return (
     <Link
@@ -146,21 +154,26 @@ function NavItem({ item, isActive, collapsed }) {
       {isActive && !collapsed && (
         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-gradient-to-b from-violet-500 to-rose-500" />
       )}
-      <Icon size={collapsed ? 18 : 16} className={isActive ? 'text-violet-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'} />
-      {!collapsed && <span className="truncate">{label}</span>}
+      <Icon size={16} className={isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'} />
+      <span className="truncate">{label}</span>
     </Link>
   );
 }
 
-// Same visual language as NavItem, plus a sub-menu. Only rendered expanded —
-// collapsed channels fall back to a plain icon link.
-function ExpandableNavItem({ item, pathname, isActive }) {
-  const { label, icon: Icon, href, sub } = item;
-  const subItems = sub || [['Conversations', href], ['Automation', `${href}/automation`]];
-  // With custom subs the parent href isn't a prefix of every child, so open
-  // when the parent OR any child route is active.
-  const open = pathname.startsWith(href) || subItems.some(([, h]) => pathname === h || pathname.startsWith(h + '/'));
+// WhatsApp-style unread pill: the exact count up to 99, "99+" beyond that.
+function UnreadBadge({ count }) {
+  return (
+    <span className="ml-auto shrink-0 bg-emerald-500 text-white text-[10px] leading-none rounded-full min-w-[18px] h-[18px] px-1 grid place-items-center font-semibold">
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
 
+// Same visual language as NavItem, plus a Conversations/Automation sub-menu
+// for channels that have a Playbook Studio flow builder.
+function ExpandableNavItem({ item, pathname, isActive }) {
+  const { label, icon: Icon, href } = item;
+  const open = pathname.startsWith(href);
   return (
     <div>
       <Link
@@ -175,7 +188,7 @@ function ExpandableNavItem({ item, pathname, isActive }) {
         )}
         <Icon size={16} className={isActive ? 'text-violet-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'} />
         <span className="truncate">{label}</span>
-        <ChevronDown size={14} className={`ml-auto transition-transform ${open ? 'rotate-180' : ''} ${isActive ? 'text-violet-600' : 'text-slate-400'}`} />
+        <ChevronDown size={14} className={`ml-auto transition-transform ${open ? 'rotate-180' : ''} ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
       </Link>
       {open && (
         <div className="ml-6 mb-1 border-l border-slate-200 pl-3">

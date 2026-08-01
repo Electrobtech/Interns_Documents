@@ -5,6 +5,7 @@ import Tabs from '@/components/Tabs';
 import CrudPage from '@/components/CrudPage';
 import { orders, carts } from '@/lib/resources';
 import { useApi } from '@/lib/useApi';
+import PayOrderButton from '@/components/billing/PayOrderButton';
 
 const inr = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
@@ -21,6 +22,7 @@ function Metric({ label, value, sub }) {
 export default function EcommercePage() {
   const { call } = useApi();
   const [rev, setRev] = useState(null);
+  const [ordersKey, setOrdersKey] = useState(0); // bump to force CrudPage to reload after a payment
 
   useEffect(() => { call('/analytics/revenue').then(setRev).catch(() => {}); }, [call]);
 
@@ -39,7 +41,19 @@ export default function EcommercePage() {
       </div>
 
       <Tabs title="" tabs={[
-        { label: 'Orders', render: () => <CrudPage {...orders} header={false} /> },
+        {
+          label: 'Orders',
+          render: () => (
+            <CrudPage
+              key={ordersKey}
+              {...orders}
+              header={false}
+              rowActions={(row) => (
+                <PayOrderButton order={row} onPaid={() => setOrdersKey((k) => k + 1)} />
+              )}
+            />
+          ),
+        },
         { label: 'Abandoned Carts', render: () => <CrudPage {...carts} header={false} /> },
       ]} />
     </div>

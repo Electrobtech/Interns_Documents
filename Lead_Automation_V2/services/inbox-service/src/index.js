@@ -40,6 +40,32 @@ app.get('/conversations', async (req, res) => {
   res.json(rows);
 });
 
+// Per-channel unread counts, for the sidebar's WhatsApp-style badges — a
+// message counts as unread when it's inbound and newer than the
+// conversation's last_read_at (bumped to now() below whenever the thread
+// is opened). Returned as both a byChannel map (keyed the same as
+// Sidebar.jsx's CHANNELS[].href, e.g. 'whatsapp', 'instagram') and a total,
+// so the frontend doesn't have to sum it itself.
+app.get('/conversations/unread-summary', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT c.channel_type, COUNT(m.id)::int AS unread_count
+       FROM conversations c
+       JOIN messages m ON m.conversation_id = c.id
+      WHERE c.organization_id = $1
+        AND m.direction = 'inbound'
+        AND m.created_at > c.last_read_at
+      GROUP BY c.channel_type`,
+    [req.user.organizationId]
+  );
+  const byChannel = {};
+  let total = 0;
+  for (const row of rows) {
+    byChannel[row.channel_type] = row.unread_count;
+    total += row.unread_count;
+  }
+  res.json({ byChannel, total });
+});
+
 app.get('/conversations/:id', async (req, res) => {
   const org = req.user.organizationId;
   // Joined to contacts for contact_name/contact_id — previously this was a
@@ -85,6 +111,15 @@ app.get('/conversations/:id', async (req, res) => {
       WHERE conversation_id=$1 ORDER BY created_at ASC`,
     [req.params.id]
   );
+
+  // Opening the thread clears its unread badge, the same way opening a
+  // chat in WhatsApp does — see /conversations/unread-summary above.
+  // Best-effort: a slow/failed update here shouldn't block the thread
+  // itself from loading.
+  pool
+    .query(`UPDATE conversations SET last_read_at = now() WHERE id = $1 AND organization_id = $2`, [req.params.id, org])
+    .catch((err) => console.error('[inbox-service] failed to bump last_read_at (non-fatal):', err.message));
+
   res.json({ ...conv.rows[0], messages: msgs.rows });
 });
 

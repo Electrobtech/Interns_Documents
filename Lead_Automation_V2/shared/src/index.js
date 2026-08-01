@@ -8,5 +8,6 @@ module.exports = {
   userModel: require('./models/userModel'),
   leadModel: require('./models/leadModel'),
   walletModel: require('./models/walletModel'),
+  paymentModel: require('./models/paymentModel'),
   attachmentModel: require('./models/attachmentModel'),
 };
