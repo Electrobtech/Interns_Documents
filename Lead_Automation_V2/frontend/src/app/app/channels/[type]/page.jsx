@@ -9,6 +9,7 @@ import { useSocketEvent } from '@/lib/socket';
 import ConversationList from '@/components/ConversationList';
 import EmailPanel from '@/components/EmailPanel';
 import SmsPanel from '@/components/SmsPanel';
+import WhatsAppConversationsView from '@/components/whatsapp/WhatsAppConversationsView';
 
 const META = {
   whatsapp:  { label: 'WhatsApp', icon: MessageCircle },
@@ -55,6 +56,14 @@ export default function ChannelPage() {
         <SmsPanel />
       </div>
     );
+  }
+
+  // WhatsApp gets its own QuickReply.ai-style master-detail layout instead
+  // of the generic connection-card + plain-list view other channels use —
+  // see WhatsAppConversationsView.jsx. It renders full-bleed (no page
+  // padding, own height calc) since it manages a two-pane layout internally.
+  if (type === 'whatsapp') {
+    return <WhatsAppConversationsView />;
   }
 
   return <GenericChannelPage type={type} meta={meta} call={call} />;
