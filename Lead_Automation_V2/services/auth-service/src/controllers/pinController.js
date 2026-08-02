@@ -17,7 +17,7 @@
 //
 // Storage / lockout bookkeeping lives on users.pin_hash / is_pin_enabled /
 // failed_pin_attempts / pin_lockout_until (see
-// infra/db/migrations/017_pin_authentication.sql). Hashing mirrors
+// infra/db/migrations/020_pin_authentication.sql). Hashing mirrors
 // password_hash in index.js: bcryptjs, same cost factor.
 //
 // Two extra rules layered on top (018_pin_expiration_history.sql):

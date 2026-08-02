@@ -20,14 +20,26 @@ app.get('/health', (_req, res) => res.json({ service: 'inbox', ok: true }));
 app.get('/conversations', async (req, res) => {
   const { status, channel, assigned_to, q: search, limit = 100, offset = 0 } = req.query;
 
+  // lead_stage/assigned_to_name are joined in the same shape as the
+  // single-conversation endpoint below (l LATERAL join + users join) so the
+  // conversation list can render a "Lead" tag and an "Assigned to <name>"
+  // badge (QuickReply-style chat list) without a second round trip per row.
   const { rows } = await pool.query(
     `SELECT c.id, c.channel_type, c.status, c.handled_by, c.assigned_to, c.last_message_at,
             ct.name AS contact_name, ct.email AS contact_email, ct.phone AS contact_phone, ct.tags AS contact_tags,
+            u.name AS assigned_to_name,
+            l.stage AS lead_stage,
             (SELECT body FROM messages m WHERE m.conversation_id = c.id
               ORDER BY created_at DESC LIMIT 1) AS last_message_preview,
             (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.direction = 'inbound')::int AS inbound_count
        FROM conversations c
        LEFT JOIN contacts ct ON ct.id = c.contact_id
+       LEFT JOIN users u ON u.id = c.assigned_to
+       LEFT JOIN LATERAL (
+         SELECT stage FROM leads
+          WHERE contact_id = c.contact_id AND organization_id = c.organization_id
+          ORDER BY created_at DESC LIMIT 1
+       ) l ON TRUE
       WHERE c.organization_id = $1
         AND ($2::text IS NULL OR c.status = $2)
         AND ($3::text IS NULL OR c.channel_type = $3)
