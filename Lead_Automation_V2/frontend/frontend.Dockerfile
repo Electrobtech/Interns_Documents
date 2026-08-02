@@ -5,7 +5,8 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Copy package.json first for better caching
-COPY package.json ./
+COPY package.json package-lock.json ./
+
 
 # Install dependencies
 # Local build environments behind TLS-inspecting proxies/AV present a

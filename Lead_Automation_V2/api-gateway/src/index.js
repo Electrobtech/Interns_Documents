@@ -13,7 +13,7 @@ const AI          = process.env.AI_SERVICE_URL          || 'http://localhost:400
 const ECOMMERCE   = process.env.ECOMMERCE_SERVICE_URL   || 'http://localhost:4006';
 const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:4007';
 const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
-const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
+const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4008';
 const LINKEDIN     = process.env.LINKEDIN_SERVICE_URL    || 'http://localhost:4009';
 const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
 const AUTOMATION  = process.env.AUTOMATION_SERVICE_URL  || 'http://localhost:4011';
@@ -21,7 +21,7 @@ const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4
 // Gmail Pub/Sub push handler. 4013 matches email-service's own EMAIL_PORT
 // default and the EMAIL_SERVICE_URL set in docker-compose.
 const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4013';
-const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4012'; // Gmail Pub/Sub push handler — was referenced below but never declared
+ // Gmail Pub/Sub push handler — was referenced below but never declared
 const CALENDAR    = process.env.CALENDAR_SERVICE_URL    || 'http://localhost:4014';
 const BILLING      = process.env.BILLING_SERVICE_URL     || 'http://localhost:4015';
 
@@ -154,7 +154,6 @@ const routes = [
   // linkedin-service mounts its own routes under this prefix (see
   // services/linkedin-service/src/index.js) — was missing entirely, so every
   // LinkedIn call from the frontend 404'd at the gateway before this.
-  { path: '/api/v1/integrations/linkedin', target: LINKEDIN },
   { path: '/api-keys',        target: INTEGRATION },
   { path: '/webhooks',        target: INTEGRATION },
   { path: '/webhook/gmail',   target: EMAIL },        // Gmail Pub/Sub push — must precede the generic '/webhook' entry below

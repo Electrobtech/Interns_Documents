@@ -1,5 +1,5 @@
 FROM node:20-alpine
-ENV NODE_OPTIONS=--openssl-legacy-provider
+#ENV NODE_OPTIONS=--openssl-legacy-provider
 WORKDIR /app
 COPY api-gateway ./
 # Local build environments behind TLS-inspecting proxies/AV present a

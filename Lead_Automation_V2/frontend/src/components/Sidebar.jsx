@@ -1,4 +1,5 @@
 'use client';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -6,7 +7,7 @@ import {
   LayoutDashboard, Inbox, Users, Bot, Megaphone, ShoppingCart,
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
   MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown, Bell,
-  Zap, FileText, Linkedin,
+  Zap, FileText, Linkedin, PanelLeftClose, PanelLeftOpen, CreditCard,
 } from 'lucide-react';
 import { useUnreadCounts } from '@/lib/useUnreadCounts';
 
@@ -28,6 +29,7 @@ const PLATFORM = [
   { label: 'Analytics & Insights',    icon: BarChart3,       href: '/app/analytics'          },
   { label: 'Documents & Knowledge',   icon: FileText,        href: '/app/documents'          },
   { label: 'Integrations & APIs',     icon: Plug,            href: '/app/integrations'       },
+  { label: 'Billing & Payments',      icon: CreditCard,      href: '/app/billing'             },
   { label: 'Settings & Team',         icon: Settings,        href: '/app/settings'           },
   { label: 'Click Notification Demo', icon: Bell,            href: '/app/notification-demo' },
 ];
@@ -115,13 +117,13 @@ export default function Sidebar() {
       <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
         <p className="px-3 pt-1 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Platform</p>
         {PLATFORM.map((item) => (
-          <NavItem key={item.href} item={item} isActive={isActive(item.href)} />
+          <NavItem key={item.href} item={item} isActive={isActive(item.href)} collapsed={collapsed} />
         ))}
         <p className="px-3 pt-5 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Channels</p>
         {CHANNELS.map((item) =>
           item.expandable
-            ? <ExpandableNavItem key={item.href} item={item} pathname={pathname} isActive={isActive(item.href)} />
-            : <NavItem key={item.href} item={item} isActive={isActive(item.href)} />
+            ? <ExpandableNavItem key={item.href} item={item} pathname={pathname} isActive={isActive(item.href)} collapsed={collapsed} />
+            : <NavItem key={item.href} item={item} isActive={isActive(item.href)} collapsed={collapsed} />
         )}
       </nav>
 
@@ -139,7 +141,7 @@ export default function Sidebar() {
   );
 }
 
-function NavItem({ item, isActive }) {
+function NavItem({ item, isActive, collapsed }) {
   const { label, icon: Icon, href } = item;
   return (
     <Link
@@ -171,9 +173,16 @@ function UnreadBadge({ count }) {
 
 // Same visual language as NavItem, plus a Conversations/Automation sub-menu
 // for channels that have a Playbook Studio flow builder.
-function ExpandableNavItem({ item, pathname, isActive }) {
+function ExpandableNavItem({ item, pathname, isActive, collapsed }) {
   const { label, icon: Icon, href } = item;
   const open = pathname.startsWith(href);
+  // Every expandable channel gets the same two sub-views: its live
+  // conversations (the channel's own href) and its Playbook Studio
+  // automation builder at `<href>/automation`.
+  const subItems = [
+    ['Conversations', href],
+    ['Automation', `${href}/automation`],
+  ];
   return (
     <div>
       <Link
