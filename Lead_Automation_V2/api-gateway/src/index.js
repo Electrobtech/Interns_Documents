@@ -21,7 +21,6 @@ const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4
 // Gmail Pub/Sub push handler. 4013 matches email-service's own EMAIL_PORT
 // default and the EMAIL_SERVICE_URL set in docker-compose.
 const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4013';
- // Gmail Pub/Sub push handler — was referenced below but never declared
 const CALENDAR    = process.env.CALENDAR_SERVICE_URL    || 'http://localhost:4014';
 const BILLING      = process.env.BILLING_SERVICE_URL     || 'http://localhost:4015';
 
@@ -88,82 +87,54 @@ const routes = [
   // integration-service owns these specific /auth/* paths; they MUST precede
   // the generic '/auth' -> AUTH entry or that entry swallows them.
   { path: '/auth/connect-url',    target: INTEGRATION },
-{ path: '/auth/facebook',       target: INTEGRATION },
-{ path: '/auth/refresh-tokens', target: INTEGRATION },
-{ path: '/auth/deauthorize',    target: INTEGRATION },
-{ path: '/auth/data-deletion',  target: INTEGRATION },
-{ path: '/auth/unlock',         target: INTEGRATION },
-{ path: '/instagram',           target: INTEGRATION },
-{ path: '/facebook',            target: INTEGRATION },
-{ path: '/whatsapp',            target: INTEGRATION },
-{ path: '/credentials',         target: INTEGRATION },
-{ path: '/api/v1/integrations/linkedin', target: LINKEDIN },
-{ path: '/auth',                target: AUTH },
-{ path: '/conversations',       target: INBOX },
-{ path: '/contacts',            target: CONTACT },
-{ path: '/leads',               target: CONTACT },
-{ path: '/campaigns',           target: CAMPAIGN },
-{ path: '/ai-agents',           target: AI },
-{ path: '/orders',              target: ECOMMERCE },
-{ path: '/carts',               target: ECOMMERCE },
-{ path: '/recovery-flows',      target: ECOMMERCE },
-{ path: '/reviews',             target: REVIEW },
-{ path: '/social',              target: REVIEW },
-{ path: '/google',              target: REVIEW },
-{ path: '/analytics',           target: ANALYTICS },
-{ path: '/integrations',        target: INTEGRATION },
-{ path: '/api-keys',            target: INTEGRATION },
-{ path: '/webhooks',            target: INTEGRATION },
-{ path: '/webhook/gmail',       target: EMAIL },
-{ path: '/webhook/sms',         target: INTEGRATION },
-{ path: '/webhook',             target: INTEGRATION },
-{ path: '/sms',                 target: INTEGRATION },
-{ path: '/channels',            target: INTEGRATION },
-{ path: '/company',             target: AUTH },
-{ path: '/users',               target: TEAM },
-{ path: '/teams',               target: TEAM },
-{ path: '/automation',          target: AUTOMATION },
-{ path: '/notifications',       target: NOTIFICATION },
-{ path: '/email',               target: EMAIL },
-{ path: '/calendar',            target: CALENDAR },
   { path: '/auth/facebook',       target: INTEGRATION }, // covers /auth/facebook and /auth/facebook/callback
   { path: '/auth/refresh-tokens', target: INTEGRATION },
   { path: '/auth/deauthorize',    target: INTEGRATION },
   { path: '/auth/data-deletion',  target: INTEGRATION }, // covers /auth/data-deletion and /auth/data-deletion-status
   { path: '/auth/unlock',         target: INTEGRATION }, // admin-only: lifts the lock on the Instagram/Facebook connection
-  { path: '/instagram',       target: INTEGRATION },
-  { path: '/facebook',        target: INTEGRATION },
-  { path: '/whatsapp',        target: INTEGRATION },
-  { path: '/credentials',     target: INTEGRATION }, // manual API key / App ID / App Secret entry (routes/credentials.js)
-  { path: '/auth',            target: AUTH },
-  { path: '/company',         target: AUTH }, // Company Registration wizard: companyController.js + gstController.js
-  { path: '/super-admin',     target: AUTH }, // Platform Super Admin API: superAdminController.js — separate requireSuperAdmin auth, not tenant `authenticate`
-  { path: '/conversations',   target: INBOX },
-  { path: '/socket.io',       target: INBOX, ws: true }, // live message delivery — see services/inbox-service/src/realtime.js
-  { path: '/contacts',        target: CONTACT },
-  { path: '/leads',           target: CONTACT },
-  { path: '/campaigns',       target: CAMPAIGN },
-  { path: '/ai-agents',       target: AI },
-  { path: '/orders',          target: ECOMMERCE },
-  { path: '/carts',           target: ECOMMERCE },
-  { path: '/recovery-flows',  target: ECOMMERCE },
-  { path: '/reviews',         target: REVIEW },
-  { path: '/social',          target: REVIEW },
-  { path: '/analytics',       target: ANALYTICS },
-  { path: '/integrations',    target: INTEGRATION },
+  { path: '/instagram',           target: INTEGRATION },
+  { path: '/facebook',            target: INTEGRATION },
+  { path: '/whatsapp',            target: INTEGRATION },
+  { path: '/credentials',         target: INTEGRATION }, // manual API key / App ID / App Secret entry (routes/credentials.js)
   // linkedin-service mounts its own routes under this prefix (see
   // services/linkedin-service/src/index.js) — was missing entirely, so every
   // LinkedIn call from the frontend 404'd at the gateway before this.
-  { path: '/api-keys',        target: INTEGRATION },
-  { path: '/webhooks',        target: INTEGRATION },
-  { path: '/webhook/gmail',   target: EMAIL },        // Gmail Pub/Sub push — must precede the generic '/webhook' entry below
-  { path: '/webhook/sms',     target: INTEGRATION },   // SMS-forwarder-app webhook — must precede the generic '/webhook' entry below
-  { path: '/webhook',         target: INTEGRATION },   // Meta webhook callback (/webhook/meta)
-  { path: '/sms',             target: INTEGRATION },   // device management (list/add/remove connected phones) — routes/smsDevices.js
-  { path: '/channels',        target: INTEGRATION },
-  { path: '/users',           target: TEAM },
-  { path: '/teams',           target: TEAM },
-  { path: '/automation',      target: AUTOMATION },
+  { path: '/api/v1/integrations/linkedin', target: LINKEDIN },
+  { path: '/auth',                target: AUTH },
+  { path: '/super-admin',         target: AUTH }, // Platform Super Admin API: superAdminController.js — separate requireSuperAdmin auth, not tenant `authenticate`
+  { path: '/company',             target: AUTH }, // Company Registration wizard: companyController.js + gstController.js
+  { path: '/conversations',       target: INBOX },
+  { path: '/socket.io',           target: INBOX, ws: true }, // live message delivery — see services/inbox-service/src/realtime.js
+  { path: '/contacts',            target: CONTACT },
+  { path: '/leads',               target: CONTACT },
+  { path: '/campaigns',           target: CAMPAIGN },
+  { path: '/ai-agents',           target: AI },
+  { path: '/orders',              target: ECOMMERCE },
+  { path: '/carts',               target: ECOMMERCE },
+  { path: '/recovery-flows',      target: ECOMMERCE },
+  { path: '/reviews',             target: REVIEW },
+  { path: '/social',              target: REVIEW },
+  { path: '/google',              target: REVIEW },
+  { path: '/analytics',           target: ANALYTICS },
+  { path: '/integrations',        target: INTEGRATION },
+  { path: '/api-keys',            target: INTEGRATION },
+  { path: '/webhooks',            target: INTEGRATION },
+  { path: '/webhook/gmail',       target: EMAIL },      // Gmail Pub/Sub push — must precede the generic '/webhook' entry below
+  { path: '/webhook/sms',         target: INTEGRATION }, // SMS-forwarder app webhook — must precede the generic '/webhook' entry below
+  { path: '/webhook',             target: INTEGRATION }, // Meta webhook callback (/webhook/meta)
+  { path: '/sms',                 target: INTEGRATION }, // device management (list/add/remove connected phones) — routes/smsDevices.js
+  { path: '/channels',            target: INTEGRATION },
+  { path: '/users',               target: TEAM },
+  { path: '/teams',               target: TEAM },
+  { path: '/automation',          target: AUTOMATION },
+  { path: '/notifications',       target: NOTIFICATION },
+  { path: '/email',               target: EMAIL },
+  { path: '/calendar',            target: CALENDAR },
+  // billing-service mounts everything under /billing/* (wallet, walkin POS,
+  // payments, orders — see services/billing-service/src/index.js and
+  // frontend/src/components/billing/*.jsx). BILLING was declared above but
+  // never actually routed, so every Billing & Payments page call 404'd here.
+  { path: '/billing',             target: BILLING },
 ];
 
 const wsProxies = [];

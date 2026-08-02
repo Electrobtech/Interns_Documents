@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -8,6 +8,7 @@ import {
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
   MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown, Bell,
   Zap, FileText, Linkedin, PanelLeftClose, PanelLeftOpen, CreditCard,
+  LayoutTemplate, Workflow,
 } from 'lucide-react';
 import { useUnreadCounts } from '@/lib/useUnreadCounts';
 
@@ -34,17 +35,36 @@ const PLATFORM = [
   { label: 'Click Notification Demo', icon: Bell,            href: '/app/notification-demo' },
 ];
 
-// Channels with a Playbook Studio ("Automation" tab) get `expandable: true`,
-// which opens a Conversations/Automation sub-menu. Everything else is a flat link.
+// CHANNELS now only ever surfaces conversation-facing items. Every channel
+// that has a conversation thread view gets `expandable: true` with a single
+// "Conversations" sub-item (kept as a sub-item rather than collapsed onto
+// the parent link so the nav tree visually matches the target hierarchy).
+// Voice Call and Email have no separate "Conversations" drill-down, so they
+// stay flat links. Automation builder/workflow pages have all moved out to
+// the dedicated AUTOMATION section below — see the `AUTOMATION` array.
 const CHANNELS = [
   { label: 'WhatsApp',  icon: MessageCircle, href: '/app/channels/whatsapp',  expandable: true  },
   { label: 'Instagram', icon: Instagram,     href: '/app/channels/instagram', expandable: true  },
-  { label: 'Messenger', icon: MessageSquare, href: '/app/channels/messenger', expandable: false },
-  { label: 'LinkedIn',  icon: Linkedin,      href: '/app/channels/linkedin',  expandable: false },
+  { label: 'Messenger', icon: MessageSquare, href: '/app/channels/messenger', expandable: true  },
+  { label: 'LinkedIn',  icon: Linkedin,      href: '/app/channels/linkedin',  expandable: true  },
   { label: 'SMS / RCS', icon: Smartphone,    href: '/app/channels/sms',       expandable: true  },
-  { label: 'Web Chat',  icon: Globe,         href: '/app/channels/webchat',   expandable: false },
+  { label: 'Web Chat',  icon: Globe,         href: '/app/channels/webchat',   expandable: true  },
   { label: 'Voice Call',icon: Phone,         href: '/app/channels/voice',     expandable: false },
   { label: 'Email',     icon: Mail,          href: '/app/channels/email',     expandable: false },
+];
+
+// Every channel's "Automation" tab, plus the two new global sections
+// (Templates / Playbooks). Only WhatsApp, Instagram, and SMS/RCS currently
+// have a real Playbook Studio behind them (see PlaybookStudioApp.jsx /
+// SmsAutomationSimulator.jsx) — Messenger, LinkedIn, Web Chat, and Email
+// don't have an Automation builder yet, so they're intentionally left out
+// of this list rather than linking to a page that doesn't exist.
+const AUTOMATION = [
+  { label: 'WhatsApp Automation',  icon: MessageCircle,  href: '/app/channels/whatsapp/automation'  },
+  { label: 'Instagram Automation', icon: Instagram,      href: '/app/channels/instagram/automation' },
+  { label: 'SMS / RCS Automation', icon: Smartphone,     href: '/app/channels/sms/automation'       },
+  { label: 'Templates',            icon: LayoutTemplate, href: '/app/automation/templates'          },
+  { label: 'Playbooks',            icon: Workflow,       href: '/app/automation/playbooks'          },
 ];
 
 export default function Sidebar() {
@@ -64,6 +84,12 @@ export default function Sidebar() {
 
   const isActive = (href) =>
     href === '/app' ? pathname === '/app' : pathname === href || pathname.startsWith(href + '/');
+
+  // Same as isActive, but a channel's CHANNELS entry (e.g. "WhatsApp") should
+  // not also light up while the user is on that channel's /automation page —
+  // that page has its own entry now, under the AUTOMATION section.
+  const isChannelActive = (href) =>
+    isActive(href) && !pathname.startsWith(href + '/automation');
 
   const { byChannel, clearChannel } = useUnreadCounts();
 
@@ -122,9 +148,15 @@ export default function Sidebar() {
         <p className="px-3 pt-5 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Channels</p>
         {CHANNELS.map((item) =>
           item.expandable
-            ? <ExpandableNavItem key={item.href} item={item} pathname={pathname} isActive={isActive(item.href)} collapsed={collapsed} />
-            : <NavItem key={item.href} item={item} isActive={isActive(item.href)} collapsed={collapsed} />
+            ? <ExpandableNavItem key={item.href} item={item} pathname={pathname} isActive={isChannelActive(item.href)}
+                unread={byChannel[channelKey(item.href)] || 0} />
+            : <NavItem key={item.href} item={item} isActive={isChannelActive(item.href)} collapsed={collapsed}
+                unread={byChannel[channelKey(item.href)] || 0} />
         )}
+        <p className="px-3 pt-5 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Automation</p>
+        {AUTOMATION.map((item) => (
+          <NavItem key={item.href} item={item} isActive={isActive(item.href)} collapsed={collapsed} />
+        ))}
       </nav>
 
       {/* Status footer */}
@@ -141,7 +173,7 @@ export default function Sidebar() {
   );
 }
 
-function NavItem({ item, isActive, collapsed }) {
+function NavItem({ item, isActive, collapsed, unread = 0 }) {
   const { label, icon: Icon, href } = item;
   return (
     <Link
@@ -157,7 +189,8 @@ function NavItem({ item, isActive, collapsed }) {
         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-gradient-to-b from-violet-500 to-rose-500" />
       )}
       <Icon size={16} className={isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'} />
-      <span className="truncate">{label}</span>
+      {!collapsed && <span className="truncate">{label}</span>}
+      {!collapsed && unread > 0 && <UnreadBadge count={unread} />}
     </Link>
   );
 }
@@ -173,16 +206,11 @@ function UnreadBadge({ count }) {
 
 // Same visual language as NavItem, plus a Conversations/Automation sub-menu
 // for channels that have a Playbook Studio flow builder.
-function ExpandableNavItem({ item, pathname, isActive, collapsed }) {
-  const { label, icon: Icon, href } = item;
-  const open = pathname.startsWith(href);
-  // Every expandable channel gets the same two sub-views: its live
-  // conversations (the channel's own href) and its Playbook Studio
-  // automation builder at `<href>/automation`.
-  const subItems = [
-    ['Conversations', href],
-    ['Automation', `${href}/automation`],
-  ];
+function ExpandableNavItem({ item, pathname, isActive, unread = 0 }) {
+  const { label, icon: Icon, href, sub } = item;
+  const subItems = sub || [['Conversations', href]];
+  const open = (pathname.startsWith(href) && !pathname.startsWith(href + '/automation'))
+    || subItems.some(([, h]) => pathname === h || pathname.startsWith(h + '/'));
   return (
     <div>
       <Link
@@ -197,7 +225,8 @@ function ExpandableNavItem({ item, pathname, isActive, collapsed }) {
         )}
         <Icon size={16} className={isActive ? 'text-violet-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'} />
         <span className="truncate">{label}</span>
-        <ChevronDown size={14} className={`ml-auto transition-transform ${open ? 'rotate-180' : ''} ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+        {unread > 0 && <UnreadBadge count={unread} />}
+        <ChevronDown size={14} className={`${unread > 0 ? '' : 'ml-auto'} transition-transform ${open ? 'rotate-180' : ''} ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
       </Link>
       {open && (
         <div className="ml-6 mb-1 border-l border-slate-200 pl-3">
