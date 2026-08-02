@@ -4,8 +4,11 @@ FROM node:20-alpine
 # Set working directory
 WORKDIR /app
 
-# Copy package.json first for better caching
-COPY package.json ./
+# Copy package.json AND package-lock.json first for better caching.
+# npm ci needs the lockfile present to do a reproducible install — without
+# it, npm install would silently re-resolve versions from the registry on
+# every build instead of using the versions actually tested locally.
+COPY package.json package-lock.json ./
 
 # Install dependencies
 # Local build environments behind TLS-inspecting proxies/AV present a
@@ -13,7 +16,7 @@ COPY package.json ./
 # which silently yields EMPTY package dirs. Registry traffic is already
 # decrypted by that middlebox; this only stops npm from re-verifying it.
 RUN npm config set strict-ssl false
-RUN npm install
+RUN npm ci
 
 # Copy all source files
 COPY . .

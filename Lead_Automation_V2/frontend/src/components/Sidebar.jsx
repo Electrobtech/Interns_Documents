@@ -1,4 +1,5 @@
 'use client';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -6,7 +7,7 @@ import {
   LayoutDashboard, Inbox, Users, Bot, Megaphone, ShoppingCart,
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
   MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown, Bell,
-  Zap, FileText, Linkedin,
+  Zap, FileText, Linkedin, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { useUnreadCounts } from '@/lib/useUnreadCounts';
 
@@ -115,13 +116,15 @@ export default function Sidebar() {
       <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
         <p className="px-3 pt-1 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Platform</p>
         {PLATFORM.map((item) => (
-          <NavItem key={item.href} item={item} isActive={isActive(item.href)} />
+          <NavItem key={item.href} item={item} isActive={isActive(item.href)} collapsed={collapsed} />
         ))}
         <p className="px-3 pt-5 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Channels</p>
         {CHANNELS.map((item) =>
           item.expandable
-            ? <ExpandableNavItem key={item.href} item={item} pathname={pathname} isActive={isActive(item.href)} />
-            : <NavItem key={item.href} item={item} isActive={isActive(item.href)} />
+            ? <ExpandableNavItem key={item.href} item={item} pathname={pathname} isActive={isActive(item.href)}
+                unread={byChannel[channelKey(item.href)] || 0} />
+            : <NavItem key={item.href} item={item} isActive={isActive(item.href)} collapsed={collapsed}
+                unread={byChannel[channelKey(item.href)] || 0} />
         )}
       </nav>
 
@@ -139,7 +142,7 @@ export default function Sidebar() {
   );
 }
 
-function NavItem({ item, isActive }) {
+function NavItem({ item, isActive, collapsed, unread = 0 }) {
   const { label, icon: Icon, href } = item;
   return (
     <Link
@@ -155,7 +158,8 @@ function NavItem({ item, isActive }) {
         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-gradient-to-b from-violet-500 to-rose-500" />
       )}
       <Icon size={16} className={isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'} />
-      <span className="truncate">{label}</span>
+      {!collapsed && <span className="truncate">{label}</span>}
+      {!collapsed && unread > 0 && <UnreadBadge count={unread} />}
     </Link>
   );
 }
@@ -171,9 +175,10 @@ function UnreadBadge({ count }) {
 
 // Same visual language as NavItem, plus a Conversations/Automation sub-menu
 // for channels that have a Playbook Studio flow builder.
-function ExpandableNavItem({ item, pathname, isActive }) {
-  const { label, icon: Icon, href } = item;
-  const open = pathname.startsWith(href);
+function ExpandableNavItem({ item, pathname, isActive, unread = 0 }) {
+  const { label, icon: Icon, href, sub } = item;
+  const subItems = sub || [['Conversations', href], ['Automation', `${href}/automation`]];
+  const open = pathname.startsWith(href) || subItems.some(([, h]) => pathname === h || pathname.startsWith(h + '/'));
   return (
     <div>
       <Link
@@ -188,7 +193,8 @@ function ExpandableNavItem({ item, pathname, isActive }) {
         )}
         <Icon size={16} className={isActive ? 'text-violet-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'} />
         <span className="truncate">{label}</span>
-        <ChevronDown size={14} className={`ml-auto transition-transform ${open ? 'rotate-180' : ''} ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+        {unread > 0 && <UnreadBadge count={unread} />}
+        <ChevronDown size={14} className={`${unread > 0 ? '' : 'ml-auto'} transition-transform ${open ? 'rotate-180' : ''} ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
       </Link>
       {open && (
         <div className="ml-6 mb-1 border-l border-slate-200 pl-3">
