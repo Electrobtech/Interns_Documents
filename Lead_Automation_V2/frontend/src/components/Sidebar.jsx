@@ -7,8 +7,8 @@ import {
   LayoutDashboard, Inbox, Users, Bot, Megaphone, ShoppingCart,
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
   MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown, Bell,
-  Zap, FileText, Linkedin, PanelLeftClose, PanelLeftOpen, LayoutTemplate,
-  Workflow,
+  Zap, FileText, Linkedin, PanelLeftClose, PanelLeftOpen, CreditCard,
+  LayoutTemplate, Workflow,
 } from 'lucide-react';
 import { useUnreadCounts } from '@/lib/useUnreadCounts';
 
@@ -30,6 +30,7 @@ const PLATFORM = [
   { label: 'Analytics & Insights',    icon: BarChart3,       href: '/app/analytics'          },
   { label: 'Documents & Knowledge',   icon: FileText,        href: '/app/documents'          },
   { label: 'Integrations & APIs',     icon: Plug,            href: '/app/integrations'       },
+  { label: 'Billing & Payments',      icon: CreditCard,      href: '/app/billing'             },
   { label: 'Settings & Team',         icon: Settings,        href: '/app/settings'           },
   { label: 'Click Notification Demo', icon: Bell,            href: '/app/notification-demo' },
 ];

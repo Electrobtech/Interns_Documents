@@ -144,6 +144,7 @@ services:
     build:
       context: .
       dockerfile: services/billing-service/Dockerfile
+      network: host
     env_file: .env
     environment:
       PORT: 4015
@@ -313,6 +314,7 @@ services:
     build:
       context: .
       dockerfile: services/calendar-service/Dockerfile
+      network: host
     container_name: calendar-service
     env_file: .env
     environment:

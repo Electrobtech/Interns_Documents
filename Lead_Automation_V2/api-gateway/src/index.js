@@ -13,7 +13,7 @@ const AI          = process.env.AI_SERVICE_URL          || 'http://localhost:400
 const ECOMMERCE   = process.env.ECOMMERCE_SERVICE_URL   || 'http://localhost:4006';
 const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:4007';
 const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
-const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4009';
+const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4008';
 const LINKEDIN     = process.env.LINKEDIN_SERVICE_URL    || 'http://localhost:4009';
 const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
 const AUTOMATION  = process.env.AUTOMATION_SERVICE_URL  || 'http://localhost:4011';
@@ -97,7 +97,8 @@ const routes = [
   { path: '/whatsapp',            target: INTEGRATION },
   { path: '/credentials',         target: INTEGRATION }, // manual API key / App ID / App Secret entry (routes/credentials.js)
   // linkedin-service mounts its own routes under this prefix (see
-  // services/linkedin-service/src/index.js).
+  // services/linkedin-service/src/index.js) — was missing entirely, so every
+  // LinkedIn call from the frontend 404'd at the gateway before this.
   { path: '/api/v1/integrations/linkedin', target: LINKEDIN },
   { path: '/auth',                target: AUTH },
   { path: '/super-admin',         target: AUTH }, // Platform Super Admin API: superAdminController.js — separate requireSuperAdmin auth, not tenant `authenticate`
@@ -119,7 +120,7 @@ const routes = [
   { path: '/api-keys',            target: INTEGRATION },
   { path: '/webhooks',            target: INTEGRATION },
   { path: '/webhook/gmail',       target: EMAIL },      // Gmail Pub/Sub push — must precede the generic '/webhook' entry below
-  { path: '/webhook/sms',         target: INTEGRATION }, // SMS-forwarder-app webhook — must precede the generic '/webhook' entry below
+  { path: '/webhook/sms',         target: INTEGRATION }, // SMS-forwarder app webhook — must precede the generic '/webhook' entry below
   { path: '/webhook',             target: INTEGRATION }, // Meta webhook callback (/webhook/meta)
   { path: '/sms',                 target: INTEGRATION }, // device management (list/add/remove connected phones) — routes/smsDevices.js
   { path: '/channels',            target: INTEGRATION },
@@ -129,6 +130,11 @@ const routes = [
   { path: '/notifications',       target: NOTIFICATION },
   { path: '/email',               target: EMAIL },
   { path: '/calendar',            target: CALENDAR },
+  // billing-service mounts everything under /billing/* (wallet, walkin POS,
+  // payments, orders — see services/billing-service/src/index.js and
+  // frontend/src/components/billing/*.jsx). BILLING was declared above but
+  // never actually routed, so every Billing & Payments page call 404'd here.
+  { path: '/billing',             target: BILLING },
 ];
 
 const wsProxies = [];
