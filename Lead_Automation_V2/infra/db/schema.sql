@@ -1057,6 +1057,113 @@ CREATE TABLE IF NOT EXISTS attachments (
 
 CREATE INDEX IF NOT EXISTS idx_attachments_owner ON attachments (organization_id, owner_type, owner_id);
 
+-- ---------- Products / Offers ----------
+-- Backs services/campaign-service/src/products.js. This table (and its
+-- migrations/023_products.sql source) was never folded into schema.sql, so
+-- /products 500'd on every call against a fresh database — this block is
+-- that migration, verbatim, applied here instead.
+CREATE TABLE IF NOT EXISTS products (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  name              TEXT NOT NULL,
+  category          TEXT,                       -- e.g. saas, service, course, physical
+  status            TEXT NOT NULL DEFAULT 'active',  -- active | draft | archived
+  tagline           TEXT,                       -- one-line positioning
+  description       TEXT,
+
+  -- Pricing kept as text + optional numeric: real offers are often "from
+  -- Rs. 4,999/seat/mo" or "custom", which a strict numeric column cannot hold,
+  -- but a numeric is still wanted for sorting/analytics when one exists.
+  price_display     TEXT,
+  price_amount      NUMERIC(12,2),
+  currency          TEXT DEFAULT 'INR',
+  billing_period    TEXT,                       -- monthly | annual | one_time | usage
+
+  -- The marketing substance. Arrays rather than prose so the agent can use
+  -- them individually (one value prop per ad, one objection per FAQ answer).
+  value_props       TEXT[] NOT NULL DEFAULT '{}',
+  target_segments   TEXT[] NOT NULL DEFAULT '{}',
+  objections        TEXT[] NOT NULL DEFAULT '{}',
+  differentiators   TEXT[] NOT NULL DEFAULT '{}',
+  keywords          TEXT[] NOT NULL DEFAULT '{}',
+
+  -- Compliance/tone guardrails the agent must respect when writing for this
+  -- offer (e.g. "never promise guaranteed placement").
+  tone              TEXT,
+  claims_to_avoid   TEXT[] NOT NULL DEFAULT '{}',
+
+  landing_url       TEXT,
+  is_primary        BOOLEAN NOT NULL DEFAULT false,  -- the default offer for new campaigns
+
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_products_org        ON products (organization_id);
+CREATE INDEX IF NOT EXISTS ix_products_org_status ON products (organization_id, status);
+
+-- At most one primary offer per organization. Partial unique index rather
+-- than a constraint so archiving/unsetting stays a plain UPDATE.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_products_one_primary
+  ON products (organization_id) WHERE is_primary;
+
+-- Campaigns and calendar events can point at the offer they promote, so
+-- performance is attributable per product. Nullable: plenty of sends are not
+-- offer-specific.
+ALTER TABLE campaigns       ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
+ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS ix_campaigns_product ON campaigns (product_id) WHERE product_id IS NOT NULL;
+
+-- ---------- Message Templates (Template Creation module) ----------
+-- Backs services/campaign-service/src/templates.js and the sidebar's
+-- Automation > Templates screen (frontend/src/app/app/campaigns/templates).
+-- A local template library with its own review/approval workflow — distinct
+-- from integration-service's POST /whatsapp/send-template, which sends a
+-- message using a template name already approved on Meta's side. The two
+-- meet at send time: campaign-service resolves a campaigns.template_id to
+-- this table's `name` + `header`/`body`/`buttons` and hands that name to
+-- integration-service's send-template call.
+CREATE TABLE IF NOT EXISTS message_templates (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  name              TEXT NOT NULL,               -- auto-slugified, e.g. college_broadcast_17_6_26
+  category          TEXT NOT NULL DEFAULT 'MARKETING',   -- MARKETING | UTILITY | AUTHENTICATION
+  language          TEXT NOT NULL DEFAULT 'en_US',
+  channels          TEXT[] NOT NULL DEFAULT '{WHATSAPP}', -- WHATSAPP | RCS | SMS | EMAIL (multi-tag)
+  status            TEXT NOT NULL DEFAULT 'PENDING',      -- PENDING | APPROVED | REJECTED
+
+  header_type       TEXT NOT NULL DEFAULT 'NONE',   -- NONE | TEXT | IMAGE | VIDEO | DOCUMENT
+  header_text       TEXT,
+  header_media_url  TEXT,
+
+  body              TEXT NOT NULL DEFAULT '',
+  body_variables    JSONB NOT NULL DEFAULT '{}',    -- {"1": "example value", "2": "..."}
+  footer            TEXT,                            -- max 60 chars, enforced app-side
+
+  -- Array of { type: 'QUICK_REPLY'|'PHONE_NUMBER'|'URL', text, value? }
+  buttons           JSONB NOT NULL DEFAULT '[]',
+
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_message_templates_org         ON message_templates (organization_id);
+CREATE INDEX IF NOT EXISTS ix_message_templates_org_status  ON message_templates (organization_id, status);
+CREATE INDEX IF NOT EXISTS ix_message_templates_channels    ON message_templates USING GIN (channels);
+
+-- campaigns.template_id, added here rather than inline on campaigns' own
+-- CREATE TABLE further up because message_templates didn't exist yet at
+-- that point in a single-pass load (same reasoning as flow_playbook_id
+-- above). Nullable — every non-WhatsApp broadcast, and any WhatsApp one
+-- written as free text, still just uses campaigns.message_body directly.
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS template_id UUID REFERENCES message_templates(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS ix_campaigns_template ON campaigns (template_id) WHERE template_id IS NOT NULL;
+
 CREATE OR REPLACE FUNCTION create_wallet_for_new_org() RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO wallets (organization_id) VALUES (NEW.id)

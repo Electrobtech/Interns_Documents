@@ -1,5 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   Megaphone, Plus, Search, X, Edit, Trash2, Calendar,
   Clock, CheckCircle2, Play, Pause, XCircle, Radio, Mail,
@@ -8,6 +9,7 @@ import {
   BarChart3, AlertTriangle, ChevronDown, ShieldCheck, Check,
 } from 'lucide-react';
 import { useCampaigns, useUpdateCampaign, useCampaignDecision } from '@/lib/queries/crm';
+import { useTemplatesForCampaign } from '@/lib/queries/templates';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '@/lib/useApi';
 import { DateTimePicker } from '@/components/calendar/DateTimePicker';
@@ -153,15 +155,43 @@ function CampaignRow({ c, onDelete, onSubmitForApproval, idx }) {
 }
 
 /* ─── CreateModal ───────────────────────────────────────── */
+// Fills {{1}}, {{2}}… in a template body with its own stored example
+// values — same substitution the Template Creator's live preview does —
+// so picking a template drops ready-to-send copy into Message Body rather
+// than raw placeholders.
+function renderTemplateBody(body, variables = {}) {
+  if (!body) return '';
+  return body.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) =>
+    (variables[key] != null && variables[key] !== '') ? variables[key] : match);
+}
+
 function CreateModal({ onClose, onCreate }) {
   const [form, setForm] = useState({
     name: '', type: 'broadcast', channel_type: 'whatsapp',
     message_body: '', scheduled_at: '', status: 'draft',
+    template_id: null,
   });
   const [busy, setBusy] = useState(false);
   const [err,  setErr]  = useState('');
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  // Only WhatsApp has a template concept wired up today (services/
+  // campaign-service/src/templates.js); RCS/SMS/Email templates exist in
+  // the schema but nothing sends against them yet.
+  const showTemplatePicker = form.channel_type === 'whatsapp';
+  const { data: approvedTemplates } = useTemplatesForCampaign('WHATSAPP');
+
+  const applyTemplate = (id) => {
+    if (!id) return set('template_id', null);
+    const tpl = (approvedTemplates || []).find((t) => t.id === id);
+    if (!tpl) return;
+    setForm((p) => ({
+      ...p,
+      template_id: tpl.id,
+      message_body: renderTemplateBody(tpl.body, tpl.body_variables),
+    }));
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -213,7 +243,12 @@ function CreateModal({ onClose, onCreate }) {
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Channel</label>
-              <select value={form.channel_type} onChange={(e) => set('channel_type', e.target.value)} className="input-premium">
+              <select value={form.channel_type}
+                onChange={(e) => {
+                  const channel_type = e.target.value;
+                  setForm((p) => ({ ...p, channel_type, template_id: channel_type === 'whatsapp' ? p.template_id : null }));
+                }}
+                className="input-premium">
                 {ALL_CHANNELS.filter((c) => c !== 'all').map((c) => (
                   <option key={c} value={c}>{CHANNEL_CFG[c]?.label || c}</option>
                 ))}
@@ -221,12 +256,36 @@ function CreateModal({ onClose, onCreate }) {
             </div>
           </div>
 
+          {showTemplatePicker && (
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                Use a Saved Template <span className="text-slate-300 normal-case font-normal">(optional)</span>
+              </label>
+              {approvedTemplates?.length ? (
+                <select value={form.template_id || ''} onChange={(e) => applyTemplate(e.target.value || null)} className="input-premium">
+                  <option value="">Write a custom message instead…</option>
+                  {approvedTemplates.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  No approved WhatsApp templates yet —{' '}
+                  <Link href="/app/campaigns/templates/new" className="text-violet-600 font-semibold hover:underline">create one</Link>.
+                </p>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Message Body</label>
             <textarea rows={4} value={form.message_body}
-              onChange={(e) => set('message_body', e.target.value)}
+              onChange={(e) => { set('message_body', e.target.value); set('template_id', null); }}
               placeholder="Write your broadcast message here…"
               className="input-premium resize-none" />
+            {form.template_id && (
+              <p className="text-[11px] text-violet-500 mt-1">Populated from template — edit freely, it'll just be sent as custom text.</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
