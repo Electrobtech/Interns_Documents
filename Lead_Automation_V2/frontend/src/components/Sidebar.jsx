@@ -58,11 +58,19 @@ const CHANNELS = [
 // SmsAutomationSimulator.jsx) — Messenger, LinkedIn, Web Chat, and Email
 // don't have an Automation builder yet, so they're intentionally left out
 // of this list rather than linking to a page that doesn't exist.
+//
+// "Templates" used to point at a Coming Soon stub for a still-unbuilt
+// concept (reusable automation playbooks). It now points at the real
+// Template Creation module — WhatsApp/RCS/SMS/Email message templates with
+// image headers, live preview, and an approval flow — since that's what
+// actually ships today and it's what the Bulk Campaign builder consumes
+// (frontend/src/app/app/campaigns/templates, services/campaign-service/
+// src/templates.js). The old stub now redirects here.
 const AUTOMATION = [
   { label: 'WhatsApp Automation',  icon: MessageCircle,  href: '/app/channels/whatsapp/automation'  },
   { label: 'Instagram Automation', icon: Instagram,      href: '/app/channels/instagram/automation' },
   { label: 'SMS / RCS Automation', icon: Smartphone,     href: '/app/channels/sms/automation'       },
-  { label: 'Templates',            icon: LayoutTemplate, href: '/app/automation/templates'          },
+  { label: 'Templates',            icon: LayoutTemplate, href: '/app/campaigns/templates'            },
   { label: 'Playbooks',            icon: Workflow,       href: '/app/automation/playbooks'          },
 ];
 

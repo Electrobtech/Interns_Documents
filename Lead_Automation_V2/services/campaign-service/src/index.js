@@ -1,7 +1,10 @@
 require('dotenv').config();
 
+const path = require('path');
 const express = require('express');
 const productRoutes = require('./products');
+const templateRoutes = require('./templates');
+const templateMediaRoutes = require('./templateMedia');
 const cors = require('cors');
 const { pool, authenticate, requirePermission, logAudit } = require('@lead/shared');
 const { enqueueBroadcast } = require('./services/bulkCampaignQueue');
@@ -9,6 +12,15 @@ const { startBulkCampaignWorker } = require('./services/bulkCampaignWorker');
 
 const app = express();
 app.use(cors());
+
+// Serves the header images/videos/documents templateMedia.js writes to
+// public/uploads/templates — the URL it hands back
+// (`${CAMPAIGN_PUBLIC_URL}/uploads/templates/<file>`) only resolves once
+// this is mounted. Ahead of authenticate(): the WhatsApp live preview (and,
+// later, Meta fetching the header media for template submission) needs to
+// load these unauthenticated, same as any other public asset URL.
+app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
+
 app.use(express.json());
 app.use(authenticate);
 
@@ -35,6 +47,12 @@ app.get('/health', (_req, res) => res.json({ service: 'campaign', ok: true }));
 // Products / offers — what the company sells. Mounted here so /products
 // is matched before any campaign :id routes below.
 app.use(productRoutes);
+
+// Message Templates (Template Creation module) + their media uploads.
+// Mounted here for the same reason as productRoutes above — /templates and
+// /templates/media/upload must be matched before any campaign :id routes.
+app.use(templateMediaRoutes);
+app.use(templateRoutes);
 
 app.get('/campaigns', ah(async (req, res) => {
   const { rows } = await pool.query(

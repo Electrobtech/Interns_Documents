@@ -107,6 +107,9 @@ const routes = [
   { path: '/contacts',            target: CONTACT },
   { path: '/leads',               target: CONTACT },
   { path: '/campaigns',           target: CAMPAIGN },
+  // Message Templates (Template Creation module) — owned by campaign-service
+  // (src/templates.js + src/templateMedia.js), not yet in this route table.
+  { path: '/templates',           target: CAMPAIGN },
   { path: '/ai-agents',           target: AI },
   { path: '/orders',              target: ECOMMERCE },
   { path: '/carts',               target: ECOMMERCE },
