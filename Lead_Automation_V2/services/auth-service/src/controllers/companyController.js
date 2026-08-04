@@ -21,6 +21,12 @@ const {
 
 const router = express.Router();
 
+// Fixed ₹/mo pricing for the plans that have one — must match
+// PLANS in frontend/src/components/registration/steps/Step6Subscription.jsx
+// and PLAN_PRICES in services/billing-service/src/routes/subscriptionPlan.js.
+// Enterprise is intentionally absent (sales-quoted "Custom" pricing).
+const PAID_PLAN_PRICES = { starter: 1999, professional: 5999 };
+
 // ---------------------------------------------------------------------
 // POST /auth/register/company — Step 7 "Create Company" submit.
 // Creates the tenant (organizations row) + the Account Owner (users row,
@@ -120,9 +126,16 @@ async function registerCompany(req, res, { owner, company, contact, address, ver
     );
     const userId = user.rows[0].id;
 
+    // Starter/Professional have a fixed ₹ price and are charged via
+    // Razorpay right after the wizard submits (see
+    // services/billing-service/src/routes/subscriptionPlan.js) — that row
+    // starts life 'pending_payment' and only flips to 'active' once the
+    // charge clears. Enterprise is sales-quoted ("Custom" pricing, no
+    // fixed amount to charge inline) so it goes straight to 'active'.
+    const initialStatus = PAID_PLAN_PRICES[subscription.plan] ? 'pending_payment' : 'active';
     await pool.query(
-      `INSERT INTO subscriptions (organization_id, plan, status) VALUES ($1, $2, 'active')`,
-      [organizationId, subscription.plan]
+      `INSERT INTO subscriptions (organization_id, plan, status) VALUES ($1, $2, $3)`,
+      [organizationId, subscription.plan, initialStatus]
     );
 
     await pool.query('COMMIT');

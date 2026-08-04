@@ -68,7 +68,10 @@ BEGIN
     'email_accounts', 'email_threads', 'email_messages',
     'sms_devices',
     'wallets', 'wallet_transactions', 'payments', 'feature_flags', 'attachments',
-    'calendar_accounts', 'calendar_events'
+    'calendar_accounts', 'calendar_events',
+    'organization_channel_subscriptions', 'whatsapp_billing_ledger',
+    'meta_usage_charges', 'sms_usage_charges',
+    'products',
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
@@ -127,6 +130,47 @@ CREATE POLICY tenant_isolation ON campaign_recipients
          AND c.organization_id = app_current_org()
     )
   );
+
+-- invoice_line_items (025_channel_subscription_billing.sql) hangs off
+-- invoices the same way — EXISTS check against the parent invoice row.
+ALTER TABLE invoice_line_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invoice_line_items FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON invoice_line_items;
+CREATE POLICY tenant_isolation ON invoice_line_items
+  USING (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM invoices i
+       WHERE i.id = invoice_line_items.invoice_id
+         AND i.organization_id = app_current_org()
+    )
+  )
+  WITH CHECK (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM invoices i
+       WHERE i.id = invoice_line_items.invoice_id
+         AND i.organization_id = app_current_org()
+    )
+  );
+
+-- billing_markup_config: NOT the direct organization_id = app_current_org()
+-- loop above, because organization_id is nullable here (NULL = the
+-- platform-wide default row, which every tenant must be able to read).
+-- A tenant connection may read the default row plus its own override row,
+-- but may only ever WRITE its own org's row (never the shared default or
+-- another org's) — in practice writes go through requireSuperAdmin routes
+-- under withSystemAccess anyway.
+ALTER TABLE billing_markup_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE billing_markup_config FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON billing_markup_config;
+CREATE POLICY tenant_isolation ON billing_markup_config
+  USING      (app_rls_bypass() OR organization_id IS NULL OR organization_id = app_current_org())
+  WITH CHECK (app_rls_bypass() OR organization_id = app_current_org());
+
+-- channel_plans, meta_rate_cards, sms_rate_cards (025_channel_subscription_
+-- billing.sql) are deliberately NOT given RLS — global platform catalogues
+-- with no organization_id column at all, same category as `permissions`/
+-- `roles` above. Every tenant reads the same rows; only platform admins
+-- (requireSuperAdmin routes) write them.
 
 ALTER TABLE campaign_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE campaign_logs FORCE ROW LEVEL SECURITY;

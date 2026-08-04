@@ -691,11 +691,14 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 );
 
 CREATE TABLE IF NOT EXISTS invoices (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  amount          NUMERIC,
-  status          TEXT,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  amount                NUMERIC(14,2),
+  currency              TEXT NOT NULL DEFAULT 'INR',
+  status                TEXT DEFAULT 'draft',
+  billing_period_start  DATE,
+  billing_period_end    DATE,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ---------- API / Webhooks / Audit ----------
@@ -975,6 +978,188 @@ CREATE TABLE IF NOT EXISTS platform_admins (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ---------- Channel subscription billing (see infra/db/migrations/025_channel_subscription_billing.sql for full rationale) ----------
+
+-- Our own price catalogue per channel — platform-admin managed, not per-org.
+CREATE TABLE IF NOT EXISTS channel_plans (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  channel_type    TEXT NOT NULL CHECK (channel_type IN
+                    ('whatsapp','messenger','instagram','linkedin','email','sms')),
+  our_fee_amount  NUMERIC(14,2) NOT NULL CHECK (our_fee_amount >= 0),
+  currency        TEXT NOT NULL DEFAULT 'INR',
+  billing_period  TEXT NOT NULL DEFAULT 'monthly' CHECK (billing_period IN ('monthly','annual')),
+  active          BOOLEAN NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_channel_plans_active_channel_period
+  ON channel_plans (channel_type, billing_period) WHERE active;
+
+-- Which channels an org is subscribed to, at what (snapshotted) price.
+CREATE TABLE IF NOT EXISTS organization_channel_subscriptions (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  channel_type    TEXT NOT NULL CHECK (channel_type IN
+                    ('whatsapp','messenger','instagram','linkedin','email','sms')),
+  channel_plan_id UUID REFERENCES channel_plans(id),
+  price_amount    NUMERIC(14,2) NOT NULL CHECK (price_amount >= 0),
+  currency        TEXT NOT NULL DEFAULT 'INR',
+  billing_period  TEXT NOT NULL DEFAULT 'monthly' CHECK (billing_period IN ('monthly','annual')),
+  status          TEXT NOT NULL DEFAULT 'pending_payment' CHECK (status IN ('pending_payment','active','paused','cancelled')),
+  trial_ends_at   TIMESTAMPTZ,
+  started_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  cancelled_at    TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_org_channel_sub_live
+  ON organization_channel_subscriptions (organization_id, channel_type)
+  WHERE status IN ('pending_payment','active','paused');
+CREATE INDEX IF NOT EXISTS idx_org_channel_sub_org
+  ON organization_channel_subscriptions (organization_id);
+
+-- Meta's rate card (per channel_type/category/recipient country) — the
+-- source of truth for WhatsApp usage pass-through. Never hardcode these
+-- rates in application code; Meta revises them roughly every 6 months.
+CREATE TABLE IF NOT EXISTS meta_rate_cards (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  channel_type    TEXT NOT NULL CHECK (channel_type IN ('whatsapp','messenger','instagram')),
+  category        TEXT NOT NULL CHECK (category IN ('marketing','utility','authentication','service')),
+  country_code    TEXT NOT NULL DEFAULT '*',
+  meta_rate       NUMERIC(14,4) NOT NULL CHECK (meta_rate >= 0),
+  currency        TEXT NOT NULL DEFAULT 'INR',
+  gst_percent     NUMERIC(5,2) NOT NULL DEFAULT 18.00,
+  bsp_markup      NUMERIC(14,4) NOT NULL DEFAULT 0,
+  effective_from  DATE NOT NULL DEFAULT CURRENT_DATE,
+  active          BOOLEAN NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_meta_rate_cards_lookup
+  ON meta_rate_cards (channel_type, category, country_code, effective_from DESC) WHERE active;
+
+-- SMS rate card — kept separate from meta_rate_cards (not a Meta product,
+-- has its own compliance fields tracked alongside cost in sms_usage_charges).
+CREATE TABLE IF NOT EXISTS sms_rate_cards (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  route_type      TEXT NOT NULL CHECK (route_type IN ('promotional','transactional','otp')),
+  per_sms_rate    NUMERIC(14,4) NOT NULL CHECK (per_sms_rate >= 0),
+  currency        TEXT NOT NULL DEFAULT 'INR',
+  gst_percent     NUMERIC(5,2) NOT NULL DEFAULT 18.00,
+  effective_from  DATE NOT NULL DEFAULT CURRENT_DATE,
+  active          BOOLEAN NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sms_rate_cards_lookup
+  ON sms_rate_cards (route_type, effective_from DESC) WHERE active;
+
+-- The % markup we add on top of Meta's/SMS's actual cost. organization_id
+-- NULL = platform-wide default; a specific org can get its own override row.
+CREATE TABLE IF NOT EXISTS billing_markup_config (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  markup_percent    NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (markup_percent >= 0),
+  updated_by_admin  UUID REFERENCES platform_admins(id),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_billing_markup_default
+  ON billing_markup_config ((organization_id IS NULL)) WHERE organization_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_billing_markup_org
+  ON billing_markup_config (organization_id) WHERE organization_id IS NOT NULL;
+
+-- WhatsApp campaign billing ledger — reserve (pre-send hold) → settle
+-- (post-send reconcile to actual delivered count) → charge. See
+-- campaign-service/src/whatsappBilling.js.
+CREATE TABLE IF NOT EXISTS whatsapp_billing_ledger (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  entry_type            TEXT NOT NULL CHECK (entry_type IN ('reservation','charge','refund')),
+  status                TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','settled','released')),
+  amount                NUMERIC(14,2) NOT NULL CHECK (amount >= 0),
+  currency              TEXT NOT NULL DEFAULT 'INR',
+  campaign_id           UUID REFERENCES campaigns(id) ON DELETE SET NULL,
+  category              TEXT CHECK (category IN ('marketing','utility','authentication','service')),
+  recipient_count       INT,
+  reserved_by_entry_id  UUID REFERENCES whatsapp_billing_ledger(id),
+  note                  TEXT,
+  settled_at            TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_ledger_org_created
+  ON whatsapp_billing_ledger (organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_ledger_campaign
+  ON whatsapp_billing_ledger (campaign_id) WHERE campaign_id IS NOT NULL;
+
+-- Per-message Meta usage audit trail — feeds invoice_line_items.
+CREATE TABLE IF NOT EXISTS meta_usage_charges (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  channel_type      TEXT NOT NULL CHECK (channel_type IN ('whatsapp','messenger','instagram')),
+  category          TEXT NOT NULL CHECK (category IN ('marketing','utility','authentication','service')),
+  recipient_country TEXT,
+  meta_rate         NUMERIC(14,4) NOT NULL,
+  markup_percent    NUMERIC(5,2) NOT NULL DEFAULT 0,
+  bsp_markup        NUMERIC(14,4) NOT NULL DEFAULT 0,
+  gst_amount        NUMERIC(14,2) NOT NULL DEFAULT 0,
+  quantity          INT NOT NULL CHECK (quantity > 0),
+  total_amount      NUMERIC(14,2) NOT NULL,
+  currency          TEXT NOT NULL DEFAULT 'INR',
+  period            DATE NOT NULL,
+  campaign_id       UUID REFERENCES campaigns(id) ON DELETE SET NULL,
+  reference_id      TEXT,
+  invoiced          BOOLEAN NOT NULL DEFAULT false,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_meta_usage_org_period ON meta_usage_charges (organization_id, period);
+CREATE INDEX IF NOT EXISTS idx_meta_usage_campaign ON meta_usage_charges (campaign_id) WHERE campaign_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_meta_usage_uninvoiced ON meta_usage_charges (organization_id) WHERE NOT invoiced;
+
+-- SMS usage audit trail — kept separate from meta_usage_charges (different
+-- compliance fields: DLT template id, sender id).
+CREATE TABLE IF NOT EXISTS sms_usage_charges (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  route_type        TEXT NOT NULL CHECK (route_type IN ('promotional','transactional','otp')),
+  per_sms_rate      NUMERIC(14,4) NOT NULL,
+  markup_percent    NUMERIC(5,2) NOT NULL DEFAULT 0,
+  gst_amount        NUMERIC(14,2) NOT NULL DEFAULT 0,
+  quantity          INT NOT NULL CHECK (quantity > 0),
+  total_amount      NUMERIC(14,2) NOT NULL,
+  currency          TEXT NOT NULL DEFAULT 'INR',
+  period            DATE NOT NULL,
+  campaign_id       UUID REFERENCES campaigns(id) ON DELETE SET NULL,
+  dlt_template_id   TEXT,
+  sender_id         TEXT,
+  reference_id      TEXT,
+  invoiced          BOOLEAN NOT NULL DEFAULT false,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sms_usage_org_period ON sms_usage_charges (organization_id, period);
+CREATE INDEX IF NOT EXISTS idx_sms_usage_campaign ON sms_usage_charges (campaign_id) WHERE campaign_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sms_usage_uninvoiced ON sms_usage_charges (organization_id) WHERE NOT invoiced;
+
+-- Itemized invoice lines — indirectly scoped via invoice_id -> invoices.organization_id.
+CREATE TABLE IF NOT EXISTS invoice_line_items (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_id    UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  type          TEXT NOT NULL CHECK (type IN
+                  ('saas_channel_fee','meta_passthrough','sms_passthrough','bsp_markup','other')),
+  channel_type  TEXT,
+  description   TEXT NOT NULL,
+  quantity      INT NOT NULL DEFAULT 1,
+  unit_amount   NUMERIC(14,2) NOT NULL,
+  total_amount  NUMERIC(14,2) NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_line_items_invoice ON invoice_line_items (invoice_id);
+
 CREATE TABLE IF NOT EXISTS wallets (
   organization_id       UUID PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
   balance               NUMERIC(14,2) NOT NULL DEFAULT 0,
@@ -1009,7 +1194,7 @@ CREATE INDEX IF NOT EXISTS idx_wallet_tx_org_created ON wallet_transactions (org
 CREATE TABLE IF NOT EXISTS payments (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id     UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  purpose             TEXT NOT NULL CHECK (purpose IN ('WALLET_RECHARGE', 'ECOMMERCE_ORDER', 'WALKIN_SALE')),
+  purpose             TEXT NOT NULL CHECK (purpose IN ('WALLET_RECHARGE', 'ECOMMERCE_ORDER', 'WALKIN_SALE', 'INVOICE_SETTLEMENT')),
   reference_id        UUID,                    -- ecommerce_orders.id for ECOMMERCE_ORDER / WALKIN_SALE
   contact_id          UUID REFERENCES contacts(id),
   amount              NUMERIC(14,2) NOT NULL CHECK (amount > 0),
@@ -1056,6 +1241,113 @@ CREATE TABLE IF NOT EXISTS attachments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_attachments_owner ON attachments (organization_id, owner_type, owner_id);
+
+-- ---------- Products / Offers ----------
+-- Backs services/campaign-service/src/products.js. This table (and its
+-- migrations/023_products.sql source) was never folded into schema.sql, so
+-- /products 500'd on every call against a fresh database — this block is
+-- that migration, verbatim, applied here instead.
+CREATE TABLE IF NOT EXISTS products (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  name              TEXT NOT NULL,
+  category          TEXT,                       -- e.g. saas, service, course, physical
+  status            TEXT NOT NULL DEFAULT 'active',  -- active | draft | archived
+  tagline           TEXT,                       -- one-line positioning
+  description       TEXT,
+
+  -- Pricing kept as text + optional numeric: real offers are often "from
+  -- Rs. 4,999/seat/mo" or "custom", which a strict numeric column cannot hold,
+  -- but a numeric is still wanted for sorting/analytics when one exists.
+  price_display     TEXT,
+  price_amount      NUMERIC(12,2),
+  currency          TEXT DEFAULT 'INR',
+  billing_period    TEXT,                       -- monthly | annual | one_time | usage
+
+  -- The marketing substance. Arrays rather than prose so the agent can use
+  -- them individually (one value prop per ad, one objection per FAQ answer).
+  value_props       TEXT[] NOT NULL DEFAULT '{}',
+  target_segments   TEXT[] NOT NULL DEFAULT '{}',
+  objections        TEXT[] NOT NULL DEFAULT '{}',
+  differentiators   TEXT[] NOT NULL DEFAULT '{}',
+  keywords          TEXT[] NOT NULL DEFAULT '{}',
+
+  -- Compliance/tone guardrails the agent must respect when writing for this
+  -- offer (e.g. "never promise guaranteed placement").
+  tone              TEXT,
+  claims_to_avoid   TEXT[] NOT NULL DEFAULT '{}',
+
+  landing_url       TEXT,
+  is_primary        BOOLEAN NOT NULL DEFAULT false,  -- the default offer for new campaigns
+
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_products_org        ON products (organization_id);
+CREATE INDEX IF NOT EXISTS ix_products_org_status ON products (organization_id, status);
+
+-- At most one primary offer per organization. Partial unique index rather
+-- than a constraint so archiving/unsetting stays a plain UPDATE.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_products_one_primary
+  ON products (organization_id) WHERE is_primary;
+
+-- Campaigns and calendar events can point at the offer they promote, so
+-- performance is attributable per product. Nullable: plenty of sends are not
+-- offer-specific.
+ALTER TABLE campaigns       ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
+ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS ix_campaigns_product ON campaigns (product_id) WHERE product_id IS NOT NULL;
+
+-- ---------- Message Templates (Template Creation module) ----------
+-- Backs services/campaign-service/src/templates.js and the sidebar's
+-- Automation > Templates screen (frontend/src/app/app/campaigns/templates).
+-- A local template library with its own review/approval workflow — distinct
+-- from integration-service's POST /whatsapp/send-template, which sends a
+-- message using a template name already approved on Meta's side. The two
+-- meet at send time: campaign-service resolves a campaigns.template_id to
+-- this table's `name` + `header`/`body`/`buttons` and hands that name to
+-- integration-service's send-template call.
+CREATE TABLE IF NOT EXISTS message_templates (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  name              TEXT NOT NULL,               -- auto-slugified, e.g. college_broadcast_17_6_26
+  category          TEXT NOT NULL DEFAULT 'MARKETING',   -- MARKETING | UTILITY | AUTHENTICATION
+  language          TEXT NOT NULL DEFAULT 'en_US',
+  channels          TEXT[] NOT NULL DEFAULT '{WHATSAPP}', -- WHATSAPP | RCS | SMS | EMAIL (multi-tag)
+  status            TEXT NOT NULL DEFAULT 'PENDING',      -- PENDING | APPROVED | REJECTED
+
+  header_type       TEXT NOT NULL DEFAULT 'NONE',   -- NONE | TEXT | IMAGE | VIDEO | DOCUMENT
+  header_text       TEXT,
+  header_media_url  TEXT,
+
+  body              TEXT NOT NULL DEFAULT '',
+  body_variables    JSONB NOT NULL DEFAULT '{}',    -- {"1": "example value", "2": "..."}
+  footer            TEXT,                            -- max 60 chars, enforced app-side
+
+  -- Array of { type: 'QUICK_REPLY'|'PHONE_NUMBER'|'URL', text, value? }
+  buttons           JSONB NOT NULL DEFAULT '[]',
+
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_message_templates_org         ON message_templates (organization_id);
+CREATE INDEX IF NOT EXISTS ix_message_templates_org_status  ON message_templates (organization_id, status);
+CREATE INDEX IF NOT EXISTS ix_message_templates_channels    ON message_templates USING GIN (channels);
+
+-- campaigns.template_id, added here rather than inline on campaigns' own
+-- CREATE TABLE further up because message_templates didn't exist yet at
+-- that point in a single-pass load (same reasoning as flow_playbook_id
+-- above). Nullable — every non-WhatsApp broadcast, and any WhatsApp one
+-- written as free text, still just uses campaigns.message_body directly.
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS template_id UUID REFERENCES message_templates(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS ix_campaigns_template ON campaigns (template_id) WHERE template_id IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION create_wallet_for_new_org() RETURNS TRIGGER AS $$
 BEGIN

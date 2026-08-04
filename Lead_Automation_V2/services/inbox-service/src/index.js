@@ -10,6 +10,10 @@ app.use(authenticate); // every inbox route requires a valid token
 
 const canWrite = requirePermission('inbox:write');
 
+// Used by POST /conversations/:id/reply to forward email replies to the
+// service that actually talks to the Gmail API — see that route for why.
+const EMAIL_SERVICE_URL = process.env.EMAIL_SERVICE_URL || 'http://email-service:4013';
+
 const VALID_STATUSES = [
   'new', 'open', 'pending', 'resolved', 'snoozed', 'handoff', 'archived', 'spam', 'closed', 'campaign', 'missed',
 ];
@@ -31,7 +35,14 @@ app.get('/conversations', async (req, res) => {
             l.stage AS lead_stage,
             (SELECT body FROM messages m WHERE m.conversation_id = c.id
               ORDER BY created_at DESC LIMIT 1) AS last_message_preview,
-            (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.direction = 'inbound')::int AS inbound_count
+            -- FIX: this used to count every inbound message this
+            -- conversation has EVER received, so the purple badge in the
+            -- Unified Inbox list never cleared even after opening the
+            -- thread (which only bumps last_read_at). Scoped to
+            -- last_read_at, matching /conversations/unread-summary and
+            -- the GET /conversations/:id read-receipt logic below.
+            (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id
+              AND m.direction = 'inbound' AND m.created_at > c.last_read_at)::int AS inbound_count
        FROM conversations c
        LEFT JOIN contacts ct ON ct.id = c.contact_id
        LEFT JOIN users u ON u.id = c.assigned_to
@@ -136,9 +147,67 @@ app.get('/conversations/:id', async (req, res) => {
 });
 
 // Post a reply (outbound message).
+//
+// FIX: for channel_type='email' this used to only insert a row into the
+// local `messages` table — nothing was ever actually emailed, since
+// email-service (the only thing that calls the Gmail API) was never
+// invoked. email-service's POST /email/messages/reply already sends via
+// Gmail AND mirrors itself into these same shared conversations/messages
+// tables (see emailConversationStore.recordEmailMessage), so for email we
+// now forward there instead of writing our own duplicate local-only row.
+// Other channels (WhatsApp/SMS/etc.) are unchanged for now.
 app.post('/conversations/:id/reply', canWrite, async (req, res) => {
   const org = req.user.organizationId;
   const { body } = req.body;
+
+  const { rows: convRows } = await pool.query(
+    `SELECT channel_type FROM conversations WHERE id=$1 AND organization_id=$2`,
+    [req.params.id, org]
+  );
+  if (!convRows.length) return res.status(404).json({ error: 'Conversation not found' });
+
+  if (convRows[0].channel_type === 'email') {
+    const { rows: threadRows } = await pool.query(
+      `SELECT id FROM email_threads WHERE conversation_id=$1 AND organization_id=$2
+        ORDER BY last_message_time DESC NULLS LAST LIMIT 1`,
+      [req.params.id, org]
+    );
+    if (!threadRows.length) {
+      return res.status(409).json({ error: 'No connected email thread found for this conversation.' });
+    }
+
+    let emailRes;
+    try {
+      emailRes = await fetch(`${EMAIL_SERVICE_URL}/email/messages/reply`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Forward the caller's own JWT — email-service authenticates
+          // every request itself and needs req.user.organizationId.
+          Authorization: req.headers.authorization,
+        },
+        body: JSON.stringify({ emailThreadId: threadRows[0].id, text: body }),
+      });
+    } catch (err) {
+      console.error('[inbox-service] email-service unreachable:', err.message);
+      return res.status(502).json({ error: 'Could not reach email-service to send this reply.' });
+    }
+
+    const payload = await emailRes.json().catch(() => ({}));
+    if (!emailRes.ok) {
+      return res.status(emailRes.status).json({ error: payload.error || 'Failed to send email reply.' });
+    }
+
+    logAudit(req, 'inbox.reply', { conversationId: req.params.id, channel: 'email' });
+    // email-service already inserted the real row into `messages` — fetch
+    // it back so the response shape matches what the frontend expects.
+    const { rows: sent } = await pool.query(
+      `SELECT * FROM messages WHERE conversation_id=$1 ORDER BY created_at DESC LIMIT 1`,
+      [req.params.id]
+    );
+    return res.status(201).json(sent[0] || payload);
+  }
+
   const { rows } = await pool.query(
     `INSERT INTO messages (organization_id, conversation_id, direction, body, sender)
      VALUES ($1,$2,'outbound',$3,$4) RETURNING *`,

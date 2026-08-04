@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Loader2, Rocket } from 'lucide-react';
 import Image from 'next/image';
 import { api } from '@/lib/api';
 import { setToken } from '@/lib/auth';
+import { openCheckout } from '@/lib/billing';
 import { useToast, ToastStack } from '@/components/Toast';
 import {
   validateGst, validateStep1, validateStep2, validateStep3, validateStep4,
@@ -19,7 +20,7 @@ import Step2CompanyInfo from './steps/Step2CompanyInfo';
 import Step3BusinessContact from './steps/Step3BusinessContact';
 import Step4Address from './steps/Step4Address';
 import Step5Verification from './steps/Step5Verification';
-import Step6Subscription from './steps/Step6Subscription';
+import Step6Subscription, { PLANS as SUBSCRIPTION_PLANS } from './steps/Step6Subscription';
 import Step7Finish from './steps/Step7Finish';
 
 const INITIAL_FORM = {
@@ -59,6 +60,7 @@ export default function RegistrationWizard() {
   const [furthestStep, setFurthestStep] = useState(1);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [paying, setPaying] = useState(false);
   // Which company/address fields GST actually returned a value for on the
   // last successful verify — NOT the same as "which fields are lockable".
   // A field only gets locked if it's both lockable AND GST actually filled
@@ -162,7 +164,50 @@ export default function RegistrationWizard() {
       };
       const res = await api('/auth/register/company', { method: 'POST', body: payload });
       setToken(res.token);
-      toast.success('Company created! Redirecting…');
+
+      // Starter/Professional have a fixed ₹ price — charge it right now via
+      // Razorpay Checkout, using the token we just received. Enterprise has
+      // no `amount` (sales-quoted "Custom" pricing), so there's nothing to
+      // charge inline; that subscription row was already created 'active'
+      // by the backend.
+      const plan = SUBSCRIPTION_PLANS.find((p) => p.id === form.subscription.plan);
+      if (plan?.amount) {
+        toast.success('Company created! Opening payment…');
+        setSubmitting(false);
+        setPaying(true);
+        try {
+          const order = await api('/billing/subscription-plan/checkout', { method: 'POST', token: res.token });
+          const result = await openCheckout({
+            keyId: order.keyId,
+            orderId: order.orderId,
+            amount: order.amount,
+            currency: order.currency,
+            name: 'Orbq',
+            description: `${plan.name} plan subscription`,
+            prefill: { name: form.owner.fullName, email: form.owner.workEmail, contact: form.owner.mobile },
+          });
+          await api('/billing/subscription-plan/verify', {
+            method: 'POST',
+            token: res.token,
+            body: { orderId: result.orderId, paymentId: result.paymentId, signature: result.signature },
+          });
+          toast.success('Payment successful! Redirecting…');
+        } catch (payErr) {
+          // Registration itself already succeeded — don't block the redirect
+          // over a cancelled/failed charge. The subscription row just stays
+          // 'pending_payment' and can be completed later from Billing.
+          toast.error(
+            payErr.message === 'Payment cancelled'
+              ? "Payment not completed — you're all set, just finish it anytime from Billing."
+              : (payErr.message || 'Payment failed — you can retry it anytime from Billing.')
+          );
+        } finally {
+          setPaying(false);
+        }
+      } else {
+        toast.success('Company created! Redirecting…');
+      }
+
       setTimeout(() => router.push('/'), 800);
     } catch (e) {
       toast.error(e.message || 'Registration failed');
@@ -238,10 +283,10 @@ export default function RegistrationWizard() {
                   Next <ChevronRight size={16} />
                 </button>
               ) : (
-                <button type="button" onClick={submit} disabled={submitting}
+                <button type="button" onClick={submit} disabled={submitting || paying}
                   className="flex items-center gap-1.5 bg-gradient-to-r from-rose-600 to-violet-600 text-white rounded-xl px-5 py-2.5 text-sm font-bold shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 hover:-translate-y-0.5 transition-all duration-150 disabled:opacity-60 disabled:hover:translate-y-0">
-                  {submitting ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />}
-                  {submitting ? 'Creating…' : 'Create Company'}
+                  {(submitting || paying) ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />}
+                  {submitting ? 'Creating…' : paying ? 'Waiting for payment…' : 'Create Company'}
                 </button>
               )}
             </div>
