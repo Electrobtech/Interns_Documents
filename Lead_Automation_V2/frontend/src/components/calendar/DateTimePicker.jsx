@@ -40,6 +40,16 @@ export function DateTimePicker({
   const dateObj = value ? new Date(value) : undefined;
   const timeStr = value ? toLocalTimeInputValue(new Date(value)) : '09:00';
 
+  // react-day-picker's `{ before: Date }` matcher does an exact
+  // millisecond comparison, not a day-level one — every call site here
+  // passes `minDate={new Date()}` (see BookMeetingDialog.jsx and this
+  // component's own callers), which bakes in the *current time of day*.
+  // That made TODAY's calendar cell (internally midnight-anchored) count
+  // as "before" a minDate of e.g. 21:43, silently disabling the one date
+  // people try to click most. Truncating to the start of that day fixes
+  // it without changing what any caller passes in.
+  const disabledBefore = minDate ? new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()) : undefined;
+
   function commit(nextDate, nextTime) {
     if (!nextDate) {
       onChange('');
@@ -95,7 +105,7 @@ export function DateTimePicker({
           selected={dateObj}
           onSelect={(d) => commit(d, timeStr)}
           onMonthChange={handleMonthLoad}
-          disabled={minDate ? { before: minDate } : undefined}
+          disabled={disabledBefore ? { before: disabledBefore } : undefined}
           modifiers={{ busy: (d) => busyDayKeys.has(d.toDateString()) }}
           modifiersClassNames={{ busy: 'relative after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:h-1 after:w-1 after:rounded-full after:bg-amber-500' }}
         />

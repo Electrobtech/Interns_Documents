@@ -9,6 +9,11 @@ const gstController = require('./controllers/gstController');
 const pinController = require('./controllers/pinController');
 const superAdminController = require('./controllers/superAdminController');
 
+// Helper to catch unhandled promise rejections in async routes
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -81,7 +86,7 @@ app.post('/auth/register', async (req, res) => {
 });
 
 // ---- Login ----
-app.post('/auth/login', async (req, res) => {
+app.post('/auth/login', asyncHandler(async (req, res) => {
   const { password } = req.body;
   const email = req.body.email?.trim().toLowerCase();
   if (!email || !password) return res.status(400).json({ error: 'email & password required' });
@@ -106,10 +111,10 @@ app.post('/auth/login', async (req, res) => {
   const token = sign({ userId: rows[0].id, organizationId: rows[0].organization_id, role: rows[0].role, permissions });
   await withSystemAccess(() => logAuditRaw(rows[0].organization_id, rows[0].id, 'auth.login', { email }));
   res.json({ token });
-});
+}));
 
 // ---- Profile (protected) ----
-app.get('/auth/profile', authenticate, async (req, res) => {
+app.get('/auth/profile', authenticate, asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT u.id, u.name, u.email, r.name AS role, o.name AS organization
        FROM users u JOIN roles r ON r.id = u.role_id
@@ -118,11 +123,35 @@ app.get('/auth/profile', authenticate, async (req, res) => {
     [req.user.userId]
   );
   res.json(rows[0] || {});
-});
+}));
 
 app.post('/auth/logout', authenticate, (req, res) => {
   logAuditRaw(req.user.organizationId, req.user.userId, 'auth.logout', {});
   res.json({ ok: true });
+});
+
+// ---- Global error handler ----
+// Must be registered last (after every app.use/route above) — that's
+// how Express recognizes it as an error-handling middleware (the 4-arg
+// signature is what actually matters, but position keeps it "last resort").
+//
+// This is the safety net superAdminController.js's asyncHandler wrapper
+// routes into: previously an async handler that threw (e.g. a Postgres
+// 22P02 invalid_text_representation from a malformed UUID) had no
+// try/catch and no next(err) anywhere, so the rejection was unhandled
+// and Node killed the process. Nothing here is route-specific — any
+// current or future handler in this service that throws lands here
+// instead of crashing.
+app.use((err, req, res, _next) => {
+  console.error(`[${req.method} ${req.originalUrl}]`, err);
+  if (res.headersSent) return;
+  // Postgres invalid input for a typed column (e.g. a non-UUID string
+  // bound to a `uuid` column) — this is a client input problem, not a
+  // server fault, so 400 rather than 500.
+  if (err.code === '22P02') {
+    return res.status(400).json({ error: 'Invalid input format' });
+  }
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 const PORT = process.env.AUTH_PORT || 4001;

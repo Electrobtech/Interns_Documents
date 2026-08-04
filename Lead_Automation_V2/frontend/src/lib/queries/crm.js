@@ -85,6 +85,18 @@ export function useCreateLead() {
   });
 }
 
+// PUT /conversations/:id/handled-by — { handled_by: 'bot'|'human' }. One-click
+// human takeover: flips who owns replying on a thread (see the Recent
+// Conversations table on the main dashboard and inbox-service's route).
+export function useSetHandledBy() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, handled_by }) => call(`/conversations/${id}/handled-by`, { method: 'PUT', body: { handled_by } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations', 'list'] }),
+  });
+}
+
 // GET /conversations/:id — conversation + messages + the contact/lead columns
 // the Unified Inbox context rail needs (see services/inbox-service).
 export function useConversation(conversationId) {

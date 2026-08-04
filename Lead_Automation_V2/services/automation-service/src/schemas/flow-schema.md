@@ -208,4 +208,30 @@ json{ "id": "node_wait", "type": "delay", "data": { "seconds": 3600, "scheduledA
 json{ "id": "node_wait2", "type": "delay", "data": { "seconds": null, "scheduledAt": "2026-08-15T09:00:00.000Z", "nextNodeId": "node_followup" } }
 
 6. Handoff Node (type: "handoff") — end of automation, route to human
-{ "id": "node_human", "type": "handoff", "data": { "team": "support_l2", "nextNodeId": null } }
+
+json{ "id": "node_human", "type": "handoff", "data": { "team": "support_l2", "nextNodeId": null } }
+
+Optionally carries a `followUp` object so reaching this node also drops a
+reminder into the CRM's Follow-ups queue (see the Follow-ups page,
+frontend/src/app/app/follow-ups/page.jsx, and
+services/automation-service/src/repositories/followUpRepository.js) instead
+of the handoff only ever surfacing in the Unified Inbox:
+
+json{
+  "id": "node_human",
+  "type": "handoff",
+  "data": {
+    "team": "support_l2",
+    "nextNodeId": null,
+    "followUp": {
+      "enabled": true,
+      "dueInHours": 24,        // common presets: 24, 48, 72 — any positive number is accepted
+      "priority": "medium",    // low | medium | high
+      "assignTo": "Priya (Sales)"  // free text, same convention as `team`; only written to
+                                    // follow_ups.assigned_to when it happens to be a real user id
+    }
+  }
+}
+
+`followUp` is entirely optional — omitting it (or `enabled: false`) leaves
+the handoff behaving exactly as before, with no Follow-up row created.

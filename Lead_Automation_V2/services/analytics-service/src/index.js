@@ -19,10 +19,25 @@ function relTime(ts) {
   return `${Math.floor(secs / 86400)}d`;
 }
 
-// Aggregated summary that powers the dashboard cards, chart, channels and inbox.
+// Very small keyword heuristic — there's no stored sentiment column, so the
+// "Sentiment tag" column on the dashboard's Recent Conversations table is
+// derived on the fly from the most recent inbound-looking text. Good enough
+// for an at-a-glance signal; not a substitute for real sentiment analysis.
+const URGENT_WORDS = ['urgent', 'asap', 'immediately', 'emergency', 'angry', 'frustrated', 'complain', 'refund', 'cancel', 'not working', 'broken', 'worst', 'terrible', 'disappointed', 'unacceptable'];
+const POSITIVE_WORDS = ['thanks', 'thank you', 'great', 'awesome', 'love', 'perfect', 'happy', 'excellent', 'amazing', 'good job'];
+function detectSentiment(text) {
+  if (!text) return 'neutral';
+  const t = text.toLowerCase();
+  if (URGENT_WORDS.some((w) => t.includes(w))) return 'urgent';
+  if (POSITIVE_WORDS.some((w) => t.includes(w))) return 'positive';
+  return 'neutral';
+}
+
+// Aggregated summary that powers the dashboard cards, chart, channels,
+// funnel and inbox (see frontend/src/app/app/page.jsx).
 app.get('/analytics/summary', async (req, res) => {
   const org = req.user.organizationId;
-  const [totals, trendRows, channelRows, inboxRows] = await Promise.all([
+  const [totals, trendRows, channelRows, inboxRows, funnelRows] = await Promise.all([
     pool.query(
       `SELECT
          (SELECT COUNT(*) FROM conversations WHERE organization_id=$1) AS total,
@@ -31,7 +46,23 @@ app.get('/analytics/summary', async (req, res) => {
             AND NOT EXISTS (SELECT 1 FROM messages m
                              WHERE m.conversation_id=c.id AND m.direction='outbound')) AS unreplied,
          (SELECT COALESCE(SUM(amount),0) FROM ecommerce_orders
-            WHERE organization_id=$1 AND status IN ('paid','completed')) AS revenue`,
+            WHERE organization_id=$1 AND status IN ('paid','completed')) AS revenue,
+         (SELECT COUNT(*) FROM conversations WHERE organization_id=$1 AND handled_by='human') AS human_handled,
+         -- Avg seconds between an inbound message and the next bot-authored
+         -- outbound reply in the same thread, over the last 30 days.
+         (SELECT AVG(response_seconds) FROM (
+            SELECT EXTRACT(EPOCH FROM (m_out.created_at - m_in.created_at)) AS response_seconds
+              FROM messages m_in
+              JOIN LATERAL (
+                SELECT created_at FROM messages m2
+                 WHERE m2.conversation_id = m_in.conversation_id
+                   AND m2.direction = 'outbound' AND m2.sender = 'bot'
+                   AND m2.created_at > m_in.created_at
+                 ORDER BY m2.created_at ASC LIMIT 1
+              ) m_out ON true
+             WHERE m_in.organization_id=$1 AND m_in.direction='inbound'
+               AND m_in.created_at >= now() - interval '30 days'
+          ) r) AS avg_response_seconds`,
       [org]
     ),
     pool.query(
@@ -50,16 +81,31 @@ app.get('/analytics/summary', async (req, res) => {
       [org]
     ),
     pool.query(
-      `SELECT c.channel_type, c.status, c.last_message_at, ct.name AS contact_name,
+      `SELECT c.id, c.channel_type, c.status, c.handled_by, c.last_message_at, ct.name AS contact_name,
               (SELECT body FROM messages m WHERE m.conversation_id=c.id
-                ORDER BY created_at DESC LIMIT 1) AS last_body
+                ORDER BY created_at DESC LIMIT 1) AS last_body,
+              (SELECT score FROM leads
+                WHERE contact_id=c.contact_id AND organization_id=c.organization_id
+                ORDER BY created_at DESC LIMIT 1) AS lead_score
          FROM conversations c LEFT JOIN contacts ct ON ct.id=c.contact_id
-        WHERE c.organization_id=$1 ORDER BY c.last_message_at DESC LIMIT 4`,
+        WHERE c.organization_id=$1 ORDER BY c.last_message_at DESC LIMIT 8`,
+      [org]
+    ),
+    // Conversion Funnel & Revenue Matrix: Inquiries Captured -> Qualified
+    // Leads -> Meetings Scheduled -> Deals Closed.
+    pool.query(
+      `SELECT
+         (SELECT COUNT(*) FROM leads WHERE organization_id=$1) AS inquiries,
+         (SELECT COUNT(*) FROM leads WHERE organization_id=$1 AND stage IN ('qualified','active','won')) AS qualified,
+         (SELECT COUNT(DISTINCT contact_id) FROM calendar_events
+            WHERE organization_id=$1 AND contact_id IS NOT NULL) AS meetings,
+         (SELECT COUNT(*) FROM leads WHERE organization_id=$1 AND stage='won') AS closed`,
       [org]
     ),
   ]);
 
   const t = totals.rows[0];
+  const f = funnelRows.rows[0];
   const channelTotal = channelRows.rows.reduce((s, r) => s + r.count, 0) || 1;
 
   res.json({
@@ -67,13 +113,25 @@ app.get('/analytics/summary', async (req, res) => {
     openConversations: Number(t.open),
     unreplied: Number(t.unreplied),
     revenueImpact: Number(t.revenue),
+    humanHandoffRate: Number(t.total) > 0 ? Math.round((Number(t.human_handled) / Number(t.total)) * 1000) / 10 : 0,
+    avgResponseSeconds: t.avg_response_seconds != null ? Math.round(Number(t.avg_response_seconds) * 10) / 10 : null,
     trend: trendRows.rows,
     topChannels: channelRows.rows.map((r) => [r.name, Math.round((r.count / channelTotal) * 100)]),
+    funnel: {
+      inquiries: Number(f.inquiries),
+      qualified: Number(f.qualified),
+      meetings: Number(f.meetings),
+      closed: Number(f.closed),
+    },
     recentInbox: inboxRows.rows.map((r) => ({
+      id: r.id,
       name: r.contact_name || 'Unknown',
       channel: r.channel_type,
       message: r.last_body || '',
       status: r.status,
+      handledBy: r.handled_by,
+      leadScore: r.lead_score != null ? Number(r.lead_score) : null,
+      sentiment: detectSentiment(r.last_body),
       time: relTime(r.last_message_at),
     })),
   });
