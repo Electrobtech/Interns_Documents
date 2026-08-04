@@ -608,6 +608,154 @@ router.patch('/super-admin/system-health/providers/:serviceKey', requirePlatform
 // Internal microservice health — live pings, see platformHealthModel.js.
 router.get('/super-admin/system-health/internal', async (_req, res) => {
   res.json(await platformHealthModel.checkAll());
+// ---------- Channel-subscription billing (platform-admin side) ----------
+// Manage the channel_plans catalogue (our own price per channel) and the
+// Meta/SMS rate cards + per-org markup overrides. Tenant-facing reads of
+// these same tables happen through billing-service's GET /billing/plans —
+// this is the write side. See infra/db/migrations/025_channel_subscription_
+// billing.sql for the full schema rationale.
+
+router.get('/super-admin/channel-plans', async (_req, res) => {
+  const { rows } = await pool.query(`SELECT * FROM channel_plans ORDER BY channel_type, billing_period`);
+  res.json(rows);
+});
+
+// Superseding a price never UPDATEs in place — deactivates the current
+// active row for that (channel_type, billing_period) and inserts a new
+// one, so existing organization_channel_subscriptions rows (which
+// snapshotted the old price) are unaffected, per the task brief's
+// "later catalogue price changes don't retroactively change an existing
+// client's rate" requirement.
+router.put('/super-admin/channel-plans/:channelType', async (req, res) => {
+  const { channelType } = req.params;
+  const { ourFeeAmount, billingPeriod = 'monthly', currency = 'INR' } = req.body;
+  if (!(Number(ourFeeAmount) >= 0)) {
+    return res.status(400).json({ error: 'ourFeeAmount must be a non-negative number' });
+  }
+
+  try {
+    await pool.query('BEGIN');
+    await pool.query(
+      `UPDATE channel_plans SET active = false, updated_at = now()
+        WHERE channel_type = $1 AND billing_period = $2 AND active = true`,
+      [channelType, billingPeriod]
+    );
+    const { rows } = await pool.query(
+      `INSERT INTO channel_plans (channel_type, our_fee_amount, currency, billing_period, active)
+       VALUES ($1,$2,$3,$4,true) RETURNING *`,
+      [channelType, ourFeeAmount, currency, billingPeriod]
+    );
+    await pool.query('COMMIT');
+    await logSuperAdminAction(req, null, 'super_admin.channel_plan.update', { channelType, billingPeriod, ourFeeAmount });
+    res.json(rows[0]);
+  } catch (e) {
+    await pool.query('ROLLBACK').catch(() => {});
+    throw e;
+  }
+});
+
+// GET/PUT Meta rate cards — the numbers to update whenever Meta revises
+// its rate card (roughly every 6 months per category/country); never a
+// constant in application code, see meta_rate_cards' own comments.
+router.get('/super-admin/meta-rate-cards', async (_req, res) => {
+  const { rows } = await pool.query(`SELECT * FROM meta_rate_cards ORDER BY channel_type, category, country_code`);
+  res.json(rows);
+});
+
+router.post('/super-admin/meta-rate-cards', async (req, res) => {
+  const { channelType, category, countryCode = '*', metaRate, currency = 'INR', gstPercent = 18.0, bspMarkup = 0, effectiveFrom } = req.body;
+  if (!(Number(metaRate) >= 0)) return res.status(400).json({ error: 'metaRate must be a non-negative number' });
+
+  try {
+    await pool.query('BEGIN');
+    await pool.query(
+      `UPDATE meta_rate_cards SET active = false
+        WHERE channel_type = $1 AND category = $2 AND country_code = $3 AND active = true`,
+      [channelType, category, countryCode]
+    );
+    const { rows } = await pool.query(
+      `INSERT INTO meta_rate_cards (channel_type, category, country_code, meta_rate, currency, gst_percent, bsp_markup, effective_from, active)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8, CURRENT_DATE), true) RETURNING *`,
+      [channelType, category, countryCode, metaRate, currency, gstPercent, bspMarkup, effectiveFrom || null]
+    );
+    await pool.query('COMMIT');
+    await logSuperAdminAction(req, null, 'super_admin.meta_rate_card.update', { channelType, category, countryCode, metaRate });
+    res.json(rows[0]);
+  } catch (e) {
+    await pool.query('ROLLBACK').catch(() => {});
+    throw e;
+  }
+});
+
+// GET/PUT SMS rate cards — same pattern, separate table (different
+// compliance shape, see sms_rate_cards' own comments).
+router.get('/super-admin/sms-rate-cards', async (_req, res) => {
+  const { rows } = await pool.query(`SELECT * FROM sms_rate_cards ORDER BY route_type`);
+  res.json(rows);
+});
+
+router.post('/super-admin/sms-rate-cards', async (req, res) => {
+  const { routeType, perSmsRate, currency = 'INR', gstPercent = 18.0, effectiveFrom } = req.body;
+  if (!(Number(perSmsRate) >= 0)) return res.status(400).json({ error: 'perSmsRate must be a non-negative number' });
+
+  try {
+    await pool.query('BEGIN');
+    await pool.query(`UPDATE sms_rate_cards SET active = false WHERE route_type = $1 AND active = true`, [routeType]);
+    const { rows } = await pool.query(
+      `INSERT INTO sms_rate_cards (route_type, per_sms_rate, currency, gst_percent, effective_from, active)
+       VALUES ($1,$2,$3,$4,COALESCE($5, CURRENT_DATE), true) RETURNING *`,
+      [routeType, perSmsRate, currency, gstPercent, effectiveFrom || null]
+    );
+    await pool.query('COMMIT');
+    await logSuperAdminAction(req, null, 'super_admin.sms_rate_card.update', { routeType, perSmsRate });
+    res.json(rows[0]);
+  } catch (e) {
+    await pool.query('ROLLBACK').catch(() => {});
+    throw e;
+  }
+});
+
+// Markup config: the platform-wide default row (organizationId omitted)
+// or a per-org override, if a BSP contract or negotiated deal means an
+// org's pass-through markup differs from the default.
+router.get('/super-admin/billing-markup', async (req, res) => {
+  const { organizationId } = req.query;
+  const { rows } = await pool.query(
+    `SELECT * FROM billing_markup_config WHERE organization_id ${organizationId ? '= $1' : 'IS NULL'}`,
+    organizationId ? [organizationId] : []
+  );
+  res.json(rows[0] || null);
+});
+
+router.put('/super-admin/billing-markup', async (req, res) => {
+  const { organizationId = null, markupPercent } = req.body;
+  if (!(Number(markupPercent) >= 0)) return res.status(400).json({ error: 'markupPercent must be a non-negative number' });
+
+  // organization_id NULL (the platform default row) and a specific org's
+  // override row live under two different partial unique indexes
+  // (ux_billing_markup_default / ux_billing_markup_org — see migration
+  // 025) — a single ON CONFLICT target can't cover both, so branch
+  // explicitly instead of relying on one query to handle either case.
+  const { rows } = organizationId
+    ? await pool.query(
+        `INSERT INTO billing_markup_config (organization_id, markup_percent, updated_by_admin, updated_at)
+         VALUES ($1,$2,$3,now())
+         ON CONFLICT (organization_id) WHERE organization_id IS NOT NULL
+           DO UPDATE SET markup_percent = EXCLUDED.markup_percent, updated_by_admin = EXCLUDED.updated_by_admin, updated_at = now()
+         RETURNING *`,
+        [organizationId, markupPercent, req.admin.adminId]
+      )
+    : await pool.query(
+        `INSERT INTO billing_markup_config (organization_id, markup_percent, updated_by_admin, updated_at)
+         VALUES (NULL,$1,$2,now())
+         ON CONFLICT ((organization_id IS NULL)) WHERE organization_id IS NULL
+           DO UPDATE SET markup_percent = EXCLUDED.markup_percent, updated_by_admin = EXCLUDED.updated_by_admin, updated_at = now()
+         RETURNING *`,
+        [markupPercent, req.admin.adminId]
+      );
+
+  await logSuperAdminAction(req, organizationId, 'super_admin.billing_markup.update', { organizationId, markupPercent });
+  res.json(rows[0]);
 });
 
 module.exports = router;

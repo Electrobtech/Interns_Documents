@@ -9,6 +9,7 @@ const cors = require('cors');
 const { pool, authenticate, requirePermission, logAudit } = require('@lead/shared');
 const { enqueueBroadcast } = require('./services/bulkCampaignQueue');
 const { startBulkCampaignWorker } = require('./services/bulkCampaignWorker');
+const whatsappBilling = require('./whatsappBilling');
 
 const app = express();
 app.use(cors());
@@ -285,6 +286,39 @@ const AUTOMATION_SERVICE_URL = process.env.AUTOMATION_SERVICE_URL || 'http://loc
 // failure (bad/missing number, expired token, a transcript write hiccup on
 // the automation-service side, etc) never aborts the rest of the run —
 // every outcome is caught and recorded rather than thrown.
+// GET /campaigns/:id/cost-estimate — pre-send cost estimate shown to the
+// user before they trigger a WhatsApp broadcast (per task brief: "so they
+// don't accidentally trigger a ₹40,000 blast"). Not billing-service, since
+// it needs the campaign's actual audience, which only campaign-service has
+// resolved. Non-WhatsApp channels have no Meta pass-through, so this
+// returns a zero estimate for them rather than a 404 — the frontend can
+// call this unconditionally for any campaign.
+app.get('/campaigns/:id/cost-estimate', canSend, ah(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT * FROM campaigns WHERE id=$1 AND organization_id=$2`,
+    [req.params.id, req.user.organizationId]
+  );
+  const campaign = rows[0];
+  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+  if (campaign.channel_type !== 'whatsapp') {
+    return res.json({ channel_type: campaign.channel_type, currency: 'INR', total_amount: 0, note: 'No Meta pass-through fee for this channel.' });
+  }
+
+  const { rows: audience } = await pool.query(
+    `SELECT c.id AS contact_id, c.phone FROM campaign_audiences ca
+       JOIN contacts c ON c.id = ca.contact_id
+      WHERE ca.campaign_id = $1`,
+    [campaign.id]
+  );
+  const estimate = await whatsappBilling.estimateFor(
+    req.user.organizationId,
+    audience.map((c) => ({ contactId: c.contact_id, phone: c.phone })),
+    'marketing'
+  );
+  res.json({ channel_type: 'whatsapp', ...estimate });
+}));
+
 app.post('/campaigns/:id/send', canSend, ah(async (req, res) => {
   const { rows } = await pool.query(
     `UPDATE campaigns SET status='sent' WHERE id=$1 AND organization_id=$2 RETURNING *`,
@@ -301,12 +335,29 @@ app.post('/campaigns/:id/send', canSend, ah(async (req, res) => {
     [campaign.id]
   );
 
+  // WhatsApp carries a real Meta pass-through cost — place a soft hold for
+  // the estimated total before any message goes out. Every other channel
+  // (Messenger/Instagram today, Email/LinkedIn/SMS elsewhere) skips this;
+  // see meta_rate_cards for how a future Meta fee on Messenger/Instagram
+  // would plug into the same reserve/settle path without a code change here.
+  const isWhatsApp = campaign.channel_type === 'whatsapp';
+  let reservation = null;
+  if (isWhatsApp) {
+    const { reservation: res_ } = await whatsappBilling.reserve(req.user.organizationId, {
+      campaignId: campaign.id,
+      recipients: audience.map((c) => ({ contactId: c.id, phone: c.phone })),
+      category: 'marketing',
+    });
+    reservation = res_;
+  }
+
   const authHeader = req.headers.authorization;
   const logEvent = (contactId, event) =>
     pool.query(`INSERT INTO campaign_logs (campaign_id, contact_id, event) VALUES ($1,$2,$3)`,
       [campaign.id, contactId, event]
     ).catch((err) => console.error('[campaign-service] failed to write campaign_log (non-fatal):', err.message));
 
+  const deliveries = [];
   await Promise.all(audience.map(async (contact) => {
     // WhatsApp sends to the E.164 phone number; Instagram (and anything
     // else) sends to the channel-scoped external_id (PSID etc) — falls back
@@ -315,7 +366,10 @@ app.post('/campaigns/:id/send', canSend, ah(async (req, res) => {
       ? (contact.phone || contact.external_id)
       : contact.external_id;
 
-    if (!externalId) return logEvent(contact.id, 'failed');
+    if (!externalId) {
+      deliveries.push({ contactId: contact.id, phone: contact.phone, delivered: false });
+      return logEvent(contact.id, 'failed');
+    }
 
     try {
       const resp = await fetch(`${AUTOMATION_SERVICE_URL}/automation/internal/campaign-send`, {
@@ -326,12 +380,23 @@ app.post('/campaigns/:id/send', canSend, ah(async (req, res) => {
         },
         body: JSON.stringify({ channel: campaign.channel_type, externalId, body: campaign.message_body }),
       });
+      deliveries.push({ contactId: contact.id, phone: contact.phone, delivered: resp.ok });
       await logEvent(contact.id, resp.ok ? 'delivered' : 'failed');
     } catch (err) {
       console.error(`[campaign-service] send failed for contact ${contact.id}:`, err.message);
+      deliveries.push({ contactId: contact.id, phone: contact.phone, delivered: false });
       await logEvent(contact.id, 'failed');
     }
   }));
+
+  // Reconcile the hold down to what actually delivered (and was actually
+  // billable — some deliveries may have landed in a free window). This is
+  // what writes the meta_usage_charges rows the invoice job later reads.
+  if (isWhatsApp && reservation) {
+    await whatsappBilling.settle(req.user.organizationId, reservation.id, {
+      deliveries, category: 'marketing',
+    }).catch((err) => console.error('[campaign-service] WhatsApp billing settle failed (non-fatal):', err.message));
+  }
 
   res.json(campaign);
 }));

@@ -9,6 +9,7 @@ import {
   MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown, Bell,
   Zap, FileText, Linkedin, PanelLeftClose, PanelLeftOpen, CreditCard,
   LayoutTemplate, Workflow, CalendarClock,
+  LayoutTemplate, Workflow,
 } from 'lucide-react';
 import { useUnreadCounts } from '@/lib/useUnreadCounts';
 
