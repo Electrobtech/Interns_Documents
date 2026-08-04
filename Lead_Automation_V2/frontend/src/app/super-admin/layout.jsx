@@ -2,12 +2,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { LayoutDashboard, Building2, ScrollText, LogOut, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, Building2, ScrollText, LogOut, ShieldAlert, Receipt, BarChart3 } from 'lucide-react';
 import { getSuperAdminToken, superAdminLogout } from '@/lib/superAdminAuth';
 
 const NAV = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/super-admin' },
   { label: 'Companies', icon: Building2, href: '/super-admin/companies' },
+  { label: 'Billing', icon: Receipt, href: '/super-admin/billing' },
+  { label: 'Analytics', icon: BarChart3, href: '/super-admin/analytics' },
   { label: 'Audit Log', icon: ScrollText, href: '/super-admin/audit-logs' },
 ];
 

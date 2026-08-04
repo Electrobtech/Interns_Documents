@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { pool, authenticate, requirePermission, logAudit } = require('@lead/shared');
 const importRoutes = require('./importRoutes');
+const followUpRoutes = require('./followUpRoutes');
 
 const app = express();
 app.use(cors());
@@ -17,6 +18,13 @@ app.get('/health', (_req, res) => res.json({ service: 'contact', ok: true }));
 // /contacts/import is not swallowed by :id, and it parses its own
 // multipart body via multer (express.json above ignores multipart).
 app.use(importRoutes);
+
+// Follow-ups: manual reminders (Follow-ups page, Contact/Lead detail views)
+// plus rows created automatically by the Automation Builder's Handoff node
+// (services/automation-service writes those directly to the shared
+// follow_ups table — see followUpRepository.js — so nothing here needs to
+// call out to automation-service).
+app.use(followUpRoutes);
 
 app.get('/contacts', async (req, res) => {
   // ?tag=vip lets the Bulk Campaign tab's "Contact Segment" dropdown

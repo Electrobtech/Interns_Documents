@@ -13,7 +13,7 @@
 // user.organizationId and will reject this one outright.)
 
 const { sign, verify } = require('./auth');
-const { withSystemAccess } = require('./db');
+const { withSystemAccess, pool } = require('./db');
 const { logAuditRaw } = require('./audit');
 
 function signSuperAdminToken({ adminId, email }) {
@@ -46,6 +46,45 @@ function requireSuperAdmin(req, res, next) {
   });
 }
 
+/**
+ * Enforces role-based access control (RBAC) for platform admins.
+ * Must be used on routes behind `requireSuperAdmin` where `req.admin` is populated.
+ *
+ * @param {...string} allowedRoles - Acceptable roles (e.g., 'super_admin', 'billing_admin')
+ */
+function requirePlatformRole(...allowedRoles) {
+  return async (req, res, next) => {
+    if (!req.admin || !req.admin.adminId) {
+      return res.status(401).json({ error: 'Super admin access required' });
+    }
+
+    try {
+      // Lazy-load admin role if it wasn't pre-loaded on req.admin
+      if (!req.admin.role) {
+        const { rows } = await pool.query(
+          `SELECT role, status FROM platform_admins WHERE id = $1 LIMIT 1`,
+          [req.admin.adminId]
+        );
+        if (!rows.length || rows[0].status !== 'active') {
+          return res.status(403).json({ error: 'Platform admin account is inactive' });
+        }
+        req.admin.role = rows[0].role;
+      }
+
+      if (!allowedRoles.includes(req.admin.role)) {
+        return res.status(403).json({
+          error: `Forbidden: Action requires one of the following roles: ${allowedRoles.join(', ')}`,
+        });
+      }
+
+      next();
+    } catch (err) {
+      console.error('[requirePlatformRole] error verifying role:', err.message);
+      res.status(500).json({ error: 'Internal server error during authorization' });
+    }
+  };
+}
+
 // Convenience wrapper around logAuditRaw for platform-level actions
 // (suspend a tenant, manual wallet top-up, toggle a feature flag).
 // organization_id is the *target* tenant being acted on, not the
@@ -56,4 +95,9 @@ function logSuperAdminAction(req, organizationId, action, meta = {}) {
   return logAuditRaw(organizationId, null, action, { ...meta, platformAdminId: req.admin?.adminId });
 }
 
-module.exports = { signSuperAdminToken, requireSuperAdmin, logSuperAdminAction };
+module.exports = {
+  signSuperAdminToken,
+  requireSuperAdmin,
+  requirePlatformRole,
+  logSuperAdminAction,
+};

@@ -200,6 +200,33 @@ CREATE TABLE IF NOT EXISTS conversations (
 CREATE INDEX IF NOT EXISTS ix_conversations_org_channel_external
   ON conversations (organization_id, channel_type, external_contact_id);
 
+-- Follow-ups: Moved after conversations table to satisfy FK dependency
+CREATE TABLE IF NOT EXISTS follow_ups (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  contact_id      UUID REFERENCES contacts(id) ON DELETE CASCADE,
+  lead_id         UUID REFERENCES leads(id) ON DELETE SET NULL,
+  conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
+  due_at          TIMESTAMPTZ NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'pending',   -- pending | completed | cancelled
+  priority        TEXT NOT NULL DEFAULT 'medium',    -- low | medium | high
+  disposition     TEXT,                              -- Interested | No Response | Lost | Converted | Callback Requested ...
+  assigned_to     UUID REFERENCES users(id) ON DELETE SET NULL,
+  notes           TEXT,
+  source          TEXT NOT NULL DEFAULT 'manual',     -- manual | automation
+  created_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+  completed_at    TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT follow_ups_status_check   CHECK (status   IN ('pending','completed','cancelled')),
+  CONSTRAINT follow_ups_priority_check CHECK (priority IN ('low','medium','high')),
+  CONSTRAINT follow_ups_source_check   CHECK (source   IN ('manual','automation'))
+);
+
+CREATE INDEX IF NOT EXISTS ix_follow_ups_org_due    ON follow_ups (organization_id, status, due_at);
+CREATE INDEX IF NOT EXISTS ix_follow_ups_contact     ON follow_ups (contact_id);
+CREATE INDEX IF NOT EXISTS ix_follow_ups_assigned_to ON follow_ups (assigned_to);
+
 CREATE TABLE IF NOT EXISTS messages (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
@@ -322,14 +349,6 @@ CREATE TABLE IF NOT EXISTS campaigns (
   scheduled_at    TIMESTAMPTZ,
   status          TEXT DEFAULT 'draft',    -- draft | scheduled | sent | needs_approval | rejected | queued | processing | completed | failed
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  -- Bulk/broadcast SMS & RCS support (020_bulk_campaigns.sql) — additive,
-  -- NULL/defaulted for the original one-shot campaigns.send flow.
-  -- flow_playbook_id is added further down via ALTER TABLE, once
-  -- `playbooks` itself exists (playbooks is created later in this file;
-  -- 020_bulk_campaigns.sql could add it as a plain REFERENCES column
-  -- because it ran as a later ALTER against an already-live database
-  -- where playbooks already existed — a fresh single-pass schema.sql
-  -- load doesn't have that luxury).
   recipient_source     TEXT,                 -- 'csv' | 'manual' | 'segment'
   send_mode            TEXT DEFAULT 'immediate', -- 'immediate' | 'scheduled'
   throttle_per_minute  INT DEFAULT 60,       -- SMS/min rate cap for this broadcast
@@ -352,24 +371,17 @@ CREATE TABLE IF NOT EXISTS campaign_logs (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Per-recipient bulk-broadcast tracking (020_bulk_campaigns.sql) — a
--- broadcast of thousands needs per-row retry/error visibility that the
--- aggregate campaign_logs event stream doesn't give.
 CREATE TABLE IF NOT EXISTS campaign_recipients (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   campaign_id     UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-  contact_id      UUID REFERENCES contacts(id) ON DELETE SET NULL, -- null when the row came from a raw CSV/manual entry with no matching contact
+  contact_id      UUID REFERENCES contacts(id) ON DELETE SET NULL,
   phone           TEXT NOT NULL,
   name            TEXT,
-  variables       JSONB NOT NULL DEFAULT '{}',  -- mapped CSV-column -> flow-parameter values for this recipient
+  variables       JSONB NOT NULL DEFAULT '{}',
   status          TEXT NOT NULL DEFAULT 'pending', -- pending | queued | sent | failed
   error           TEXT,
   attempts        INT NOT NULL DEFAULT 0,
-  job_id          TEXT,                          -- BullMQ job id, for cross-referencing worker logs
-  -- FIX: bulkCampaignWorker.js writes this on every send attempt (success or
-  -- failure) and campaign-service's GET /campaigns/:id/recipients selects it,
-  -- but it was missing here entirely — every job failed with
-  -- 'column "rendered_message" does not exist' and crashed the worker/process.
+  job_id          TEXT,
   rendered_message TEXT,
   sent_at         TIMESTAMPTZ,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -379,8 +391,6 @@ CREATE TABLE IF NOT EXISTS campaign_recipients (
 CREATE INDEX IF NOT EXISTS ix_campaign_recipients_campaign_status
   ON campaign_recipients (campaign_id, status);
 
--- Fast dedupe / lookup by phone within a single campaign (e.g. a CSV with a
--- repeated number, or checking "did this number already get queued").
 CREATE INDEX IF NOT EXISTS ix_campaign_recipients_campaign_phone
   ON campaign_recipients (campaign_id, phone);
 
@@ -478,90 +488,7 @@ CREATE TABLE IF NOT EXISTS google_oauth_configs (
   UNIQUE (organization_id)
 );
 
--- ---------- Email (Gmail) — see migrations/013_email_integration.sql and
--- services/email-service. Full-fidelity mailbox data lives in these
--- dedicated tables; a summarized copy is also written into the shared
--- conversations/messages tables above (channel_type='email') so a
--- connected mailbox shows up in the Unified Inbox like every other
--- channel. ----------
-CREATE TABLE IF NOT EXISTS email_accounts (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  provider          TEXT NOT NULL DEFAULT 'gmail',
-  email             TEXT NOT NULL,
-  access_token      TEXT,
-  refresh_token     TEXT,
-  token_expires_at  TIMESTAMPTZ,
-  scope             TEXT,
-  connected         BOOLEAN NOT NULL DEFAULT true,
-  connected_by      UUID REFERENCES users(id),
-  history_id        TEXT,
-  watch_expires_at  TIMESTAMPTZ,
-  last_synced_at    TIMESTAMPTZ,
-  last_sync_error   TEXT,
-  signature_html    TEXT,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (organization_id, email)
-);
-
-CREATE TABLE IF NOT EXISTS email_threads (
-  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  email_account_id   UUID REFERENCES email_accounts(id) ON DELETE CASCADE,
-  thread_id          TEXT NOT NULL,
-  conversation_id    UUID REFERENCES conversations(id) ON DELETE SET NULL,
-  subject            TEXT,
-  participants       TEXT[] DEFAULT '{}',
-  last_message_time  TIMESTAMPTZ,
-  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (email_account_id, thread_id)
-);
-
-CREATE TABLE IF NOT EXISTS email_messages (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  email_account_id  UUID REFERENCES email_accounts(id) ON DELETE CASCADE,
-  thread_id         UUID REFERENCES email_threads(id) ON DELETE CASCADE,
-  message_id        TEXT NOT NULL,
-  rfc822_message_id TEXT,
-  in_reply_to       TEXT,
-  from_email        TEXT,
-  to_email          TEXT[] DEFAULT '{}',
-  cc_email          TEXT[] DEFAULT '{}',
-  subject           TEXT,
-  body              TEXT,
-  html_body         TEXT,
-  snippet           TEXT,
-  direction         TEXT NOT NULL,
-  status            TEXT NOT NULL DEFAULT 'received',
-  label_ids         TEXT[] DEFAULT '{}',
-  has_attachments   BOOLEAN NOT NULL DEFAULT false,
-  received_at       TIMESTAMPTZ,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (email_account_id, message_id)
-);
-
-CREATE INDEX IF NOT EXISTS ix_email_messages_thread ON email_messages (thread_id, received_at);
-
-CREATE TABLE IF NOT EXISTS email_attachments (
-  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  message_id          UUID REFERENCES email_messages(id) ON DELETE CASCADE,
-  filename            TEXT,
-  mime_type           TEXT,
-  size                INT,
-  gmail_attachment_id TEXT,
-  url                 TEXT,
-  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS ix_email_attachments_message ON email_attachments (message_id);
-
--- ---------------------------------------------------------------------
--- Google Calendar integration (services/calendar-service) — see
--- infra/db/migrations/016_calendar_integration.sql for the full
--- rationale/comments; kept in sync here for fresh installs.
--- ---------------------------------------------------------------------
+-- ---------- Google Calendar Integration ----------
 CREATE TABLE IF NOT EXISTS calendar_accounts (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
@@ -581,9 +508,6 @@ CREATE TABLE IF NOT EXISTS calendar_accounts (
 CREATE TABLE IF NOT EXISTS calendar_events (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  -- NULL for events created while Google Calendar is not connected. Google is
-  -- an optional enhancement (real invites/reminders); the internal calendar
-  -- works without it, so this cannot be NOT NULL.
   google_event_id     TEXT,
   title               TEXT NOT NULL,
   description         TEXT,
@@ -605,24 +529,17 @@ CREATE INDEX IF NOT EXISTS ix_calendar_events_org_time ON calendar_events (organ
 CREATE INDEX IF NOT EXISTS ix_calendar_events_contact ON calendar_events (contact_id);
 CREATE INDEX IF NOT EXISTS ix_calendar_events_campaign ON calendar_events (campaign_id);
 
--- ---------- SMS (receive-only, via forwarder app) — see
--- migrations/015_sms_forwarder_devices.sql and services/integration-service
--- routes/smsWebhook.js + smsDevices.js. Each row is one Android phone
--- running a third-party forwarding app (e.g. SMS Forwarder) that POSTs
--- inbound texts to a per-device webhook URL; the token in that URL is the
--- only credential. Inbound texts land in the shared contacts/conversations/
--- messages tables above (channel_type='sms') like every other channel. ----------
+-- ---------- SMS Devices ----------
 CREATE TABLE IF NOT EXISTS sms_devices (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  label             TEXT NOT NULL,             -- e.g. "Front desk phone", "Rep #2 SIM"
-  phone_number      TEXT,                       -- optional, cosmetic — not used for delivery
-  webhook_token     TEXT NOT NULL UNIQUE,        -- 64-char random hex; the URL IS the credential
+  label             TEXT NOT NULL,
+  phone_number      TEXT,
+  webhook_token     TEXT NOT NULL UNIQUE,
   connected         BOOLEAN NOT NULL DEFAULT true,
   last_message_at   TIMESTAMPTZ,
   message_count     INTEGER NOT NULL DEFAULT 0,
-  last_raw_payload  JSONB,                       -- most recent payload received — critical for
-                                                   -- debugging field-name mismatches
+  last_raw_payload  JSONB,
   locked_at         TIMESTAMPTZ,
   locked_by         UUID REFERENCES users(id) ON DELETE SET NULL,
   created_by        UUID REFERENCES users(id),
@@ -755,11 +672,6 @@ CREATE INDEX IF NOT EXISTS idx_playbooks_org_status ON playbooks(organization_id
 CREATE INDEX IF NOT EXISTS idx_playbooks_org_type_status ON playbooks(organization_id, playbook_type, status);
 CREATE INDEX IF NOT EXISTS idx_playbooks_channels_gin ON playbooks USING GIN (channels);
 
--- campaigns.flow_playbook_id (020_bulk_campaigns.sql), added here rather
--- than inline on campaigns' own CREATE TABLE further up because playbooks
--- didn't exist yet at that point in a single-pass load. Type is TEXT, not
--- UUID, to match playbooks.id above (playbook ids are human-authored
--- slugs/flow-builder ids, not generated UUIDs).
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS flow_playbook_id TEXT REFERENCES playbooks(id);
 
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -961,23 +873,56 @@ CREATE TABLE IF NOT EXISTS linkedin_sync_logs (
 CREATE INDEX IF NOT EXISTS idx_linkedin_approvals_user_status ON linkedin_approvals (user_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_linkedin_sync_logs_user_created ON linkedin_sync_logs (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_linkedin_campaign_metrics_lookup ON linkedin_campaign_metrics (user_id, campaign_urn, date);
--- =====================================================================
--- Platform Super Admin: multi-tenant governance + wallet billing
--- (folded in from 022_super_admin_billing.sql so a fresh non-Docker
--- setup via scripts/setup-db.sh — which only loads schema.sql, not the
--- migrations/ folder — gets these tables too. See that migration file
--- for the full design rationale.)
--- =====================================================================
 
+-- ---------- Platform Super Admin & Billing ----------
 CREATE TABLE IF NOT EXISTS platform_admins (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name          TEXT NOT NULL,
   email         TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   status        TEXT NOT NULL DEFAULT 'active', -- active | disabled
+  role          TEXT NOT NULL DEFAULT 'super_admin'
+                  CHECK (role IN ('super_admin', 'billing_admin', 'support_lead')),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS platform_announcements (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title       TEXT NOT NULL,
+  message     TEXT NOT NULL,
+  severity    TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info', 'warning', 'critical')),
+  active      BOOLEAN NOT NULL DEFAULT true,
+  starts_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ends_at     TIMESTAMPTZ,
+  created_by  UUID REFERENCES platform_admins(id),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_platform_announcements_active_window
+  ON platform_announcements (active, starts_at, ends_at);
+
+CREATE TABLE IF NOT EXISTS platform_service_status (
+  service_key TEXT PRIMARY KEY CHECK (service_key IN (
+                'meta_whatsapp', 'meta_instagram', 'meta_messenger',
+                'twilio_sms', 'llm_provider', 'razorpay'
+              )),
+  label       TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'operational'
+                CHECK (status IN ('operational', 'degraded', 'outage')),
+  note        TEXT,
+  updated_by  UUID REFERENCES platform_admins(id),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO platform_service_status (service_key, label) VALUES
+  ('meta_whatsapp',   'WhatsApp Cloud API'),
+  ('meta_instagram',  'Instagram Messaging API'),
+  ('meta_messenger',  'Messenger Platform API'),
+  ('twilio_sms',      'Twilio (SMS/RCS)'),
+  ('llm_provider',    'LLM Provider'),
+  ('razorpay',        'Razorpay')
+ON CONFLICT (service_key) DO NOTHING;
 -- ---------- Channel subscription billing (see infra/db/migrations/025_channel_subscription_billing.sql for full rationale) ----------
 
 -- Our own price catalogue per channel — platform-admin managed, not per-org.
@@ -1186,24 +1131,20 @@ CREATE TABLE IF NOT EXISTS wallet_transactions (
 
 CREATE INDEX IF NOT EXISTS idx_wallet_tx_org_created ON wallet_transactions (organization_id, created_at DESC);
 
--- Generic payment-gateway ledger (billing-service). Covers wallet top-ups
--- (funds campaigns/broadcasts via wallet_transactions), product-platform
--- checkout (ecommerce_orders), and staff-recorded walk-in sales — cash or
--- a Razorpay Payment Link/QR — all in one place so there's a single
--- reconciliation view instead of one per gateway flow.
 CREATE TABLE IF NOT EXISTS payments (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id     UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  purpose             TEXT NOT NULL CHECK (purpose IN ('WALLET_RECHARGE', 'ECOMMERCE_ORDER', 'WALKIN_SALE', 'INVOICE_SETTLEMENT')),
-  reference_id        UUID,                    -- ecommerce_orders.id for ECOMMERCE_ORDER / WALKIN_SALE
+
+  purpose      TEXT NOT NULL CHECK (purpose IN ('WALLET_RECHARGE', 'ECOMMERCE_ORDER', 'WALKIN_SALE', 'SUBSCRIPTION_CHARGE', 'INVOICE_SETTLEMENT')),
+  reference_id UUID, -- ecommerce_orders.id for ECOMMERCE_ORDER / WALKIN_SALE
   contact_id          UUID REFERENCES contacts(id),
   amount              NUMERIC(14,2) NOT NULL CHECK (amount > 0),
   currency            TEXT NOT NULL DEFAULT 'INR',
-  method              TEXT,                    -- razorpay | cash | manual
+  method              TEXT,
   status              TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'pending', 'paid', 'failed', 'refunded')),
   gateway             TEXT DEFAULT 'razorpay',
-  gateway_order_id    TEXT,                    -- Razorpay order_id or payment_link_id
-  gateway_payment_id  TEXT,                    -- Razorpay payment_id, set once captured
+  gateway_order_id    TEXT,
+  gateway_payment_id  TEXT,
   gateway_signature   TEXT,
   notes               JSONB,
   created_by_user     UUID REFERENCES users(id),
@@ -1213,10 +1154,72 @@ CREATE TABLE IF NOT EXISTS payments (
 
 CREATE INDEX IF NOT EXISTS idx_payments_org_created ON payments (organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payments_gateway_order_id ON payments (gateway_order_id);
--- Partial unique index (not a plain UNIQUE constraint) because most rows
--- have gateway_payment_id = NULL until captured, and NULLs must not
--- collide with each other under a normal UNIQUE.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_gateway_payment_id ON payments (gateway_payment_id) WHERE gateway_payment_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  plan                  TEXT,
+  status                TEXT DEFAULT 'active' CHECK (status IN ('trialing', 'active', 'past_due', 'canceled')),
+  billing_cycle         TEXT NOT NULL DEFAULT 'monthly' CHECK (billing_cycle IN ('monthly', 'yearly')),
+  amount                NUMERIC(12,2) NOT NULL DEFAULT 0,
+  currency              TEXT NOT NULL DEFAULT 'INR',
+  auto_billing          BOOLEAN NOT NULL DEFAULT true,
+  current_period_start  DATE NOT NULL DEFAULT current_date,
+  current_period_end    DATE NOT NULL DEFAULT (current_date + INTERVAL '1 month'),
+  cancel_at_period_end  BOOLEAN NOT NULL DEFAULT false,
+  canceled_at           TIMESTAMPTZ,
+  updated_by_admin      UUID REFERENCES platform_admins(id),
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions (status);
+
+CREATE TABLE IF NOT EXISTS invoices (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  invoice_number      TEXT UNIQUE,
+  subscription_id     UUID REFERENCES subscriptions(id),
+  payment_id          UUID REFERENCES payments(id),
+  seller_gstin        TEXT,
+  seller_state_code   TEXT,
+  buyer_legal_name    TEXT,
+  buyer_gstin         TEXT,
+  buyer_state         TEXT,
+  buyer_state_code    TEXT,
+  place_of_supply     TEXT,
+  hsn_sac_code        TEXT DEFAULT '998314',
+  line_items          JSONB NOT NULL DEFAULT '[]'::jsonb,
+  subtotal            NUMERIC(12,2) NOT NULL DEFAULT 0,
+  cgst_rate           NUMERIC(5,2) NOT NULL DEFAULT 0,
+  cgst_amount         NUMERIC(12,2) NOT NULL DEFAULT 0,
+  sgst_rate           NUMERIC(5,2) NOT NULL DEFAULT 0,
+  sgst_amount         NUMERIC(12,2) NOT NULL DEFAULT 0,
+  igst_rate           NUMERIC(5,2) NOT NULL DEFAULT 0,
+  igst_amount         NUMERIC(12,2) NOT NULL DEFAULT 0,
+  total_tax           NUMERIC(12,2) NOT NULL DEFAULT 0,
+  amount              NUMERIC(12,2) NOT NULL DEFAULT 0,
+  currency            TEXT NOT NULL DEFAULT 'INR',
+  status              TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'issued', 'paid', 'void')),
+  due_date            DATE,
+  issued_at           TIMESTAMPTZ,
+  pdf_url             TEXT,
+  pdf_generated_at    TIMESTAMPTZ,
+  generated_by_admin  UUID REFERENCES platform_admins(id),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoices_org_created ON invoices (organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_invoices_subscription ON invoices (subscription_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_payment ON invoices (payment_id);
+
+CREATE TABLE IF NOT EXISTS invoice_counters (
+  financial_year TEXT PRIMARY KEY,
+  last_number    INT NOT NULL DEFAULT 0
+);
 
 CREATE TABLE IF NOT EXISTS feature_flags (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1242,45 +1245,65 @@ CREATE TABLE IF NOT EXISTS attachments (
 
 CREATE INDEX IF NOT EXISTS idx_attachments_owner ON attachments (organization_id, owner_type, owner_id);
 
+-- ---------- Channel Quotas ----------
+CREATE TABLE IF NOT EXISTS channel_quotas (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id         UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  channel                 TEXT NOT NULL CHECK (channel IN (
+                            'whatsapp', 'instagram', 'messenger', 'linkedin',
+                            'sms_rcs', 'webchat', 'voice', 'email'
+                          )),
+  enabled                 BOOLEAN NOT NULL DEFAULT true,
+  monthly_quota           INT,
+  quota_used              INT NOT NULL DEFAULT 0,
+  quota_period_start      DATE NOT NULL DEFAULT date_trunc('month', now())::date,
+  low_quota_threshold_pct INT NOT NULL DEFAULT 80 CHECK (low_quota_threshold_pct BETWEEN 1 AND 100),
+  disabled_reason         TEXT,
+  updated_by_admin        UUID REFERENCES platform_admins(id),
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, channel)
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_quotas_org ON channel_quotas (organization_id);
+
+CREATE OR REPLACE FUNCTION create_channel_quotas_for_new_org() RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO channel_quotas (organization_id, channel)
+  SELECT NEW.id, c
+  FROM unnest(ARRAY['whatsapp','instagram','messenger','linkedin','sms_rcs','webchat','voice','email']) AS c
+  ON CONFLICT (organization_id, channel) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_create_channel_quotas_for_new_org ON organizations;
+CREATE TRIGGER trg_create_channel_quotas_for_new_org
+  AFTER INSERT ON organizations
+  FOR EACH ROW EXECUTE FUNCTION create_channel_quotas_for_new_org();
+
 -- ---------- Products / Offers ----------
--- Backs services/campaign-service/src/products.js. This table (and its
--- migrations/023_products.sql source) was never folded into schema.sql, so
--- /products 500'd on every call against a fresh database — this block is
--- that migration, verbatim, applied here instead.
 CREATE TABLE IF NOT EXISTS products (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-
   name              TEXT NOT NULL,
-  category          TEXT,                       -- e.g. saas, service, course, physical
-  status            TEXT NOT NULL DEFAULT 'active',  -- active | draft | archived
-  tagline           TEXT,                       -- one-line positioning
+  category          TEXT,
+  status            TEXT NOT NULL DEFAULT 'active',
+  tagline           TEXT,
   description       TEXT,
-
-  -- Pricing kept as text + optional numeric: real offers are often "from
-  -- Rs. 4,999/seat/mo" or "custom", which a strict numeric column cannot hold,
-  -- but a numeric is still wanted for sorting/analytics when one exists.
   price_display     TEXT,
   price_amount      NUMERIC(12,2),
   currency          TEXT DEFAULT 'INR',
-  billing_period    TEXT,                       -- monthly | annual | one_time | usage
-
-  -- The marketing substance. Arrays rather than prose so the agent can use
-  -- them individually (one value prop per ad, one objection per FAQ answer).
+  billing_period    TEXT,
   value_props       TEXT[] NOT NULL DEFAULT '{}',
   target_segments   TEXT[] NOT NULL DEFAULT '{}',
   objections        TEXT[] NOT NULL DEFAULT '{}',
   differentiators   TEXT[] NOT NULL DEFAULT '{}',
   keywords          TEXT[] NOT NULL DEFAULT '{}',
-
-  -- Compliance/tone guardrails the agent must respect when writing for this
-  -- offer (e.g. "never promise guaranteed placement").
   tone              TEXT,
   claims_to_avoid   TEXT[] NOT NULL DEFAULT '{}',
-
   landing_url       TEXT,
-  is_primary        BOOLEAN NOT NULL DEFAULT false,  -- the default offer for new campaigns
-
+  is_primary        BOOLEAN NOT NULL DEFAULT false,
   created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -1289,49 +1312,30 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE INDEX IF NOT EXISTS ix_products_org        ON products (organization_id);
 CREATE INDEX IF NOT EXISTS ix_products_org_status ON products (organization_id, status);
 
--- At most one primary offer per organization. Partial unique index rather
--- than a constraint so archiving/unsetting stays a plain UPDATE.
 CREATE UNIQUE INDEX IF NOT EXISTS ux_products_one_primary
   ON products (organization_id) WHERE is_primary;
 
--- Campaigns and calendar events can point at the offer they promote, so
--- performance is attributable per product. Nullable: plenty of sends are not
--- offer-specific.
 ALTER TABLE campaigns       ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
 ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS ix_campaigns_product ON campaigns (product_id) WHERE product_id IS NOT NULL;
 
--- ---------- Message Templates (Template Creation module) ----------
--- Backs services/campaign-service/src/templates.js and the sidebar's
--- Automation > Templates screen (frontend/src/app/app/campaigns/templates).
--- A local template library with its own review/approval workflow — distinct
--- from integration-service's POST /whatsapp/send-template, which sends a
--- message using a template name already approved on Meta's side. The two
--- meet at send time: campaign-service resolves a campaigns.template_id to
--- this table's `name` + `header`/`body`/`buttons` and hands that name to
--- integration-service's send-template call.
+-- ---------- Message Templates ----------
 CREATE TABLE IF NOT EXISTS message_templates (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-
-  name              TEXT NOT NULL,               -- auto-slugified, e.g. college_broadcast_17_6_26
-  category          TEXT NOT NULL DEFAULT 'MARKETING',   -- MARKETING | UTILITY | AUTHENTICATION
+  name              TEXT NOT NULL,
+  category          TEXT NOT NULL DEFAULT 'MARKETING',
   language          TEXT NOT NULL DEFAULT 'en_US',
-  channels          TEXT[] NOT NULL DEFAULT '{WHATSAPP}', -- WHATSAPP | RCS | SMS | EMAIL (multi-tag)
-  status            TEXT NOT NULL DEFAULT 'PENDING',      -- PENDING | APPROVED | REJECTED
-
-  header_type       TEXT NOT NULL DEFAULT 'NONE',   -- NONE | TEXT | IMAGE | VIDEO | DOCUMENT
+  channels          TEXT[] NOT NULL DEFAULT '{WHATSAPP}',
+  status            TEXT NOT NULL DEFAULT 'PENDING',
+  header_type       TEXT NOT NULL DEFAULT 'NONE',
   header_text       TEXT,
   header_media_url  TEXT,
-
   body              TEXT NOT NULL DEFAULT '',
-  body_variables    JSONB NOT NULL DEFAULT '{}',    -- {"1": "example value", "2": "..."}
-  footer            TEXT,                            -- max 60 chars, enforced app-side
-
-  -- Array of { type: 'QUICK_REPLY'|'PHONE_NUMBER'|'URL', text, value? }
+  body_variables    JSONB NOT NULL DEFAULT '{}',
+  footer            TEXT,
   buttons           JSONB NOT NULL DEFAULT '[]',
-
   created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -1341,11 +1345,6 @@ CREATE INDEX IF NOT EXISTS ix_message_templates_org         ON message_templates
 CREATE INDEX IF NOT EXISTS ix_message_templates_org_status  ON message_templates (organization_id, status);
 CREATE INDEX IF NOT EXISTS ix_message_templates_channels    ON message_templates USING GIN (channels);
 
--- campaigns.template_id, added here rather than inline on campaigns' own
--- CREATE TABLE further up because message_templates didn't exist yet at
--- that point in a single-pass load (same reasoning as flow_playbook_id
--- above). Nullable — every non-WhatsApp broadcast, and any WhatsApp one
--- written as free text, still just uses campaigns.message_body directly.
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS template_id UUID REFERENCES message_templates(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS ix_campaigns_template ON campaigns (template_id) WHERE template_id IS NOT NULL;
 

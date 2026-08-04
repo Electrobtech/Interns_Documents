@@ -6,6 +6,7 @@ const playbookRepository = require('../repositories/playbookRepository');
 const conversationSessionRepository = require('../repositories/conversationSessionRepository');
 const conversationLinkRepository = require('../repositories/conversationLinkRepository');
 const messageRepository = require('../repositories/messageRepository');
+const followUpRepository = require('../repositories/followUpRepository');
 const complianceGuard = require('../services/complianceGuard');
 const { sendWhatsAppMessage } = require('../services/whatsappSender');
 const { sendInstagramMessage } = require('../services/instagramSender');
@@ -320,6 +321,29 @@ async function processInboundEvent({ clientId, channel, contactExternalId, inter
         body: `Conversation handed off to ${handoffTemplate.team || 'a human agent'}.`,
         metadata: handoffTemplate,
       });
+
+      // Handoff node's "auto-create follow-up" option (FlowBuilder.jsx
+      // config panel / flow-schema.md `data.followUp`). Fire-and-forget,
+      // same reasoning as the message sends above — this must never slow
+      // down or fail the webhook ack, and a follow-up row missing on a
+      // rare DB hiccup is far less costly than blocking Meta's ack.
+      const followUp = handoffTemplate.followUp;
+      if (followUp?.enabled) {
+        followUpRepository
+          .createFromHandoff({
+            organizationId: clientId,
+            contactId: conversation.contact_id,
+            conversationId: conversation.id,
+            team: handoffTemplate.team,
+            dueInHours: followUp.dueInHours,
+            priority: followUp.priority,
+            assignedTo: followUp.assignTo,
+            channel,
+          })
+          .catch((err) => {
+            console.error('[webhookController] failed to auto-create follow-up on handoff:', err.message);
+          });
+      }
     }
   }
 
@@ -382,7 +406,7 @@ router.post('/automation/webhooks/:clientId/:channel', async (req, res) => {
  */
 function buildSendTemplate(node, channel) {
   if (node.type === 'handoff') {
-    return { type: 'handoff', team: node.data.team };
+    return { type: 'handoff', team: node.data.team, followUp: node.data.followUp || null };
   }
  
   const { messageType, body, buttons, list, document, header, footer } = node.data;

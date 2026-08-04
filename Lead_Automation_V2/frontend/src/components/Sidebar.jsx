@@ -8,6 +8,7 @@ import {
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
   MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown, Bell,
   Zap, FileText, Linkedin, PanelLeftClose, PanelLeftOpen, CreditCard,
+  LayoutTemplate, Workflow, CalendarClock,
   LayoutTemplate, Workflow,
 } from 'lucide-react';
 import { useUnreadCounts } from '@/lib/useUnreadCounts';
@@ -23,6 +24,7 @@ const PLATFORM = [
   { label: 'Dashboard',               icon: LayoutDashboard, href: '/app'                  },
   { label: 'Unified Inbox',           icon: Inbox,           href: '/app/inbox'              },
   { label: 'Contacts & Leads',        icon: Users,           href: '/app/contacts'           },
+  { label: 'Follow-ups',              icon: CalendarClock,   href: '/app/follow-ups'         },
   { label: 'AI Agents & Automation',  icon: Bot,             href: '/app/ai-agents'          },
   { label: 'Campaigns & Broadcasts',  icon: Megaphone,       href: '/app/campaigns'          },
   { label: 'Ecommerce & Revenue',    icon: ShoppingCart,    href: '/app/ecommerce'          },

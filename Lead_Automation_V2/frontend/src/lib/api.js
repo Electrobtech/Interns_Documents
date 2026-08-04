@@ -19,7 +19,11 @@ export async function api(path, { method = 'GET', body, token } = {}) {
     err.data = data;
     throw err;
   }
-  return res.json();
+  // 204 No Content (e.g. DELETE routes) has no body — res.json() on an
+  // empty body throws a SyntaxError, so short-circuit before parsing.
+  if (res.status === 204) return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 // Multipart/form-data variant of `api()`, for file uploads (e.g. the

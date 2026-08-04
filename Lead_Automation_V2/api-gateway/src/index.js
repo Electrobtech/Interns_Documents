@@ -107,6 +107,7 @@ const routes = [
   { path: '/socket.io',           target: INBOX, ws: true }, // live message delivery — see services/inbox-service/src/realtime.js
   { path: '/contacts',            target: CONTACT },
   { path: '/leads',               target: CONTACT },
+  { path: '/follow-ups',          target: CONTACT }, // Follow-ups feature: services/contact-service/src/followUpRoutes.js
   { path: '/campaigns',           target: CAMPAIGN },
   // Message Templates (Template Creation module) — owned by campaign-service
   // (src/templates.js + src/templateMedia.js), not yet in this route table.
