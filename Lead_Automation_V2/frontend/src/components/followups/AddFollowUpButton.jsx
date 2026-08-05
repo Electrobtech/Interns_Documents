@@ -5,7 +5,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { DateTimePicker } from '@/components/calendar/DateTimePicker';
 import { useCreateFollowUp, useTeamMembers } from '@/lib/queries/followUps';
 import { useContacts } from '@/lib/queries/crm';
 
@@ -16,6 +15,15 @@ const PRIORITIES = ['low', 'medium', 'high'];
 // combo read as near-invisible pale lavender once it sat on top of the
 // page bleeding through an unstyled dialog panel (see DialogContent below).
 const LABEL = 'block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5';
+
+// `<input type="datetime-local">`'s `min` attribute wants
+// "YYYY-MM-DDTHH:mm" in *local* time (no timezone suffix) — this formats
+// "now" into that shape so the browser's own native picker refuses past
+// times on its own, with no custom calendar/matcher logic to get wrong.
+function toDatetimeLocalValue(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 /**
  * "Add Follow-up" row action for the Contacts and Leads tables
@@ -65,6 +73,11 @@ function AddFollowUpDialog({ contact, onClose }) {
   const [assignedTo, setAssignedTo] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
+
+  // Computed once when the dialog mounts, not on every render — otherwise
+  // `min` would keep creeping forward as the clock ticks and could end up
+  // just past whatever the user already picked.
+  const [minWhen] = useState(() => toDatetimeLocalValue(new Date()));
 
   async function submit() {
     if (!contactId) { setError('Pick a lead/contact first.'); return; }
@@ -122,8 +135,13 @@ function AddFollowUpDialog({ contact, onClose }) {
 
           <div>
             <label className={LABEL}>Follow-up date & time</label>
-            <DateTimePicker value={when} onChange={setWhen} minDate={new Date()}
-              className="w-full h-[42px] rounded-xl border-slate-300 hover:border-slate-400" />
+            <input
+              type="datetime-local"
+              value={when}
+              min={minWhen}
+              onChange={(e) => setWhen(e.target.value)}
+              className="input-premium h-[42px] border-slate-300"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">

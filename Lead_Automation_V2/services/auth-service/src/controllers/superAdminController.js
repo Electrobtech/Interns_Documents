@@ -408,13 +408,18 @@ router.get('/super-admin/billing/summary', async (_req, res) => {
 // directly the same way audit-logs below does, rather than adding a
 // second, near-duplicate model function.
 router.get('/super-admin/payments', async (req, res) => {
-  const { page = 1, pageSize = 50, status, purpose } = req.query;
+  const { page = 1, pageSize = 50, status, purpose, startDate, endDate } = req.query;
   const limit = Math.max(1, Math.min(Number(pageSize) || 50, 200));
   const offset = (Math.max(1, Number(page)) - 1) * limit;
   const conditions = [];
   const params = [];
   if (status) { params.push(status); conditions.push(`p.status = $${params.length}`); }
   if (purpose) { params.push(purpose); conditions.push(`p.purpose = $${params.length}`); }
+  // startDate/endDate come in as plain 'YYYY-MM-DD' from the date inputs.
+  // Cast to ::date so the comparison is inclusive of the whole end day
+  // regardless of the row's time-of-day component (created_at is TIMESTAMPTZ).
+  if (startDate) { params.push(startDate); conditions.push(`p.created_at::date >= $${params.length}::date`); }
+  if (endDate) { params.push(endDate); conditions.push(`p.created_at::date <= $${params.length}::date`); }
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const countRes = await pool.query(`SELECT COUNT(*)::int AS total FROM payments p ${where}`, params);
