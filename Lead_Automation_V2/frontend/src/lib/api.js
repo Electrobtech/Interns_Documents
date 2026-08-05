@@ -19,8 +19,9 @@ export async function api(path, { method = 'GET', body, token } = {}) {
     err.data = data;
     throw err;
   }
-  // 204 No Content (e.g. DELETE routes) has no body — res.json() on an
-  // empty body throws a SyntaxError, so short-circuit before parsing.
+  // 204 (DELETE endpoints) and any other empty body has nothing for .json()
+  // to parse — it throws on an empty stream rather than returning null, which
+  // would surface a successful delete as a failed mutation in the UI.
   if (res.status === 204) return null;
   const text = await res.text();
   return text ? JSON.parse(text) : null;

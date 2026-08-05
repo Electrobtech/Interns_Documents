@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard, Inbox, Users, Bot, Megaphone, ShoppingCart,
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
@@ -24,7 +24,18 @@ const PLATFORM = [
   { label: 'Unified Inbox',           icon: Inbox,           href: '/app/inbox'              },
   { label: 'Contacts & Leads',        icon: Users,           href: '/app/contacts'           },
   { label: 'Follow-ups',              icon: CalendarClock,   href: '/app/follow-ups'         },
-  { label: 'AI Agents & Automation',  icon: Bot,             href: '/app/ai-agents'          },
+  { 
+    label: 'AI Agents & Automation',  
+    icon: Bot,             
+    href: '/app/ai-agents',
+    expandable: true,
+    sub: [
+      ['AI Command Center', '/app/ai-agents'],
+      ['Marketing Agent', '/app/ai-agents?agent=marketing'],
+      ['Sales Agent', '/app/ai-agents?agent=sales'],
+      ['Support Agent', '/app/ai-agents?agent=support']
+    ]
+  },
   { label: 'Campaigns & Broadcasts',  icon: Megaphone,       href: '/app/campaigns'          },
   { label: 'Ecommerce & Revenue',    icon: ShoppingCart,    href: '/app/ecommerce'          },
   { label: 'Reviews & Social',        icon: Star,            href: '/app/reviews'            },
@@ -121,7 +132,9 @@ export default function Sidebar() {
       <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
         <p className="px-3 pt-1 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Platform</p>
         {PLATFORM.map((item) => (
-          <NavItem key={item.href} item={item} isActive={isActive(item.href)} collapsed={collapsed} />
+          item.expandable
+            ? <ExpandableNavItem key={item.href} item={item} pathname={pathname} isActive={isActive(item.href)} collapsed={collapsed} />
+            : <NavItem key={item.href} item={item} isActive={isActive(item.href)} collapsed={collapsed} />
         ))}
         <p className="px-3 pt-5 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Channels</p>
         {CHANNELS.map((item) =>
@@ -181,40 +194,57 @@ function UnreadBadge({ count }) {
   );
 }
 
-function ExpandableNavItem({ item, pathname, isActive, unread = 0 }) {
+// Same visual language as NavItem, plus a Conversations/Automation sub-menu
+// for channels that have a Playbook Studio flow builder.
+function ExpandableNavItem({ item, pathname, isActive, unread = 0, collapsed = false }) {
   const { label, icon: Icon, href, sub } = item;
   const subItems = sub || [['Conversations', href]];
+  const searchParams = useSearchParams();
+  const agentParam = searchParams.get('agent');
   const open = (pathname.startsWith(href) && !pathname.startsWith(href + '/automation'))
-    || subItems.some(([, h]) => pathname === h || pathname.startsWith(h + '/'));
+    || subItems.some(([, h]) => {
+      const baseH = h.split('?')[0];
+      return pathname === baseH || pathname.startsWith(baseH + '/');
+    });
   return (
     <div>
       <Link
         href={href}
         className={`group relative flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150
+          ${collapsed ? 'justify-center px-0 py-2.5' : ''}
           ${isActive
             ? 'bg-gradient-to-r from-violet-50 to-rose-50/60 text-violet-700 font-semibold'
             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}
       >
-        {isActive && (
+        {isActive && !collapsed && (
           <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-gradient-to-b from-violet-500 to-rose-500" />
         )}
         <Icon size={16} className={isActive ? 'text-violet-600' : 'text-slate-400 group-hover:text-slate-600 transition-colors'} />
-        <span className="truncate">{label}</span>
-        {unread > 0 && <UnreadBadge count={unread} />}
-        <ChevronDown size={14} className={`${unread > 0 ? '' : 'ml-auto'} transition-transform ${open ? 'rotate-180' : ''} ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+        {!collapsed && <span className="truncate">{label}</span>}
+        {!collapsed && unread > 0 && <UnreadBadge count={unread} />}
+        {!collapsed && <ChevronDown size={14} className={`${unread > 0 ? '' : 'ml-auto'} transition-transform ${open ? 'rotate-180' : ''} ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />}
       </Link>
-      {open && (
+      {open && !collapsed && (
         <div className="ml-6 mb-1 border-l border-slate-200 pl-3">
-          {subItems.map(([subLabel, subHref]) => (
-            <Link
-              key={subHref}
-              href={subHref}
-              className={`block px-2 py-1.5 rounded-lg text-[13px] mb-0.5 transition-colors
-                ${pathname === subHref ? 'text-violet-700 font-semibold bg-violet-50' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
-            >
-              {subLabel}
-            </Link>
-          ))}
+          {subItems.map(([subLabel, subHref]) => {
+            let isSubActive = false;
+            if (subHref.includes('?agent=')) {
+              const paramValue = subHref.split('?agent=')[1];
+              isSubActive = agentParam === paramValue;
+            } else {
+              isSubActive = pathname === subHref && !agentParam;
+            }
+            return (
+              <Link
+                key={subHref}
+                href={subHref}
+                className={`block px-2 py-1.5 rounded-lg text-[13px] mb-0.5 transition-colors
+                  ${isSubActive ? 'text-violet-700 font-semibold bg-violet-50' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
+              >
+                {subLabel}
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
