@@ -1,13 +1,18 @@
 'use client';
 import { Check, Tag } from 'lucide-react';
 
+// `amount` (₹, numeric) drives the Razorpay charge run right after the
+// company is created — see RegistrationWizard.jsx's submit(). Must match
+// PAID_PLAN_PRICES in services/auth-service/src/controllers/companyController.js
+// and PLAN_PRICES in services/billing-service/src/routes/subscriptionPlan.js.
+// Enterprise has no `amount` on purpose — it's sales-quoted, not charged here.
 const PLANS = [
   {
-    id: 'starter', name: 'Starter', price: '₹1,999', period: '/mo',
+    id: 'starter', name: 'Starter', price: '₹1,999', period: '/mo', amount: 1999,
     features: ['1 channel', 'Up to 3 team seats', 'Unified inbox', 'Basic analytics'],
   },
   {
-    id: 'professional', name: 'Professional', price: '₹5,999', period: '/mo', highlight: true,
+    id: 'professional', name: 'Professional', price: '₹5,999', period: '/mo', amount: 5999, highlight: true,
     features: ['Up to 5 channels', 'Up to 15 team seats', 'Campaigns & automation', 'Advanced analytics', 'Priority support'],
   },
   {
@@ -15,6 +20,8 @@ const PLANS = [
     features: ['Unlimited channels', 'Unlimited seats', 'Custom AI agents', 'Dedicated success manager', 'SLA & SSO'],
   },
 ];
+
+export { PLANS };
 
 export default function Step6Subscription({ value, errors, onChange }) {
   const set = (patch) => onChange({ ...value, ...patch });
@@ -59,6 +66,17 @@ export default function Step6Subscription({ value, errors, onChange }) {
         })}
       </div>
       {errors.plan && <p className="text-[11px] text-red-500">{errors.plan}</p>}
+
+      {value.plan && value.plan !== 'enterprise' && (
+        <p className="text-[11px] text-slate-400">
+          You'll be asked to pay for the {PLANS.find((p) => p.id === value.plan)?.name} plan via Razorpay right after your company is created.
+        </p>
+      )}
+      {value.plan === 'enterprise' && (
+        <p className="text-[11px] text-slate-400">
+          Enterprise pricing is custom — our sales team will reach out to set up billing after your company is created.
+        </p>
+      )}
 
       <div className="max-w-xs">
         <label className="block text-xs font-medium text-slate-600 mb-1.5">Coupon Code</label>

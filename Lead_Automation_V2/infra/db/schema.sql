@@ -904,6 +904,165 @@ INSERT INTO platform_service_status (service_key, label) VALUES
   ('razorpay',        'Razorpay')
 ON CONFLICT (service_key) DO NOTHING;
 
+-- ---------- Channel subscription billing ----------
+
+-- Our own price catalogue per channel — platform-admin managed, not per-org.
+CREATE TABLE IF NOT EXISTS channel_plans (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  channel_type    TEXT NOT NULL CHECK (channel_type IN
+                    ('whatsapp','messenger','instagram','linkedin','email','sms')),
+  our_fee_amount  NUMERIC(14,2) NOT NULL CHECK (our_fee_amount >= 0),
+  currency        TEXT NOT NULL DEFAULT 'INR',
+  billing_period  TEXT NOT NULL DEFAULT 'monthly' CHECK (billing_period IN ('monthly','annual')),
+  active          BOOLEAN NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_channel_plans_active_channel_period
+  ON channel_plans (channel_type, billing_period) WHERE active;
+
+-- Which channels an org is subscribed to, at what (snapshotted) price.
+CREATE TABLE IF NOT EXISTS organization_channel_subscriptions (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  channel_type    TEXT NOT NULL CHECK (channel_type IN
+                    ('whatsapp','messenger','instagram','linkedin','email','sms')),
+  channel_plan_id UUID REFERENCES channel_plans(id),
+  price_amount    NUMERIC(14,2) NOT NULL CHECK (price_amount >= 0),
+  currency        TEXT NOT NULL DEFAULT 'INR',
+  billing_period  TEXT NOT NULL DEFAULT 'monthly' CHECK (billing_period IN ('monthly','annual')),
+  status          TEXT NOT NULL DEFAULT 'pending_payment' CHECK (status IN ('pending_payment','active','paused','cancelled')),
+  trial_ends_at   TIMESTAMPTZ,
+  started_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  cancelled_at    TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_org_channel_sub_live
+  ON organization_channel_subscriptions (organization_id, channel_type)
+  WHERE status IN ('pending_payment','active','paused');
+CREATE INDEX IF NOT EXISTS idx_org_channel_sub_org
+  ON organization_channel_subscriptions (organization_id);
+
+-- Meta's rate card (per channel_type/category/recipient country)
+CREATE TABLE IF NOT EXISTS meta_rate_cards (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  channel_type    TEXT NOT NULL CHECK (channel_type IN ('whatsapp','messenger','instagram')),
+  category        TEXT NOT NULL CHECK (category IN ('marketing','utility','authentication','service')),
+  country_code    TEXT NOT NULL DEFAULT '*',
+  meta_rate       NUMERIC(14,4) NOT NULL CHECK (meta_rate >= 0),
+  currency        TEXT NOT NULL DEFAULT 'INR',
+  gst_percent     NUMERIC(5,2) NOT NULL DEFAULT 18.00,
+  bsp_markup      NUMERIC(14,4) NOT NULL DEFAULT 0,
+  effective_from  DATE NOT NULL DEFAULT CURRENT_DATE,
+  active          BOOLEAN NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_meta_rate_cards_lookup
+  ON meta_rate_cards (channel_type, category, country_code, effective_from DESC) WHERE active;
+
+-- SMS rate card
+CREATE TABLE IF NOT EXISTS sms_rate_cards (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  route_type      TEXT NOT NULL CHECK (route_type IN ('promotional','transactional','otp')),
+  per_sms_rate    NUMERIC(14,4) NOT NULL CHECK (per_sms_rate >= 0),
+  currency        TEXT NOT NULL DEFAULT 'INR',
+  gst_percent     NUMERIC(5,2) NOT NULL DEFAULT 18.00,
+  effective_from  DATE NOT NULL DEFAULT CURRENT_DATE,
+  active          BOOLEAN NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sms_rate_cards_lookup
+  ON sms_rate_cards (route_type, effective_from DESC) WHERE active;
+
+-- The % markup we add on top of Meta's/SMS's actual cost.
+CREATE TABLE IF NOT EXISTS billing_markup_config (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  markup_percent    NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (markup_percent >= 0),
+  updated_by_admin  UUID REFERENCES platform_admins(id),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_billing_markup_default
+  ON billing_markup_config ((organization_id IS NULL)) WHERE organization_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ux_billing_markup_org
+  ON billing_markup_config (organization_id) WHERE organization_id IS NOT NULL;
+
+-- WhatsApp campaign billing ledger
+CREATE TABLE IF NOT EXISTS whatsapp_billing_ledger (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  entry_type            TEXT NOT NULL CHECK (entry_type IN ('reservation','charge','refund')),
+  status                TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','settled','released')),
+  amount                NUMERIC(14,2) NOT NULL CHECK (amount >= 0),
+  currency              TEXT NOT NULL DEFAULT 'INR',
+  campaign_id           UUID REFERENCES campaigns(id) ON DELETE SET NULL,
+  category              TEXT CHECK (category IN ('marketing','utility','authentication','service')),
+  recipient_count       INT,
+  reserved_by_entry_id  UUID REFERENCES whatsapp_billing_ledger(id),
+  note                  TEXT,
+  settled_at            TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_ledger_org_created
+  ON whatsapp_billing_ledger (organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_ledger_campaign
+  ON whatsapp_billing_ledger (campaign_id) WHERE campaign_id IS NOT NULL;
+
+-- Per-message Meta usage audit trail
+CREATE TABLE IF NOT EXISTS meta_usage_charges (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  channel_type      TEXT NOT NULL CHECK (channel_type IN ('whatsapp','messenger','instagram')),
+  category          TEXT NOT NULL CHECK (category IN ('marketing','utility','authentication','service')),
+  recipient_country TEXT,
+  meta_rate         NUMERIC(14,4) NOT NULL,
+  markup_percent    NUMERIC(5,2) NOT NULL DEFAULT 0,
+  bsp_markup        NUMERIC(14,4) NOT NULL DEFAULT 0,
+  gst_amount        NUMERIC(14,2) NOT NULL DEFAULT 0,
+  quantity          INT NOT NULL CHECK (quantity > 0),
+  total_amount      NUMERIC(14,2) NOT NULL,
+  currency          TEXT NOT NULL DEFAULT 'INR',
+  period            DATE NOT NULL,
+  campaign_id       UUID REFERENCES campaigns(id) ON DELETE SET NULL,
+  reference_id      TEXT,
+  invoiced          BOOLEAN NOT NULL DEFAULT false,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_meta_usage_org_period ON meta_usage_charges (organization_id, period);
+CREATE INDEX IF NOT EXISTS idx_meta_usage_campaign ON meta_usage_charges (campaign_id) WHERE campaign_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_meta_usage_uninvoiced ON meta_usage_charges (organization_id) WHERE NOT invoiced;
+
+-- SMS usage audit trail
+CREATE TABLE IF NOT EXISTS sms_usage_charges (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  route_type        TEXT NOT NULL CHECK (route_type IN ('promotional','transactional','otp')),
+  per_sms_rate      NUMERIC(14,4) NOT NULL,
+  markup_percent    NUMERIC(5,2) NOT NULL DEFAULT 0,
+  gst_amount        NUMERIC(14,2) NOT NULL DEFAULT 0,
+  quantity          INT NOT NULL CHECK (quantity > 0),
+  total_amount      NUMERIC(14,2) NOT NULL,
+  currency          TEXT NOT NULL DEFAULT 'INR',
+  period            DATE NOT NULL,
+  campaign_id       UUID REFERENCES campaigns(id) ON DELETE SET NULL,
+  dlt_template_id   TEXT,
+  sender_id         TEXT,
+  reference_id      TEXT,
+  invoiced          BOOLEAN NOT NULL DEFAULT false,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sms_usage_org_period ON sms_usage_charges (organization_id, period);
+CREATE INDEX IF NOT EXISTS idx_sms_usage_campaign ON sms_usage_charges (campaign_id) WHERE campaign_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sms_usage_uninvoiced ON sms_usage_charges (organization_id) WHERE NOT invoiced;
+
 CREATE TABLE IF NOT EXISTS wallets (
   organization_id       UUID PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
   balance               NUMERIC(14,2) NOT NULL DEFAULT 0,
@@ -933,8 +1092,8 @@ CREATE INDEX IF NOT EXISTS idx_wallet_tx_org_created ON wallet_transactions (org
 CREATE TABLE IF NOT EXISTS payments (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id     UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  purpose             TEXT NOT NULL CHECK (purpose IN ('WALLET_RECHARGE', 'ECOMMERCE_ORDER', 'WALKIN_SALE', 'SUBSCRIPTION_CHARGE')),
-  reference_id        UUID,
+  purpose             TEXT NOT NULL CHECK (purpose IN ('WALLET_RECHARGE', 'ECOMMERCE_ORDER', 'WALKIN_SALE', 'SUBSCRIPTION_CHARGE', 'INVOICE_SETTLEMENT')),
+  reference_id        UUID, -- ecommerce_orders.id for ECOMMERCE_ORDER / WALKIN_SALE
   contact_id          UUID REFERENCES contacts(id),
   amount              NUMERIC(14,2) NOT NULL CHECK (amount > 0),
   currency            TEXT NOT NULL DEFAULT 'INR',
@@ -981,6 +1140,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   invoice_number      TEXT UNIQUE,
   subscription_id     UUID REFERENCES subscriptions(id),
   payment_id          UUID REFERENCES payments(id),
+  billing_period_start DATE,
+  billing_period_end   DATE,
   seller_gstin        TEXT,
   seller_state_code   TEXT,
   buyer_legal_name    TEXT,
@@ -1013,6 +1174,22 @@ CREATE TABLE IF NOT EXISTS invoices (
 CREATE INDEX IF NOT EXISTS idx_invoices_org_created ON invoices (organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_invoices_subscription ON invoices (subscription_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_payment ON invoices (payment_id);
+
+-- Itemized invoice lines — indirectly scoped via invoice_id -> invoices.organization_id.
+CREATE TABLE IF NOT EXISTS invoice_line_items (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_id    UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  type          TEXT NOT NULL CHECK (type IN
+                  ('saas_channel_fee','meta_passthrough','sms_passthrough','bsp_markup','other')),
+  channel_type  TEXT,
+  description   TEXT NOT NULL,
+  quantity      INT NOT NULL DEFAULT 1,
+  unit_amount   NUMERIC(14,2) NOT NULL,
+  total_amount  NUMERIC(14,2) NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_line_items_invoice ON invoice_line_items (invoice_id);
 
 CREATE TABLE IF NOT EXISTS invoice_counters (
   financial_year TEXT PRIMARY KEY,
