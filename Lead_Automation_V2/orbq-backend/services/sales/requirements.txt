@@ -1,0 +1,36 @@
+# orbq-ai-agents
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-multipart==0.0.20
+
+# data
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+pgvector==0.3.6
+redis==5.2.1
+motor==3.6.0
+
+# workers
+celery==5.4.0
+kombu==5.4.2
+
+# auth
+pyjwt==2.10.1
+
+# http
+httpx==0.28.1
+
+# document extraction (rag/loaders.py)
+pypdf==5.1.0
+python-docx==1.1.2
+openpyxl==3.1.5
+
+# observability
+structlog==24.4.0
+opentelemetry-api==1.29.0
+opentelemetry-sdk==1.29.0
+opentelemetry-instrumentation-fastapi==0.50b0
+prometheus-client==0.21.1
