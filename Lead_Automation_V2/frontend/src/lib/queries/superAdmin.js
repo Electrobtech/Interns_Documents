@@ -300,7 +300,9 @@ export function useBillingSummary() {
 
 export function usePlatformPayments(filters = {}) {
   const { call } = useSuperAdminApi();
-  const params = new URLSearchParams(filters).toString();
+  const params = new URLSearchParams(
+    Object.entries(filters).filter(([, v]) => v !== undefined && v !== '')
+  ).toString();
   return useQuery({
     queryKey: ['super-admin', 'payments', filters],
     queryFn: () => call(`/super-admin/payments${params ? `?${params}` : ''}`),

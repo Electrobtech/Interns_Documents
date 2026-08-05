@@ -154,9 +154,13 @@ function InvoicesTab() {
 
 function PaymentsTab() {
   const [page, setPage] = useState(1);
-  const { data, isLoading, error } = usePlatformPayments({ page });
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const { data, isLoading, error } = usePlatformPayments({ page, startDate, endDate });
   const refund = useRefundPayment();
   const [refundingId, setRefundingId] = useState(null);
+
+  const hasFilter = Boolean(startDate || endDate);
 
   return (
     <Card>
@@ -164,6 +168,42 @@ function PaymentsTab() {
         <CardTitle className="text-base">Payments — all tenants</CardTitle>
       </CardHeader>
       <CardContent className="overflow-x-auto">
+        <div className="flex items-center gap-1.5 text-sm mb-4">
+          <input
+            type="date"
+            value={startDate}
+            max={endDate || undefined}
+            onChange={(e) => {
+              setStartDate(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-md border border-slate-300 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <span className="text-slate-400">to</span>
+          <input
+            type="date"
+            value={endDate}
+            min={startDate || undefined}
+            onChange={(e) => {
+              setEndDate(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-md border border-slate-300 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          {hasFilter && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setStartDate('');
+                setEndDate('');
+                setPage(1);
+              }}
+            >
+              Clear Filter
+            </Button>
+          )}
+        </div>
         {isLoading ? (
           <p className="text-sm text-slate-400">Loading…</p>
         ) : error ? (
