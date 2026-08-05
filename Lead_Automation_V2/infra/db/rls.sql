@@ -56,7 +56,7 @@ DECLARE
 BEGIN
   FOREACH t IN ARRAY ARRAY[
     'users', 'teams', 'channels', 'integrations',
-    'contacts', 'leads', 'conversations', 'messages',
+    'contacts', 'leads', 'follow_ups', 'conversations', 'messages',
     'campaigns', 'reviews', 'social_comments',
     'google_tokens', 'google_accounts', 'google_locations',
     'google_reviews', 'google_oauth_configs',
@@ -68,8 +68,11 @@ BEGIN
     'email_accounts', 'email_threads', 'email_messages',
     'sms_devices',
     'wallets', 'wallet_transactions', 'payments', 'feature_flags', 'attachments',
+    'channel_quotas',
     'calendar_accounts', 'calendar_events',
-    'products', 'message_templates'
+    'organization_channel_subscriptions', 'whatsapp_billing_ledger',
+    'meta_usage_charges', 'sms_usage_charges',
+    'products'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
@@ -129,6 +132,47 @@ CREATE POLICY tenant_isolation ON campaign_recipients
     )
   );
 
+-- invoice_line_items (025_channel_subscription_billing.sql) hangs off
+-- invoices the same way — EXISTS check against the parent invoice row.
+ALTER TABLE invoice_line_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invoice_line_items FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON invoice_line_items;
+CREATE POLICY tenant_isolation ON invoice_line_items
+  USING (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM invoices i
+       WHERE i.id = invoice_line_items.invoice_id
+         AND i.organization_id = app_current_org()
+    )
+  )
+  WITH CHECK (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM invoices i
+       WHERE i.id = invoice_line_items.invoice_id
+         AND i.organization_id = app_current_org()
+    )
+  );
+
+-- billing_markup_config: NOT the direct organization_id = app_current_org()
+-- loop above, because organization_id is nullable here (NULL = the
+-- platform-wide default row, which every tenant must be able to read).
+-- A tenant connection may read the default row plus its own override row,
+-- but may only ever WRITE its own org's row (never the shared default or
+-- another org's) — in practice writes go through requireSuperAdmin routes
+-- under withSystemAccess anyway.
+ALTER TABLE billing_markup_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE billing_markup_config FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON billing_markup_config;
+CREATE POLICY tenant_isolation ON billing_markup_config
+  USING      (app_rls_bypass() OR organization_id IS NULL OR organization_id = app_current_org())
+  WITH CHECK (app_rls_bypass() OR organization_id = app_current_org());
+
+-- channel_plans, meta_rate_cards, sms_rate_cards (025_channel_subscription_
+-- billing.sql) are deliberately NOT given RLS — global platform catalogues
+-- with no organization_id column at all, same category as `permissions`/
+-- `roles` above. Every tenant reads the same rows; only platform admins
+-- (requireSuperAdmin routes) write them.
+
 ALTER TABLE campaign_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE campaign_logs FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation ON campaign_logs;
@@ -179,6 +223,41 @@ ALTER TABLE platform_admins ENABLE ROW LEVEL SECURITY;
 ALTER TABLE platform_admins FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS bypass_only ON platform_admins;
 CREATE POLICY bypass_only ON platform_admins
+  USING      (app_rls_bypass())
+  WITH CHECK (app_rls_bypass());
+
+-- ---------- platform_announcements — global banners (Module 4) ----------
+-- Unlike platform_admins above, this one IS meant to be read by ordinary
+-- tenant-scoped connections — that's the entire point of a banner. See
+-- infra/db/migrations/028_platform_governance.sql for the full comment.
+ALTER TABLE platform_announcements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platform_announcements FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS admin_full_access ON platform_announcements;
+CREATE POLICY admin_full_access ON platform_announcements
+  USING      (app_rls_bypass())
+  WITH CHECK (app_rls_bypass());
+DROP POLICY IF EXISTS tenant_read_active ON platform_announcements;
+CREATE POLICY tenant_read_active ON platform_announcements
+  FOR SELECT
+  USING (active AND now() >= starts_at AND (ends_at IS NULL OR now() < ends_at));
+
+-- ---------- platform_service_status — admin-only status board (Module 4) ----------
+ALTER TABLE platform_service_status ENABLE ROW LEVEL SECURITY;
+ALTER TABLE platform_service_status FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS bypass_only ON platform_service_status;
+CREATE POLICY bypass_only ON platform_service_status
+  USING      (app_rls_bypass())
+  WITH CHECK (app_rls_bypass());
+
+-- ---------- invoice_counters — platform-wide sequential invoice numbering ----------
+-- No organization_id (GST sequential numbering is per financial year
+-- across the whole platform, not per tenant) — Super Admin only, same
+-- shape as platform_admins above. See
+-- infra/db/migrations/027_subscription_billing.sql.
+ALTER TABLE invoice_counters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invoice_counters FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS bypass_only ON invoice_counters;
+CREATE POLICY bypass_only ON invoice_counters
   USING      (app_rls_bypass())
   WITH CHECK (app_rls_bypass());
 

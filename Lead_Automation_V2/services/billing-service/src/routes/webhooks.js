@@ -110,6 +110,37 @@ async function settlePayment(record, gatewayPaymentId) {
           [record.reference_id, record.organization_id]
         );
       }
+    } else if (record.purpose === 'INVOICE_SETTLEMENT') {
+      // reference_id is invoices.id — see billing-service/src/routes/invoices.js's
+      // /generate endpoint, which creates this payments row when a wallet's
+      // balance doesn't cover the invoice total and a Razorpay payment link
+      // is issued instead.
+      if (record.reference_id) {
+        await pool.query(
+          `UPDATE invoices SET status = 'paid' WHERE id = $1 AND organization_id = $2`,
+          [record.reference_id, record.organization_id]
+        );
+      }
+    } else if (record.purpose === 'CHANNEL_SUBSCRIPTION') {
+      // reference_id is organization_id here, not a single row — this
+      // charge covers however many channels were pending_payment at once
+      // (see channels.js's /subscription/checkout). Activates all of them,
+      // same as the /subscription/verify endpoint's success path.
+      await pool.query(
+        `UPDATE organization_channel_subscriptions SET status = 'active'
+          WHERE organization_id = $1 AND status = 'pending_payment'`,
+        [record.organization_id]
+      );
+    } else if (record.purpose === 'SUBSCRIPTION') {
+      // reference_id is subscriptions.id — see subscriptionPlan.js's
+      // /checkout endpoint. Activates the tenant's plan, same as the
+      // /subscription-plan/verify endpoint's success path.
+      if (record.reference_id) {
+        await pool.query(
+          `UPDATE subscriptions SET status = 'active' WHERE id = $1 AND organization_id = $2`,
+          [record.reference_id, record.organization_id]
+        );
+      }
     }
   });
 }

@@ -116,7 +116,7 @@ export function seedGraph() {
    layout thrashing. Card height is a fixed estimate (documented tradeoff:
    long body text can visually overflow the box; fine for a v1 tool).   */
 /* ------------------------------------------------------------------ */
-const CARD_HEIGHT = { message: 88, answer_branch: 56, handoff: 88, delay: 118 };
+const CARD_HEIGHT = { message: 88, answer_branch: 56, handoff: 112, delay: 118 };
 
 function topAnchor(node) {
   return { x: node.position.x + NODE_WIDTH / 2, y: node.position.y };
@@ -452,12 +452,18 @@ function NodeCard({ node, selected, isEntry, onSetEntry, onMouseDownDrag, onUpda
         )}
 
         {node.type === "handoff" && (
-          <EditableText
-            value={node.data.team}
-            placeholder="Team name…"
-            className="text-[11px]"
-            onChange={(v) => onUpdate({ ...node.data, team: v })}
-          />
+          <>
+            <EditableText
+              value={node.data.team}
+              placeholder="Team name…"
+              className="text-[11px]"
+              onChange={(v) => onUpdate({ ...node.data, team: v })}
+            />
+            <HandoffFollowUpEditor
+              followUp={node.data.followUp}
+              onChange={(followUp) => onUpdate({ ...node.data, followUp })}
+            />
+          </>
         )}
 
         {node.type === "answer_branch" && (
@@ -530,6 +536,114 @@ const DELAY_UNITS = [
   { key: "hours", label: "hrs", seconds: 3600 },
   { key: "days", label: "days", seconds: 86400 },
 ];
+
+const FOLLOW_UP_DUE_PRESETS = [
+  { key: "24", label: "24h" },
+  { key: "48", label: "48h" },
+  { key: "72", label: "72h" },
+];
+const FOLLOW_UP_PRIORITIES = ["low", "medium", "high"];
+
+/**
+ * Compact config block for the Handoff node's card: enable/disable
+ * auto-creating a Follow-ups queue reminder (see the Follow-ups page,
+ * services/automation-service/src/repositories/followUpRepository.js, and
+ * flow-schema.md's `data.followUp`), plus its due timeframe, default
+ * priority, and a free-text assignee suggestion — same "team" free-text
+ * convention this node already uses, not a real user picker.
+ */
+function HandoffFollowUpEditor({ followUp, onChange }) {
+  const enabled = !!followUp?.enabled;
+  const dueInHours = String(followUp?.dueInHours ?? 24);
+  const priority = followUp?.priority || "medium";
+  const assignTo = followUp?.assignTo || "";
+
+  function patch(partial) {
+    onChange({ enabled, dueInHours: Number(dueInHours), priority, assignTo, ...followUp, ...partial });
+  }
+
+  return (
+    <div onMouseDown={(e) => e.stopPropagation()} className="mt-1.5 pt-1.5 border-t" style={{ borderColor: tokens.cardBorder }}>
+      <button
+        onClick={() => patch({ enabled: !enabled })}
+        className="w-full flex items-center justify-between text-[10px] font-semibold"
+        style={{ color: enabled ? tokens.handoff.fg : tokens.muted }}
+      >
+        <span className="flex items-center gap-1"><Clock size={11} /> Auto-create follow-up</span>
+        <span
+          className="relative inline-flex h-3.5 w-6 rounded-full transition-colors"
+          style={{ background: enabled ? tokens.handoff.fg : tokens.cardBorder }}
+        >
+          <span
+            className="absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white transition-transform"
+            style={{ left: 2, transform: enabled ? "translateX(9px)" : "translateX(0)" }}
+          />
+        </span>
+      </button>
+
+      {enabled && (
+        <div className="mt-1.5 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] uppercase tracking-wide" style={{ color: tokens.muted }}>Due in</span>
+            <div className="flex gap-1">
+              {FOLLOW_UP_DUE_PRESETS.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => patch({ dueInHours: Number(p.key) })}
+                  className="text-[9px] px-1.5 py-0.5 rounded-md font-semibold"
+                  style={{
+                    background: dueInHours === p.key ? tokens.handoff.bg : "transparent",
+                    color: dueInHours === p.key ? tokens.handoff.fg : tokens.muted,
+                    border: `1px solid ${dueInHours === p.key ? tokens.handoff.fg : tokens.cardBorder}`,
+                  }}
+                >
+                  {p.label}
+                </button>
+              ))}
+              <input
+                type="number"
+                min={1}
+                value={dueInHours}
+                onChange={(e) => patch({ dueInHours: Number(e.target.value) || 24 })}
+                title="Custom hours"
+                className="w-9 text-[9px] px-1 rounded-md border"
+                style={{ borderColor: tokens.cardBorder }}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] uppercase tracking-wide" style={{ color: tokens.muted }}>Priority</span>
+            <div className="flex gap-1">
+              {FOLLOW_UP_PRIORITIES.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => patch({ priority: p })}
+                  className="text-[9px] px-1.5 py-0.5 rounded-md capitalize font-semibold"
+                  style={{
+                    background: priority === p ? tokens.handoff.bg : "transparent",
+                    color: priority === p ? tokens.handoff.fg : tokens.muted,
+                    border: `1px solid ${priority === p ? tokens.handoff.fg : tokens.cardBorder}`,
+                  }}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <input
+            value={assignTo}
+            onChange={(e) => patch({ assignTo: e.target.value })}
+            placeholder="Assign to (agent/team) — optional"
+            className="w-full text-[10px] px-1.5 py-1 rounded-md border"
+            style={{ borderColor: tokens.cardBorder }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DelayNodeEditor({ data, onUpdate }) {
   const mode = data.scheduledAt ? "date" : "duration";
@@ -716,7 +830,7 @@ export function exportFlowJson(graph, title) {
         },
       };
     }
-    return { id: n.id, type: "handoff", position: n.position, data: { team: n.data.team, nextNodeId: null } };
+    return { id: n.id, type: "handoff", position: n.position, data: { team: n.data.team, nextNodeId: null, followUp: n.data.followUp || null } };
   });
 
   // Guards against a stale/deleted entryNodeId ever reaching Postgres: if
@@ -789,7 +903,7 @@ export function importFlowJson(playbook) {
       }
     } else {
       // handoff
-      nodes.push({ id: n.id, type: "handoff", position, data: { team: n.data.team } });
+      nodes.push({ id: n.id, type: "handoff", position, data: { team: n.data.team, followUp: n.data.followUp || null } });
     }
   }
 

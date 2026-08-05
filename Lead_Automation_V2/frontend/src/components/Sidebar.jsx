@@ -8,7 +8,7 @@ import {
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
   MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown, Bell,
   Zap, FileText, Linkedin, PanelLeftClose, PanelLeftOpen, CreditCard,
-  LayoutTemplate, Workflow,
+  LayoutTemplate, Workflow, CalendarClock,
 } from 'lucide-react';
 import { useUnreadCounts } from '@/lib/useUnreadCounts';
 
@@ -23,18 +23,8 @@ const PLATFORM = [
   { label: 'Dashboard',               icon: LayoutDashboard, href: '/app'                  },
   { label: 'Unified Inbox',           icon: Inbox,           href: '/app/inbox'              },
   { label: 'Contacts & Leads',        icon: Users,           href: '/app/contacts'           },
-  { 
-    label: 'AI Agents & Automation',  
-    icon: Bot,             
-    href: '/app/ai-agents',
-    expandable: true,
-    sub: [
-      ['AI Command Center', '/app/ai-agents'],
-      ['Marketing Agent', '/app/ai-agents?agent=marketing'],
-      ['Sales Agent', '/app/ai-agents?agent=sales'],
-      ['Support Agent', '/app/ai-agents?agent=support']
-    ]
-  },
+  { label: 'Follow-ups',              icon: CalendarClock,   href: '/app/follow-ups'         },
+  { label: 'AI Agents & Automation',  icon: Bot,             href: '/app/ai-agents'          },
   { label: 'Campaigns & Broadcasts',  icon: Megaphone,       href: '/app/campaigns'          },
   { label: 'Ecommerce & Revenue',    icon: ShoppingCart,    href: '/app/ecommerce'          },
   { label: 'Reviews & Social',        icon: Star,            href: '/app/reviews'            },
@@ -46,13 +36,6 @@ const PLATFORM = [
   { label: 'Click Notification Demo', icon: Bell,            href: '/app/notification-demo' },
 ];
 
-// CHANNELS now only ever surfaces conversation-facing items. Every channel
-// that has a conversation thread view gets `expandable: true` with a single
-// "Conversations" sub-item (kept as a sub-item rather than collapsed onto
-// the parent link so the nav tree visually matches the target hierarchy).
-// Voice Call and Email have no separate "Conversations" drill-down, so they
-// stay flat links. Automation builder/workflow pages have all moved out to
-// the dedicated AUTOMATION section below — see the `AUTOMATION` array.
 const CHANNELS = [
   { label: 'WhatsApp',  icon: MessageCircle, href: '/app/channels/whatsapp',  expandable: true  },
   { label: 'Instagram', icon: Instagram,     href: '/app/channels/instagram', expandable: true  },
@@ -64,20 +47,6 @@ const CHANNELS = [
   { label: 'Email',     icon: Mail,          href: '/app/channels/email',     expandable: false },
 ];
 
-// Every channel's "Automation" tab, plus the two new global sections
-// (Templates / Playbooks). Only WhatsApp, Instagram, and SMS/RCS currently
-// have a real Playbook Studio behind them (see PlaybookStudioApp.jsx /
-// SmsAutomationSimulator.jsx) — Messenger, LinkedIn, Web Chat, and Email
-// don't have an Automation builder yet, so they're intentionally left out
-// of this list rather than linking to a page that doesn't exist.
-//
-// "Templates" used to point at a Coming Soon stub for a still-unbuilt
-// concept (reusable automation playbooks). It now points at the real
-// Template Creation module — WhatsApp/RCS/SMS/Email message templates with
-// image headers, live preview, and an approval flow — since that's what
-// actually ships today and it's what the Bulk Campaign builder consumes
-// (frontend/src/app/app/campaigns/templates, services/campaign-service/
-// src/templates.js). The old stub now redirects here.
 const AUTOMATION = [
   { label: 'WhatsApp Automation',  icon: MessageCircle,  href: '/app/channels/whatsapp/automation'  },
   { label: 'Instagram Automation', icon: Instagram,      href: '/app/channels/instagram/automation' },
@@ -90,8 +59,6 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
-  // Persist the choice across navigation/reloads. Read in an effect rather
-  // than in useState's initializer to avoid an SSR/client hydration mismatch.
   useEffect(() => {
     if (localStorage.getItem('sidebar:collapsed') === '1') setCollapsed(true);
   }, []);
@@ -104,19 +71,11 @@ export default function Sidebar() {
   const isActive = (href) =>
     href === '/app' ? pathname === '/app' : pathname === href || pathname.startsWith(href + '/');
 
-  // Same as isActive, but a channel's CHANNELS entry (e.g. "WhatsApp") should
-  // not also light up while the user is on that channel's /automation page —
-  // that page has its own entry now, under the AUTOMATION section.
   const isChannelActive = (href) =>
     isActive(href) && !pathname.startsWith(href + '/automation');
 
   const { byChannel, clearChannel } = useUnreadCounts();
 
-  // Opening a channel's section clears its badge in the sidebar right
-  // away — same feel as opening a chat in WhatsApp. The authoritative
-  // clear still happens server-side the moment an individual conversation
-  // thread is opened (inbox-service bumps last_read_at there); this just
-  // keeps the sidebar in sync without waiting on that per-thread fetch.
   const prevChannelRef = useRef(null);
   useEffect(() => {
     const current = CHANNELS.find((c) => pathname.startsWith(c.href));
@@ -216,7 +175,6 @@ function NavItem({ item, isActive, collapsed, unread = 0 }) {
   );
 }
 
-// WhatsApp-style unread pill: the exact count up to 99, "99+" beyond that.
 function UnreadBadge({ count }) {
   return (
     <span className="ml-auto shrink-0 bg-emerald-500 text-white text-[10px] leading-none rounded-full min-w-[18px] h-[18px] px-1 grid place-items-center font-semibold">
@@ -225,9 +183,7 @@ function UnreadBadge({ count }) {
   );
 }
 
-// Same visual language as NavItem, plus a Conversations/Automation sub-menu
-// for channels that have a Playbook Studio flow builder.
-function ExpandableNavItem({ item, pathname, isActive, unread = 0, collapsed = false }) {
+function ExpandableNavItem({ item, pathname, isActive, unread = 0 }) {
   const { label, icon: Icon, href, sub } = item;
   const subItems = sub || [['Conversations', href]];
   const searchParams = useSearchParams();

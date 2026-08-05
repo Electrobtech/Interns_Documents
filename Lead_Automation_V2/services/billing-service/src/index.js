@@ -27,6 +27,13 @@ app.use('/billing/wallet', require('./routes/wallet'));
 app.use('/billing/orders', require('./routes/checkout'));
 app.use('/billing/walkin', require('./routes/walkin'));
 app.use('/billing/payments', require('./routes/payments'));
+// Channel-subscription billing (SaaS fee per channel) + itemized invoices
+// with Meta/SMS pass-through — see channels.js/invoices.js headers.
+app.use('/billing', require('./routes/channels'));
+app.use('/billing/invoices', require('./routes/invoices'));
+// Tenant-level plan charge (registration wizard's Subscription step) —
+// separate concern from the per-channel SaaS fees in ./channels.js.
+app.use('/billing/subscription-plan', require('./routes/subscriptionPlan'));
 
 app.use((err, _req, res, _next) => {
   console.error('[billing] unhandled error', err);

@@ -1,6 +1,7 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   Inbox, Search, X, Send, User, Loader2, AlertTriangle, Bot, UserCheck,
   Mail, Phone, Tag, Clock, Globe, MessageCircle, Instagram, MessageSquare,
@@ -47,12 +48,17 @@ const initials = (name) => (name || '?')
   .split(' ').filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
 
 /* ── page: three panes ── */
-export default function InboxPage() {
+// useSearchParams needs a Suspense boundary to avoid de-opting the whole
+// route during build — see the default export below.
+function InboxPageInner() {
   const qc = useQueryClient();
   const { data, isLoading } = useConversations();
   const [selectedId, setSelectedId] = useState(null);
   const [search, setSearch] = useState('');
-  const [channelF, setChannelF] = useState('');
+  // Seeded from ?channel=whatsapp when arriving via the dashboard's
+  // Omnichannel Distribution widget (one-click filter into a channel).
+  const searchParams = useSearchParams();
+  const [channelF, setChannelF] = useState(() => searchParams.get('channel') || '');
 
   // Live updates — services/inbox-service/src/realtime.js. Refresh both the
   // list and the open thread so an inbound message lands without a reload.
@@ -210,6 +216,14 @@ export default function InboxPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function InboxPage() {
+  return (
+    <Suspense fallback={null}>
+      <InboxPageInner />
+    </Suspense>
   );
 }
 

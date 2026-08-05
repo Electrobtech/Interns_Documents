@@ -11,6 +11,7 @@ export default function WalkinPOS() {
   const [amount, setAmount] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
   const [method, setMethod] = useState('cash'); // 'cash' | 'qr'
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -21,7 +22,7 @@ export default function WalkinPOS() {
   useEffect(() => () => clearInterval(pollRef.current), []);
 
   function reset() {
-    setAmount(''); setCustomerName(''); setCustomerPhone('');
+    setAmount(''); setCustomerName(''); setCustomerPhone(''); setCustomerEmail('');
     setSuccess(null); setQr(null); setError('');
     clearInterval(pollRef.current);
   }
@@ -29,13 +30,22 @@ export default function WalkinPOS() {
   async function submit() {
     const value = Number(amount);
     if (!(value > 0)) { setError('Enter a valid amount'); return; }
+    if (!customerName.trim()) { setError('Enter the customer name'); return; }
+    if (!customerPhone.trim()) { setError('Enter the customer mobile number'); return; }
+    if (!customerEmail.trim()) { setError('Enter the customer email'); return; }
     setBusy(true);
     setError('');
     try {
       if (method === 'cash') {
         const res = await call('/billing/walkin/cash', {
           method: 'POST',
-          body: { amount: value, description: customerName ? `Walk-in — ${customerName}` : undefined },
+          body: {
+            amount: value,
+            description: `Walk-in — ${customerName}`,
+            customerName,
+            customerPhone,
+            customerEmail,
+          },
         });
         setSuccess(res);
       } else {
@@ -43,8 +53,9 @@ export default function WalkinPOS() {
           method: 'POST',
           body: {
             amount: value,
-            customerName: customerName || undefined,
-            customerPhone: customerPhone || undefined,
+            customerName,
+            customerPhone,
+            customerEmail,
           },
         });
         setQr(res);
@@ -116,15 +127,29 @@ export default function WalkinPOS() {
         <input type="number" min="1" className={input} placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
       </div>
       <div>
-        <label className="block text-xs font-medium text-slate-600 mb-1">Customer name (optional)</label>
-        <input className={input} value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+        <label className="block text-xs font-medium text-slate-600 mb-1">Customer name</label>
+        <input className={input} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Full name" />
       </div>
-      {method === 'qr' && (
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Customer phone (optional, for SMS receipt)</label>
-          <input className={input} value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
-        </div>
-      )}
+      <div>
+        <label className="block text-xs font-medium text-slate-600 mb-1">Customer mobile number</label>
+        <input
+          type="tel"
+          className={input}
+          value={customerPhone}
+          onChange={(e) => setCustomerPhone(e.target.value)}
+          placeholder="10-digit mobile number"
+        />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-slate-600 mb-1">Customer email</label>
+        <input
+          type="email"
+          className={input}
+          value={customerEmail}
+          onChange={(e) => setCustomerEmail(e.target.value)}
+          placeholder="name@example.com"
+        />
+      </div>
 
       <div className="grid grid-cols-2 gap-2">
         <button
@@ -158,3 +183,4 @@ export default function WalkinPOS() {
     </div>
   );
 }
+    

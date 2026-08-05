@@ -7,6 +7,7 @@ import { contacts, leads } from '@/lib/resources';
 import { useLeads } from '@/lib/queries/crm';
 import { useRunSalesAgent, useSalesRuns } from '@/lib/queries/aiAgents';
 import { BookMeetingButton } from '@/components/calendar/BookMeetingDialog';
+import { AddFollowUpButton } from '@/components/followups/AddFollowUpButton';
 import ImportContactsDialog from '@/components/contacts/ImportContactsDialog';
 
 /* ─── score colour ──────────────────────────── */
@@ -216,7 +217,12 @@ function ContactsTab() {
           <Upload className="h-3.5 w-3.5" /> Import CSV / Excel
         </button>
       </div>
-      <CrudPage {...contacts} header={false} rowActions={(row) => <BookMeetingButton contact={row} />} />
+      <CrudPage {...contacts} header={false} rowActions={(row) => (
+        <>
+          <BookMeetingButton contact={row} />
+          <AddFollowUpButton contact={row} />
+        </>
+      )} />
       <ImportContactsDialog open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
   );
@@ -227,7 +233,12 @@ export default function ContactsPage() {
   return (
     <Tabs title="Contacts & Leads" icon={Users} tabs={[
       { label: 'Contacts', icon: Users,     render: () => <ContactsTab /> },
-      { label: 'Leads',    icon: Target,    render: () => <CrudPage {...leads}    header={false} rowActions={(row) => <BookMeetingButton contact={row} />} /> },
+      { label: 'Leads',    icon: Target,    render: () => <CrudPage {...leads}    header={false} rowActions={(row) => (
+        <>
+          <BookMeetingButton contact={row} />
+          <AddFollowUpButton contact={row} />
+        </>
+      )} /> },
       { label: 'AI Lead Scoring', icon: Sparkles, render: () => <SalesAgentPanel /> },
     ]} />
   );

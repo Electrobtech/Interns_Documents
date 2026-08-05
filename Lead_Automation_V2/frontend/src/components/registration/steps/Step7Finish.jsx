@@ -1,5 +1,6 @@
 'use client';
 import { Pencil } from 'lucide-react';
+import { PLANS } from './Step6Subscription';
 
 function SummaryRow({ label, value }) {
   if (!value) return null;
@@ -74,9 +75,16 @@ export default function Step7Finish({ form, errors, onChange, onEdit }) {
 
         <SummaryCard title="Subscription" stepId={7} onEdit={onEdit}>
           <SummaryRow label="Plan" value={subscription.plan} />
+          <SummaryRow label="Price" value={PLANS.find((p) => p.id === subscription.plan)?.price} />
           <SummaryRow label="Coupon" value={subscription.couponCode} />
         </SummaryCard>
       </div>
+
+      {subscription.plan && PLANS.find((p) => p.id === subscription.plan)?.amount && (
+        <p className="text-[11px] text-slate-400 -mt-1">
+          Clicking "Create Company" below will also open Razorpay to collect payment for the {PLANS.find((p) => p.id === subscription.plan)?.name} plan.
+        </p>
+      )}
 
       <label className="flex items-start gap-2.5 border border-slate-200 rounded-xl p-4 cursor-pointer">
         <input type="checkbox" checked={!!form.acceptTerms}
