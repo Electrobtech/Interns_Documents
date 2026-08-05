@@ -24,7 +24,18 @@ const PLATFORM = [
   { label: 'Unified Inbox',           icon: Inbox,           href: '/app/inbox'              },
   { label: 'Contacts & Leads',        icon: Users,           href: '/app/contacts'           },
   { label: 'Follow-ups',              icon: CalendarClock,   href: '/app/follow-ups'         },
-  { label: 'AI Agents & Automation',  icon: Bot,             href: '/app/ai-agents'          },
+  { 
+    label: 'AI Agents & Automation',  
+    icon: Bot,             
+    href: '/app/ai-agents',
+    expandable: true,
+    sub: [
+      ['AI Command Center', '/app/ai-agents'],
+      ['Marketing Agent', '/app/ai-agents?agent=marketing'],
+      ['Sales Agent', '/app/ai-agents?agent=sales'],
+      ['Support Agent', '/app/ai-agents?agent=support']
+    ]
+  },
   { label: 'Campaigns & Broadcasts',  icon: Megaphone,       href: '/app/campaigns'          },
   { label: 'Ecommerce & Revenue',    icon: ShoppingCart,    href: '/app/ecommerce'          },
   { label: 'Reviews & Social',        icon: Star,            href: '/app/reviews'            },
@@ -183,7 +194,9 @@ function UnreadBadge({ count }) {
   );
 }
 
-function ExpandableNavItem({ item, pathname, isActive, unread = 0 }) {
+// Same visual language as NavItem, plus a Conversations/Automation sub-menu
+// for channels that have a Playbook Studio flow builder.
+function ExpandableNavItem({ item, pathname, isActive, unread = 0, collapsed = false }) {
   const { label, icon: Icon, href, sub } = item;
   const subItems = sub || [['Conversations', href]];
   const searchParams = useSearchParams();
