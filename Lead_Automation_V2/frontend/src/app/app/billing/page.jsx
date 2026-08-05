@@ -13,7 +13,7 @@ export default function BillingPage() {
       { label: 'Channels', render: () => <ChannelSubscriptions /> },
       { label: 'Wallet', render: () => <WalletPanel /> },
       { label: 'Invoices', render: () => <InvoiceView /> },
-      { label: 'Walk-in POS', render: () => <WalkinPOS /> },
+      { label: 'Charges', render: () => <WalkinPOS /> },
       { label: 'Payment History', render: () => <PaymentHistory /> },
     ]} />
   );
