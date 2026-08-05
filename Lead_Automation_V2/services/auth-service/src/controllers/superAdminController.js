@@ -479,7 +479,6 @@ router.get('/super-admin/analytics/automation', async (req, res) => {
   }
 });
 
-
 // team-service's GET /audit-logs is tenant-scoped (req.user.organizationId);
 // this is the cross-tenant equivalent for Super Admin oversight, with an
 // optional organizationId filter for "show me this one tenant's history".
@@ -608,6 +607,8 @@ router.patch('/super-admin/system-health/providers/:serviceKey', requirePlatform
 // Internal microservice health — live pings, see platformHealthModel.js.
 router.get('/super-admin/system-health/internal', async (_req, res) => {
   res.json(await platformHealthModel.checkAll());
+});
+
 // ---------- Channel-subscription billing (platform-admin side) ----------
 // Manage the channel_plans catalogue (our own price per channel) and the
 // Meta/SMS rate cards + per-org markup overrides. Tenant-facing reads of
