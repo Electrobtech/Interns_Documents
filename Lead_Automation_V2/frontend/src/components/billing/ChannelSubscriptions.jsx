@@ -16,6 +16,27 @@ const CHANNEL_META = {
 const CATEGORY_LABEL = { marketing: 'Marketing', utility: 'Utility', authentication: 'Auth', service: 'Service' };
 const SMS_ROUTE_LABEL = { promotional: 'Promo', transactional: 'Transactional', otp: 'OTP' };
 
+// Small status pill shown under the on/off toggle: green when the channel
+// subscription is actually active on the backend, red when it's been
+// cancelled/paused (was on, now isn't), and a neutral white/outline pill
+// for anything in between (never subscribed, or mid-payment) — that's
+// "neither" active nor inactive yet.
+function statusPill(status) {
+  if (status === 'active') return { text: 'Active', className: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+  if (status === 'cancelled' || status === 'paused') return { text: 'Inactive', className: 'text-red-700 bg-red-50 border-red-200' };
+  if (status === 'pending_payment') return { text: 'Pending', className: 'text-slate-400 bg-white border-slate-200' };
+  return { text: 'Not subscribed', className: 'text-slate-400 bg-white border-slate-200' };
+}
+
+function StatusPill({ status }) {
+  const { text, className } = statusPill(status);
+  return (
+    <span className={`text-[10px] font-medium rounded-full border px-2 py-0.5 whitespace-nowrap ${className}`}>
+      {text}
+    </span>
+  );
+}
+
 // Usage-rate line under a channel card — the per-message cost on top of
 // the flat platform fee. whatsapp/messenger/instagram usage comes from
 // meta_rate_cards; sms from sms_rate_cards; linkedin/email have no
@@ -222,12 +243,15 @@ export default function ChannelSubscriptions() {
                     </span>
                   )}
                 </span>
-                <span
-                  className={`w-9 h-5 rounded-full relative transition ${isOn ? 'bg-brand' : 'bg-slate-300'}`}
-                >
+                <span className="flex flex-col items-end gap-1.5 shrink-0">
                   <span
-                    className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition ${isOn ? 'translate-x-4' : ''}`}
-                  />
+                    className={`w-9 h-5 rounded-full relative transition ${isOn ? 'bg-brand' : 'bg-slate-300'}`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition ${isOn ? 'translate-x-4' : ''}`}
+                    />
+                  </span>
+                  <StatusPill status={status} />
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-2">Platform fee</p>

@@ -24,8 +24,11 @@ async function createOrder({ organizationId, contactId, amount, paymentType, sta
 
 router.post('/cash', async (req, res) => {
   const amount = Number(req.body.amount);
-  const { contactId, description } = req.body;
+  const { contactId, description, customerName, customerPhone, customerEmail } = req.body;
   if (!(amount > 0)) return res.status(400).json({ error: 'amount must be a positive number' });
+  if (!customerName) return res.status(400).json({ error: 'customerName is required' });
+  if (!customerPhone) return res.status(400).json({ error: 'customerPhone is required' });
+  if (!customerEmail) return res.status(400).json({ error: 'customerEmail is required' });
 
   const order = await createOrder({
     organizationId: req.user.organizationId,
@@ -45,7 +48,7 @@ router.post('/cash', async (req, res) => {
     status: 'paid',
     gateway: null,
     createdByUser: req.user.userId,
-    notes: description ? { description } : null,
+    notes: { description: description || null, customerName, customerPhone, customerEmail },
   });
 
   res.status(201).json({ order, payment });
@@ -53,8 +56,11 @@ router.post('/cash', async (req, res) => {
 
 router.post('/qr', async (req, res) => {
   const amount = Number(req.body.amount);
-  const { contactId, description, customerName, customerPhone } = req.body;
+  const { contactId, description, customerName, customerPhone, customerEmail } = req.body;
   if (!(amount > 0)) return res.status(400).json({ error: 'amount must be a positive number' });
+  if (!customerName) return res.status(400).json({ error: 'customerName is required' });
+  if (!customerPhone) return res.status(400).json({ error: 'customerPhone is required' });
+  if (!customerEmail) return res.status(400).json({ error: 'customerEmail is required' });
 
   const order = await createOrder({
     organizationId: req.user.organizationId,
@@ -72,8 +78,9 @@ router.post('/qr', async (req, res) => {
       customer: {
         name: customerName || undefined,
         contact: customerPhone || undefined,
+        email: customerEmail || undefined,
       },
-      notify: { sms: !!customerPhone, email: false },
+      notify: { sms: !!customerPhone, email: !!customerEmail },
       reminder_enable: false,
       notes: { organization_id: req.user.organizationId, order_id: order.id, purpose: 'WALKIN_SALE' },
     });
@@ -88,7 +95,7 @@ router.post('/qr', async (req, res) => {
       status: 'created',
       gatewayOrderId: link.id,
       createdByUser: req.user.userId,
-      notes: { short_url: link.short_url, description: description || null },
+      notes: { short_url: link.short_url, description: description || null, customerName, customerPhone, customerEmail },
     });
 
     res.status(201).json({
