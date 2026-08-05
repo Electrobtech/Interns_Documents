@@ -1,0 +1,10 @@
+{
+  "description": "Streamline enterprise operations with a premium AI workspace featuring three intelligent agents for marketing, sales, and support, enhancing automation and decision-making.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
