@@ -598,26 +598,6 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ---------- Billing ----------
-CREATE TABLE IF NOT EXISTS subscriptions (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  plan            TEXT,
-  status          TEXT DEFAULT 'active',
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS invoices (
-  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id       UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  amount                NUMERIC(14,2),
-  currency              TEXT NOT NULL DEFAULT 'INR',
-  status                TEXT DEFAULT 'draft',
-  billing_period_start  DATE,
-  billing_period_end    DATE,
-  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
 -- ---------- API / Webhooks / Audit ----------
 CREATE TABLE IF NOT EXISTS api_keys (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -923,7 +903,8 @@ INSERT INTO platform_service_status (service_key, label) VALUES
   ('llm_provider',    'LLM Provider'),
   ('razorpay',        'Razorpay')
 ON CONFLICT (service_key) DO NOTHING;
--- ---------- Channel subscription billing (see infra/db/migrations/025_channel_subscription_billing.sql for full rationale) ----------
+
+-- ---------- Channel subscription billing ----------
 
 -- Our own price catalogue per channel — platform-admin managed, not per-org.
 CREATE TABLE IF NOT EXISTS channel_plans (
@@ -964,9 +945,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_org_channel_sub_live
 CREATE INDEX IF NOT EXISTS idx_org_channel_sub_org
   ON organization_channel_subscriptions (organization_id);
 
--- Meta's rate card (per channel_type/category/recipient country) — the
--- source of truth for WhatsApp usage pass-through. Never hardcode these
--- rates in application code; Meta revises them roughly every 6 months.
+-- Meta's rate card (per channel_type/category/recipient country)
 CREATE TABLE IF NOT EXISTS meta_rate_cards (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   channel_type    TEXT NOT NULL CHECK (channel_type IN ('whatsapp','messenger','instagram')),
@@ -984,8 +963,7 @@ CREATE TABLE IF NOT EXISTS meta_rate_cards (
 CREATE INDEX IF NOT EXISTS idx_meta_rate_cards_lookup
   ON meta_rate_cards (channel_type, category, country_code, effective_from DESC) WHERE active;
 
--- SMS rate card — kept separate from meta_rate_cards (not a Meta product,
--- has its own compliance fields tracked alongside cost in sms_usage_charges).
+-- SMS rate card
 CREATE TABLE IF NOT EXISTS sms_rate_cards (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   route_type      TEXT NOT NULL CHECK (route_type IN ('promotional','transactional','otp')),
@@ -1000,8 +978,7 @@ CREATE TABLE IF NOT EXISTS sms_rate_cards (
 CREATE INDEX IF NOT EXISTS idx_sms_rate_cards_lookup
   ON sms_rate_cards (route_type, effective_from DESC) WHERE active;
 
--- The % markup we add on top of Meta's/SMS's actual cost. organization_id
--- NULL = platform-wide default; a specific org can get its own override row.
+-- The % markup we add on top of Meta's/SMS's actual cost.
 CREATE TABLE IF NOT EXISTS billing_markup_config (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID REFERENCES organizations(id) ON DELETE CASCADE,
@@ -1015,9 +992,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_billing_markup_default
 CREATE UNIQUE INDEX IF NOT EXISTS ux_billing_markup_org
   ON billing_markup_config (organization_id) WHERE organization_id IS NOT NULL;
 
--- WhatsApp campaign billing ledger — reserve (pre-send hold) → settle
--- (post-send reconcile to actual delivered count) → charge. See
--- campaign-service/src/whatsappBilling.js.
+-- WhatsApp campaign billing ledger
 CREATE TABLE IF NOT EXISTS whatsapp_billing_ledger (
   id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id       UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -1039,7 +1014,7 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_ledger_org_created
 CREATE INDEX IF NOT EXISTS idx_whatsapp_ledger_campaign
   ON whatsapp_billing_ledger (campaign_id) WHERE campaign_id IS NOT NULL;
 
--- Per-message Meta usage audit trail — feeds invoice_line_items.
+-- Per-message Meta usage audit trail
 CREATE TABLE IF NOT EXISTS meta_usage_charges (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -1064,8 +1039,7 @@ CREATE INDEX IF NOT EXISTS idx_meta_usage_org_period ON meta_usage_charges (orga
 CREATE INDEX IF NOT EXISTS idx_meta_usage_campaign ON meta_usage_charges (campaign_id) WHERE campaign_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_meta_usage_uninvoiced ON meta_usage_charges (organization_id) WHERE NOT invoiced;
 
--- SMS usage audit trail — kept separate from meta_usage_charges (different
--- compliance fields: DLT template id, sender id).
+-- SMS usage audit trail
 CREATE TABLE IF NOT EXISTS sms_usage_charges (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -1088,22 +1062,6 @@ CREATE TABLE IF NOT EXISTS sms_usage_charges (
 CREATE INDEX IF NOT EXISTS idx_sms_usage_org_period ON sms_usage_charges (organization_id, period);
 CREATE INDEX IF NOT EXISTS idx_sms_usage_campaign ON sms_usage_charges (campaign_id) WHERE campaign_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_sms_usage_uninvoiced ON sms_usage_charges (organization_id) WHERE NOT invoiced;
-
--- Itemized invoice lines — indirectly scoped via invoice_id -> invoices.organization_id.
-CREATE TABLE IF NOT EXISTS invoice_line_items (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  invoice_id    UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
-  type          TEXT NOT NULL CHECK (type IN
-                  ('saas_channel_fee','meta_passthrough','sms_passthrough','bsp_markup','other')),
-  channel_type  TEXT,
-  description   TEXT NOT NULL,
-  quantity      INT NOT NULL DEFAULT 1,
-  unit_amount   NUMERIC(14,2) NOT NULL,
-  total_amount  NUMERIC(14,2) NOT NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_invoice_line_items_invoice ON invoice_line_items (invoice_id);
 
 CREATE TABLE IF NOT EXISTS wallets (
   organization_id       UUID PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
@@ -1134,9 +1092,8 @@ CREATE INDEX IF NOT EXISTS idx_wallet_tx_org_created ON wallet_transactions (org
 CREATE TABLE IF NOT EXISTS payments (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id     UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-
-  purpose      TEXT NOT NULL CHECK (purpose IN ('WALLET_RECHARGE', 'ECOMMERCE_ORDER', 'WALKIN_SALE', 'SUBSCRIPTION_CHARGE', 'INVOICE_SETTLEMENT')),
-  reference_id UUID, -- ecommerce_orders.id for ECOMMERCE_ORDER / WALKIN_SALE
+  purpose             TEXT NOT NULL CHECK (purpose IN ('WALLET_RECHARGE', 'ECOMMERCE_ORDER', 'WALKIN_SALE', 'SUBSCRIPTION_CHARGE', 'INVOICE_SETTLEMENT')),
+  reference_id        UUID, -- ecommerce_orders.id for ECOMMERCE_ORDER / WALKIN_SALE
   contact_id          UUID REFERENCES contacts(id),
   amount              NUMERIC(14,2) NOT NULL CHECK (amount > 0),
   currency            TEXT NOT NULL DEFAULT 'INR',
@@ -1183,6 +1140,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   invoice_number      TEXT UNIQUE,
   subscription_id     UUID REFERENCES subscriptions(id),
   payment_id          UUID REFERENCES payments(id),
+  billing_period_start DATE,
+  billing_period_end   DATE,
   seller_gstin        TEXT,
   seller_state_code   TEXT,
   buyer_legal_name    TEXT,
@@ -1215,6 +1174,22 @@ CREATE TABLE IF NOT EXISTS invoices (
 CREATE INDEX IF NOT EXISTS idx_invoices_org_created ON invoices (organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_invoices_subscription ON invoices (subscription_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_payment ON invoices (payment_id);
+
+-- Itemized invoice lines — indirectly scoped via invoice_id -> invoices.organization_id.
+CREATE TABLE IF NOT EXISTS invoice_line_items (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_id    UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  type          TEXT NOT NULL CHECK (type IN
+                  ('saas_channel_fee','meta_passthrough','sms_passthrough','bsp_markup','other')),
+  channel_type  TEXT,
+  description   TEXT NOT NULL,
+  quantity      INT NOT NULL DEFAULT 1,
+  unit_amount   NUMERIC(14,2) NOT NULL,
+  total_amount  NUMERIC(14,2) NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_line_items_invoice ON invoice_line_items (invoice_id);
 
 CREATE TABLE IF NOT EXISTS invoice_counters (
   financial_year TEXT PRIMARY KEY,
