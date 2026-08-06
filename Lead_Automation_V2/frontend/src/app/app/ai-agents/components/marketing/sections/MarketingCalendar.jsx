@@ -12,11 +12,21 @@ import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, Trash2, Load
 import {
   useCalendarEvents, useCreateCalendarEvent, useDeleteCalendarEvent, EVENT_TYPES,
 } from '@/lib/queries/marketing';
+import { expandEvents, describeRRule } from '@/lib/rrule';
 import { Card, Badge, Button, EmptyState, SectionTitle } from '../MarketingUI';
+import {
+  PageHeader, Toolbar, ToolButton, ToolSearch, StatsStrip, ViewSwitcher, SplitPane,
+} from '../HubUI';
 import { AIPanel, Modal, Field, Input, Textarea, Select, ErrorNote } from './Shared';
 
 const TYPE_TONE = Object.fromEntries(EVENT_TYPES.map((t) => [t.value, t.tone]));
 const TYPE_LABEL = Object.fromEntries(EVENT_TYPES.map((t) => [t.value, t.label]));
+// Legend swatches, matching the reference's colour-coded month grid.
+const TYPE_DOT = {
+  campaign_launch: '#E11D48', broadcast: '#3B6EF0', meeting: '#64748B',
+  webinar: '#059669', reminder: '#D97706', holiday: '#DC2626', content: '#FB7185',
+};
+
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function monthBounds(cursor) {
@@ -46,10 +56,18 @@ export default function MarketingCalendar() {
   const [presetDate, setPresetDate] = useState(null);
 
   const { start, end } = monthBounds(cursor);
-  const { data: events = [], isLoading } = useCalendarEvents({
+  const { data: stored = [], isLoading } = useCalendarEvents({
     start: start.toISOString(),
     end: end.toISOString(),
   });
+
+  // `recurrence_rule` was stored and never expanded, so a weekly event showed
+  // up exactly once. The backend now returns recurring rows regardless of how
+  // far back they started; this projects them across the visible month.
+  const events = useMemo(
+    () => expandEvents(stored, start, end),
+    [stored, start, end],
+  );
 
   const create = useCreateCalendarEvent();
   const del = useDeleteCalendarEvent();
@@ -90,6 +108,50 @@ export default function MarketingCalendar() {
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title="Marketing Calendar"
+        subtitle="Campaign launches, broadcasts, and content dates. Repeating events expand across the view."
+        count={events.length}
+      />
+
+      <Toolbar
+        right={
+          <div className="flex items-center gap-1.5">
+            <ToolButton icon={ChevronLeft}
+              onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} />
+            <span className="text-[13px] font-semibold text-[#0F1929] w-36 text-center"
+                  style={{ fontFamily: "'Outfit', sans-serif" }}>
+              {cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+            </span>
+            <ToolButton icon={ChevronRight}
+              onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} />
+            <ToolButton onClick={() => setCursor(new Date())}>Today</ToolButton>
+          </div>
+        }
+      >
+        <Button variant="primary" icon={Plus} onClick={() => openFor(null)} className="!py-1.5 !px-3 !text-[12px]">
+          New event
+        </Button>
+        <div className="flex items-center gap-2.5 ml-2 flex-wrap">
+          {EVENT_TYPES.map((t) => (
+            <span key={t.value} className="flex items-center gap-1 text-[10px] text-slate-400">
+              <span className="w-2 h-2 rounded-sm" style={{ background: TYPE_DOT[t.value] || '#CBD5E1' }} />
+              {t.label}
+            </span>
+          ))}
+        </div>
+      </Toolbar>
+
+      <StatsStrip
+        items={[
+          { label: 'This view', value: events.length, tone: 'violet' },
+          { label: 'Repeating', value: stored.filter((e) => e.recurrence_rule).length, tone: 'blue' },
+          { label: 'Campaign launches', value: events.filter((e) => e.event_type === 'campaign_launch').length, tone: 'green' },
+          { label: 'Broadcasts', value: events.filter((e) => e.event_type === 'broadcast').length, tone: 'amber' },
+          { label: 'Content', value: events.filter((e) => e.event_type === 'content').length, tone: 'slate' },
+        ]}
+      />
+
       <AIPanel
         capability="content_calendar"
         placeholder="e.g. Build a 6-week content calendar across blog, LinkedIn and WhatsApp"
@@ -121,28 +183,6 @@ export default function MarketingCalendar() {
         }}
       />
 
-      <Card className="p-4">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Button
-              icon={ChevronLeft}
-              onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
-              className="!px-2 !py-1.5"
-            />
-            <h3 className="text-sm font-bold text-[#0F1929] w-40 text-center" style={{ fontFamily: "'Outfit', sans-serif" }}>
-              {cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-            </h3>
-            <Button
-              icon={ChevronRight}
-              onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
-              className="!px-2 !py-1.5"
-            />
-            <Button onClick={() => setCursor(new Date())} className="!text-[11px]">Today</Button>
-          </div>
-          <Button variant="primary" icon={Plus} onClick={() => openFor(null)}>New event</Button>
-        </div>
-      </Card>
-
       <ErrorNote error={create.error || del.error} />
 
       <Card className="p-3">
@@ -167,10 +207,10 @@ export default function MarketingCalendar() {
                     key={i}
                     onClick={() => openFor(d)}
                     className={`min-h-[92px] rounded-xl border p-1.5 text-left transition-all hover:bg-slate-50 ${
-                      isToday ? 'border-violet-300 bg-violet-50/40' : 'border-[#EEF1F6]'
+                      isToday ? 'border-rose-300 bg-rose-50/40' : 'border-[#EEF1F6]'
                     }`}
                   >
-                    <span className={`text-[11px] font-semibold ${isToday ? 'text-violet-600' : 'text-slate-400'}`}>
+                    <span className={`text-[11px] font-semibold ${isToday ? 'text-rose-600' : 'text-slate-400'}`}>
                       {d.getDate()}
                     </span>
                     <div className="space-y-1 mt-1">
@@ -179,8 +219,8 @@ export default function MarketingCalendar() {
                           key={e.id}
                           className="text-[10px] px-1.5 py-0.5 rounded truncate"
                           style={{
-                            background: TYPE_TONE[e.event_type] === 'violet' ? '#F5F3FF' : '#F1F5F9',
-                            color: TYPE_TONE[e.event_type] === 'violet' ? '#7C3AED' : '#475569',
+                            background: TYPE_TONE[e.event_type] === 'violet' ? '#FFF1F2' : '#F1F5F9',
+                            color: TYPE_TONE[e.event_type] === 'violet' ? '#E11D48' : '#475569',
                           }}
                           title={e.title}
                         >
@@ -210,9 +250,26 @@ export default function MarketingCalendar() {
                 <span className="font-mono text-[11px] text-slate-400 w-24 flex-shrink-0">
                   {new Date(e.start_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                 </span>
-                <span className="text-[13px] text-[#0F1929] truncate flex-1">{e.title}</span>
+                <span className="text-[13px] text-[#0F1929] truncate flex-1">
+                  {e.title}
+                  {e.recurrence_rule && (
+                    <span className="text-[10px] text-rose-500 ml-1.5" title={e.recurrence_rule}>
+                      ↻ {describeRRule(e.recurrence_rule)}
+                    </span>
+                  )}
+                </span>
                 <Badge tone={TYPE_TONE[e.event_type] || 'slate'}>{TYPE_LABEL[e.event_type] || e.event_type}</Badge>
-                <Button variant="danger" icon={Trash2} onClick={() => del.mutate(e.id)} className="!px-2 !py-1.5" />
+                {/* A projected occurrence has a composite id and no row of its
+                    own. Deleting "just this one" needs an exception concept the
+                    schema doesn't have, so the whole series is the only honest
+                    option — say so rather than silently deleting everything. */}
+                <Button
+                  variant="danger"
+                  icon={Trash2}
+                  onClick={() => del.mutate(e.original_event_id || e.id)}
+                  title={e.isOccurrence ? 'Deletes the whole repeating series' : 'Delete event'}
+                  className="!px-2 !py-1.5"
+                />
               </div>
             ))}
           </div>

@@ -159,12 +159,12 @@ export default function CampaignWizard({ campaignId, onClose }) {
                 onClick={() => i < step && setStep(i)}
                 disabled={i > step}
                 className={`flex items-center gap-1.5 text-xs font-medium ${
-                  i === step ? 'text-violet-700' : i < step ? 'text-slate-500 cursor-pointer' : 'text-slate-300'
+                  i === step ? 'text-rose-700' : i < step ? 'text-slate-500 cursor-pointer' : 'text-slate-300'
                 }`}
               >
                 <span
                   className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
-                    i < step ? 'bg-violet-100 text-violet-600' : i === step ? 'bg-violet-600 text-white' : 'bg-slate-100'
+                    i < step ? 'bg-rose-100 text-rose-600' : i === step ? 'bg-rose-600 text-white' : 'bg-slate-100'
                   }`}
                 >
                   {i < step ? <Check size={11} /> : i + 1}
@@ -300,7 +300,7 @@ function StepObjectivePlatforms({ form, set }) {
               onClick={() => set({ objective: o.value })}
               className={`text-left p-3 rounded-xl border transition-all ${
                 form.objective === o.value
-                  ? 'border-violet-300 bg-violet-50 ring-2 ring-violet-100'
+                  ? 'border-rose-300 bg-rose-50 ring-2 ring-rose-100'
                   : 'border-[#E4E8F0] hover:bg-slate-50'
               }`}
             >
@@ -320,7 +320,7 @@ function StepObjectivePlatforms({ form, set }) {
               <label
                 key={p.value}
                 className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs cursor-pointer ${
-                  checked ? 'border-violet-300 bg-violet-50 text-violet-700' : 'border-[#E4E8F0] text-slate-600'
+                  checked ? 'border-rose-300 bg-rose-50 text-rose-700' : 'border-[#E4E8F0] text-slate-600'
                 }`}
               >
                 <input
@@ -341,9 +341,9 @@ function StepObjectivePlatforms({ form, set }) {
           })}
         </div>
 
-        <Card className="p-3 bg-violet-50/40 border-violet-100">
+        <Card className="p-3 bg-rose-50/40 border-rose-100">
           <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-700">
               <Sparkles size={13} /> Ask the Marketing Agent
             </div>
             <Button onClick={askAI} disabled={run.isPending || !form.name}>
@@ -392,7 +392,7 @@ function StepBudget({ form, set }) {
               key={o.v}
               onClick={() => set({ budget_type: o.v })}
               className={`text-left p-3 rounded-xl border ${
-                form.budget_type === o.v ? 'border-violet-300 bg-violet-50' : 'border-[#E4E8F0]'
+                form.budget_type === o.v ? 'border-rose-300 bg-rose-50' : 'border-[#E4E8F0]'
               }`}
             >
               <div className="text-xs font-semibold text-slate-700">{o.label}</div>
@@ -476,7 +476,7 @@ function StepAudience({ form, set }) {
         <div className="space-y-1.5 max-h-40 overflow-y-auto">
           {(audiences || []).map((a) => (
             <label key={a.id} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-xs ${
-              form.audience_id === a.id ? 'border-violet-300 bg-violet-50' : 'border-[#EEF1F6]'
+              form.audience_id === a.id ? 'border-rose-300 bg-rose-50' : 'border-[#EEF1F6]'
             }`}>
               <input type="radio" checked={form.audience_id === a.id} onChange={() => set({ audience_id: a.id })} />
               <Users size={12} className="text-slate-400" />
@@ -490,9 +490,9 @@ function StepAudience({ form, set }) {
         </div>
       </Field>
 
-      <Card className="p-3 bg-violet-50/40 border-violet-100">
+      <Card className="p-3 bg-rose-50/40 border-rose-100">
         <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-rose-700">
             <Sparkles size={13} /> Draft a persona with AI
           </span>
           <Button onClick={draftPersona} disabled={run.isPending}>
@@ -549,9 +549,9 @@ function StepContent({ form, set }) {
 
   return (
     <div className="space-y-4">
-      <Card className="p-3 bg-violet-50/40 border-violet-100">
+      <Card className="p-3 bg-rose-50/40 border-rose-100">
         <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 text-xs font-semibold text-violet-700">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-rose-700">
             <Sparkles size={13} /> Draft copy with AI
           </span>
           <Button onClick={draftContent} disabled={run.isPending || !form.name}>
@@ -660,7 +660,7 @@ function SummaryField({ label, value }) {
 /* ── shared bits ──────────────────────────────────────────────────────── */
 
 const inputClass =
-  'w-full text-sm rounded-xl border border-[#E4E8F0] px-3 py-2 outline-none focus:border-violet-300 focus:ring-2 focus:ring-violet-100 transition-all';
+  'w-full text-sm rounded-xl border border-[#E4E8F0] px-3 py-2 outline-none focus:border-rose-300 focus:ring-2 focus:ring-rose-100 transition-all';
 
 function Field({ label, required, children }) {
   return (

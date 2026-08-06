@@ -9,7 +9,10 @@ const AUTH        = process.env.AUTH_SERVICE_URL        || 'http://localhost:400
 const INBOX       = process.env.INBOX_SERVICE_URL       || 'http://localhost:4002';
 const CONTACT     = process.env.CONTACT_SERVICE_URL     || 'http://localhost:4003';
 const CAMPAIGN    = process.env.CAMPAIGN_SERVICE_URL    || 'http://localhost:4004';
-const AI          = process.env.AI_SERVICE_URL          || 'http://localhost:4005';
+const AI_OVERVIEW    = process.env.AI_OVERVIEW_SERVICE_URL    || 'http://localhost:4020';
+const AI_MARKETING   = process.env.AI_MARKETING_SERVICE_URL   || 'http://localhost:4021';
+const AI_SALES       = process.env.AI_SALES_SERVICE_URL       || 'http://localhost:4022';
+const AI_SUPPORT     = process.env.AI_SUPPORT_SERVICE_URL     || 'http://localhost:4023';
 const ECOMMERCE   = process.env.ECOMMERCE_SERVICE_URL   || 'http://localhost:4006';
 const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:4007';
 const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
@@ -112,7 +115,21 @@ const routes = [
   // Message Templates (Template Creation module) — owned by campaign-service
   // (src/templates.js + src/templateMedia.js), not yet in this route table.
   { path: '/templates',           target: CAMPAIGN },
-  { path: '/ai-agents',           target: AI },
+  { path: '/ai-agents/status',           target: AI_OVERVIEW },
+  { path: '/ai-agents/analytics',        target: AI_OVERVIEW },
+  { path: '/ai-agents/health',          target: AI_OVERVIEW },
+  { path: '/ai-agents/knowledge',       target: AI_OVERVIEW },
+  { path: '/ai-agents/sessions',        target: AI_OVERVIEW },
+  { path: '/ai-agents/runs',            target: AI_OVERVIEW },
+  { path: '/ai-agents/orchestrate',     target: AI_OVERVIEW },
+  { path: '/ai-agents/marketing',       target: AI_MARKETING },
+  { path: '/ai-agents/sales',           target: AI_SALES },
+  { path: '/ai-agents/support',         target: AI_SUPPORT },
+  { path: '/ai-agents',                 target: AI_OVERVIEW },
+  { path: '/agents/marketing',          target: AI_MARKETING },
+  { path: '/agents/sales',              target: AI_SALES },
+  { path: '/agents/support',            target: AI_SUPPORT },
+  { path: '/sessions',                  target: AI_OVERVIEW },
   { path: '/orders',              target: ECOMMERCE },
   { path: '/carts',               target: ECOMMERCE },
   { path: '/recovery-flows',      target: ECOMMERCE },

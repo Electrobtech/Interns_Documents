@@ -17,6 +17,7 @@ import {
   Plus, Search, Filter, RefreshCw, Copy, Pause, Play, Archive, Trash2,
   MoreVertical, ChevronLeft, ChevronRight, Megaphone, AlertTriangle, Download,
   Upload, Sparkles, Eye, Pencil, BarChart2, Columns3, X, Bookmark, ExternalLink,
+  List, LayoutGrid, Kanban,
 } from 'lucide-react';
 
 import {
@@ -25,9 +26,14 @@ import {
 } from '@/lib/queries/campaigns';
 import { Card, Badge, Button, EmptyState, fmt } from '../MarketingUI';
 import {
+  PageHeader, Toolbar, ToolButton, ToolSearch, StatsStrip, ViewSwitcher,
+} from '../HubUI';
+import { CardView, KanbanView } from '../CampaignViews';
+import {
   Menu, SplitButton, ConfirmDialog, Skeleton, NoSource, useToast, timeAgo,
 } from './Shared';
 import CampaignWizard from '@/app/app/ai-agents/components/marketing/CampaignWizard';
+import CampaignDetailDrawer from '@/app/app/ai-agents/components/marketing/CampaignDetailDrawer';
 
 const STATUS_TONE = Object.fromEntries(STATUSES.map((s) => [s.value, s.tone]));
 const STATUS_LABEL = Object.fromEntries(STATUSES.map((s) => [s.value, s.label]));
@@ -107,7 +113,10 @@ export default function Campaigns() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [detailId, setDetailId] = useState(null);
   const [focusIndex, setFocusIndex] = useState(-1);
+  const [view, setView] = useState('table');
+  const [columnsOpen, setColumnsOpen] = useState(false);
 
   const [columns, setColumns] = useState(() =>
     loadLocal(COLS_KEY, Object.fromEntries(ALL_COLUMNS.map((c) => [c.key, true]))),
@@ -161,6 +170,7 @@ export default function Campaigns() {
     });
 
   const openEdit = (id) => { setEditingId(id); setWizardOpen(true); };
+  const openDetail = (id) => setDetailId(id);
 
   /* ── Actions with feedback ─────────────────────────────────────────── */
 
@@ -241,7 +251,7 @@ export default function Campaigns() {
     if (!rows.length) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); setFocusIndex((i) => Math.min(rows.length - 1, i + 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setFocusIndex((i) => Math.max(0, i - 1)); }
-    else if (e.key === 'Enter' && focusIndex >= 0) { e.preventDefault(); openEdit(rows[focusIndex].id); }
+    else if (e.key === 'Enter' && focusIndex >= 0) { e.preventDefault(); openDetail(rows[focusIndex].id); }
     else if (e.key === ' ' && focusIndex >= 0) { e.preventDefault(); toggleOne(rows[focusIndex].id); }
   };
 
@@ -249,135 +259,97 @@ export default function Campaigns() {
 
   return (
     <div className="space-y-4">
-      {/* ── Header ──────────────────────────────────────────────────── */}
-      <Card className="p-4">
-        <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-[20px] font-semibold text-[#0F1929]" style={{ fontFamily: "'Outfit', sans-serif" }}>
-              Campaigns
-            </h2>
-            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-              {isLoading ? '…' : total}
-            </span>
-          </div>
+      <PageHeader
+        title="Campaigns"
+        subtitle="Plan, schedule, and track multi-step campaigns. Delivery figures fill in once a send provider is connected."
+        count={isLoading ? null : total}
+      />
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="primary"
-              icon={Plus}
-              onClick={() => { setEditingId(null); setWizardOpen(true); }}
-              className="!h-11"
-            >
-              Create campaign
-            </Button>
-
-            <Button
-              icon={Upload}
-              title="Bulk import needs a CSV ingest endpoint, which isn't built yet"
-              disabled
-            >
-              Import
-            </Button>
-
-            <SplitButton
-              label="Export"
-              icon={Download}
-              onClick={() => exportCsv(rows)}
-              items={[
-                { label: 'Export as CSV', icon: Download, onClick: () => exportCsv(rows) },
-                { label: 'Export as JSON', icon: Download, onClick: () => exportJson(rows) },
-                {
-                  label: 'Export as PDF', icon: Download, disabled: true,
-                  disabledReason: 'PDF rendering is server-side and not built yet',
-                },
-              ]}
-            />
-
-            <Button
-              icon={Sparkles}
-              onClick={() => toast({
-                message: 'Ask the Marketing Agent panel to review a campaign — open it from the header.',
-              })}
-            >
-              AI Optimize
-            </Button>
-
-            <Menu
-              trigger={
-                <button
-                  aria-label="More actions"
-                  className="w-9 h-9 rounded-xl border border-[#E4E8F0] bg-white text-slate-500
-                             hover:bg-slate-50 transition-colors flex items-center justify-center"
-                >
-                  <MoreVertical size={15} />
-                </button>
-              }
-              items={[
-                { label: 'Refresh', icon: RefreshCw, onClick: () => refetch() },
-                { label: 'Save current view', icon: Bookmark, onClick: saveView },
-                { divider: true },
-                { label: 'Export all as JSON', icon: Download, onClick: () => exportJson(rows) },
-              ]}
-            />
-          </div>
-        </div>
-
-        {/* ── Search + filter row ──────────────────────────────────── */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative flex-1 min-w-[240px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
-            <input
-              ref={searchRef}
+      {/* ── Toolbar ─────────────────────────────────────────────────── */}
+      <Toolbar
+        right={
+          <>
+            <ToolSearch
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              onKeyDown={(e) => e.key === 'Escape' && setSearch('')}
               placeholder="Search campaigns…"
-              aria-label="Search campaigns"
-              className="w-full text-sm pl-9 pr-20 py-2.5 rounded-xl border border-[#E4E8F0] outline-none
-                         focus:border-violet-300 focus:ring-2 focus:ring-violet-100 transition-all"
             />
-            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-              {search && (
-                <button onClick={() => setSearch('')} aria-label="Clear search" className="text-slate-300 hover:text-slate-500">
-                  <X size={13} />
-                </button>
-              )}
-              <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#E4E8F0] text-slate-400">
-                Ctrl+K
-              </kbd>
-            </div>
+            <ToolButton
+              icon={Filter}
+              onClick={() => setFiltersOpen((v) => !v)}
+              active={activeFilterCount > 0}
+            >
+              Filter{activeFilterCount ? ` (${activeFilterCount})` : ''}
+            </ToolButton>
+            <ViewSwitcher
+              value={view}
+              onChange={setView}
+              views={[
+                { id: 'table', icon: List, label: 'Table' },
+                { id: 'card', icon: LayoutGrid, label: 'Cards' },
+                { id: 'kanban', icon: Kanban, label: 'Kanban' },
+              ]}
+            />
+          </>
+        }
+      >
+        <Button
+          variant="primary"
+          icon={Plus}
+          onClick={() => { setEditingId(null); setWizardOpen(true); }}
+          className="!py-1.5 !px-3 !text-[12px]"
+        >
+          Create campaign
+        </Button>
+        <ToolButton icon={Copy} disabled={!selected.size}
+          onClick={() => runOnSelected((id) => duplicate.mutateAsync(id), 'duplicated')}>Duplicate</ToolButton>
+        <ToolButton icon={Archive} disabled={!selected.size}
+          onClick={() => runOnSelected((id) => changeStatus.mutateAsync({ id, to_status: 'archived' }), 'archived')}>Archive</ToolButton>
+        <ToolButton icon={Pause} disabled={!selected.size}
+          onClick={() => runOnSelected((id) => changeStatus.mutateAsync({ id, to_status: 'paused' }), 'paused')}>Pause</ToolButton>
+        <ToolButton icon={Play} disabled={!selected.size}
+          onClick={() => runOnSelected((id) => changeStatus.mutateAsync({ id, to_status: 'running' }), 'resumed')}>Resume</ToolButton>
+        <ToolButton icon={Trash2} danger disabled={!selected.size}
+          onClick={() => runOnSelected((id) => del.mutateAsync(id), 'deleted')}>Delete</ToolButton>
+        <ToolButton icon={Upload} disabled title="Bulk import needs a CSV ingest endpoint, which isn't built yet">Import</ToolButton>
+        <ToolButton icon={Download} onClick={() => exportCsv(rows)}>Export</ToolButton>
+        <ToolButton icon={Columns3} onClick={() => setColumnsOpen((v) => !v)}>Columns</ToolButton>
+        <ToolButton icon={Bookmark} onClick={saveView}>Save view</ToolButton>
+        <ToolButton icon={RefreshCw} onClick={() => refetch()} disabled={isFetching}>
+          {isFetching ? 'Refreshing…' : 'Refresh'}
+        </ToolButton>
+      </Toolbar>
+
+      {columnsOpen && (
+        <Card className="p-3">
+          <p className="text-[11px] font-semibold text-slate-500 mb-2">Visible columns</p>
+          <div className="flex flex-wrap gap-3">
+            {ALL_COLUMNS.map((c) => (
+              <label key={c.key} className="flex items-center gap-1.5 text-[12px] text-slate-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={visible(c.key)}
+                  onChange={() => setColumns((s) => ({ ...s, [c.key]: !visible(c.key) }))}
+                  className="rounded"
+                />
+                {c.label}
+              </label>
+            ))}
           </div>
+        </Card>
+      )}
 
-          {views.length > 0 && (
-            <Menu
-              align="left"
-              trigger={<Button icon={Bookmark}>Saved views</Button>}
-              items={views.map((v) => ({ label: v.name, icon: Bookmark, onClick: () => applyView(v) }))}
-            />
-          )}
-
-          <Menu
-            trigger={<Button icon={Columns3}>Columns</Button>}
-            items={ALL_COLUMNS.map((c) => ({
-              label: `${visible(c.key) ? '✓ ' : '   '}${c.label}`,
-              onClick: () => setColumns((s) => ({ ...s, [c.key]: !visible(c.key) })),
-            }))}
-          />
-
-          <Button
-            icon={Filter}
-            onClick={() => setFiltersOpen((v) => !v)}
-            className={activeFilterCount ? 'border-violet-300 text-violet-700' : ''}
-          >
-            Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
-          </Button>
-
-          <Button icon={RefreshCw} onClick={() => refetch()} disabled={isFetching}>
-            {isFetching ? 'Refreshing…' : 'Refresh'}
-          </Button>
+      {views.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap px-1">
+          <span className="text-[11px] text-slate-400">Saved views</span>
+          {views.map((v) => (
+            <ToolButton key={v.name} icon={Bookmark} onClick={() => applyView(v)}>{v.name}</ToolButton>
+          ))}
         </div>
+      )}
 
-        {filtersOpen && (
+      {filtersOpen && (
+        <Card className="p-4">
           <FilterPanel
             statusFilter={statusFilter} setStatusFilter={setStatusFilter}
             objectiveFilter={objectiveFilter} setObjectiveFilter={setObjectiveFilter}
@@ -386,16 +358,29 @@ export default function Campaigns() {
             onClear={() => { setStatusFilter([]); setObjectiveFilter([]); setPlatformFilter([]); }}
             onSaveView={saveView}
           />
-        )}
-      </Card>
+        </Card>
+      )}
+
+      {/* ── Stats strip ─────────────────────────────────────────────── */}
+      <StatsStrip
+        items={[
+          { label: 'Total', value: isLoading ? null : total, tone: 'violet' },
+          { label: 'Running', value: rows.filter((c) => c.status === 'running').length, tone: 'green' },
+          { label: 'Scheduled', value: rows.filter((c) => c.status === 'scheduled').length, tone: 'blue' },
+          { label: 'Paused', value: rows.filter((c) => c.status === 'paused').length, tone: 'amber' },
+          { label: 'Draft', value: rows.filter((c) => c.status === 'draft').length, tone: 'slate' },
+          { label: 'Spend', value: null, tone: 'slate', note: 'Needs a connected ad account' },
+          { label: 'ROAS', value: null, tone: 'slate', note: 'Needs a connected ad account' },
+        ]}
+      />
 
       {/* ── Sticky bulk bar ─────────────────────────────────────────── */}
       {selected.size > 0 && (
         <div className="sticky top-24 z-20">
-          <Card className="p-3 border-violet-200 bg-violet-50/80 backdrop-blur-sm">
+          <Card className="p-3 border-rose-200 bg-rose-50/80 backdrop-blur-sm">
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-sm font-medium text-violet-800">{selected.size} selected</span>
-              <button onClick={() => setSelected(new Set())} className="text-xs text-violet-500 hover:text-violet-700">
+              <span className="text-sm font-medium text-rose-800">{selected.size} selected</span>
+              <button onClick={() => setSelected(new Set())} className="text-xs text-rose-500 hover:text-rose-700">
                 Clear selection
               </button>
               <div className="ml-auto flex items-center gap-1.5 flex-wrap">
@@ -423,8 +408,23 @@ export default function Campaigns() {
         </div>
       )}
 
-      {/* ── Table ───────────────────────────────────────────────────── */}
-      <Card>
+      {/* ── Content: table / cards / kanban ─────────────────────────── */}
+      {view !== 'table' && !isLoading && rows.length > 0 && (
+        view === 'card' ? (
+          <CardView
+            rows={rows}
+            selected={selected}
+            onToggle={toggleOne}
+            onOpen={openDetail}
+            onEdit={openEdit}
+            onDuplicate={doDuplicate}
+          />
+        ) : (
+          <KanbanView rows={rows} onOpen={openDetail} />
+        )
+      )}
+
+      <Card className={view === 'table' ? '' : 'hidden'}>
         {isError && (
           <div className="p-4 flex items-center gap-2 text-sm text-red-600 border-b border-red-100 bg-red-50/60">
             <AlertTriangle size={14} /> Could not load campaigns.
@@ -486,7 +486,8 @@ export default function Campaigns() {
                     focused={i === focusIndex}
                     checked={selected.has(c.id)}
                     onToggle={() => toggleOne(c.id)}
-                    onOpen={() => openEdit(c.id)}
+                    onOpen={() => openDetail(c.id)}
+                    onEdit={() => openEdit(c.id)}
                     onDuplicate={() => doDuplicate(c)}
                     onMove={move}
                     onDelete={() => setConfirmDelete(c)}
@@ -543,6 +544,14 @@ export default function Campaigns() {
           onClose={() => { setWizardOpen(false); setEditingId(null); }}
         />
       )}
+
+      {detailId && (
+        <CampaignDetailDrawer
+          campaignId={detailId}
+          onClose={() => setDetailId(null)}
+          onEdit={(id) => { setDetailId(null); openEdit(id); }}
+        />
+      )}
     </div>
   );
 }
@@ -555,13 +564,13 @@ function Th({ children, align = 'left' }) {
   );
 }
 
-function Row({ c, focused, checked, onToggle, onOpen, onDuplicate, onMove, onDelete, visible }) {
+function Row({ c, focused, checked, onToggle, onOpen, onEdit, onDuplicate, onMove, onDelete, visible }) {
   const next = NEXT_STATUSES[c.status] || [];
 
   return (
     <tr
       className={`group border-b border-[#EEF1F6] transition-colors ${
-        focused ? 'bg-violet-50/60' : 'hover:bg-slate-50/70'
+        focused ? 'bg-rose-50/60' : 'hover:bg-slate-50/70'
       }`}
       style={{ height: 72 }}
       aria-selected={checked}
@@ -574,7 +583,7 @@ function Row({ c, focused, checked, onToggle, onOpen, onDuplicate, onMove, onDel
       <td className="px-3">
         <div className="flex items-center gap-2">
           <div className="min-w-0">
-            <button onClick={onOpen} className="block text-left font-semibold text-[15px] text-[#0F1929] hover:text-violet-600 truncate max-w-[260px]">
+            <button onClick={onOpen} className="block text-left font-semibold text-[15px] text-[#0F1929] hover:text-rose-600 truncate max-w-[260px]">
               {c.name}
             </button>
             <p className="text-[12px] text-slate-400 truncate max-w-[260px]">
@@ -591,7 +600,7 @@ function Row({ c, focused, checked, onToggle, onOpen, onDuplicate, onMove, onDel
           </div>
           <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <IconBtn label="Preview" icon={Eye} onClick={onOpen} />
-            <IconBtn label="Edit" icon={Pencil} onClick={onOpen} />
+            <IconBtn label="Edit" icon={Pencil} onClick={onEdit} />
             <IconBtn label="Duplicate" icon={Copy} onClick={onDuplicate} />
           </div>
         </div>
@@ -674,7 +683,7 @@ function Row({ c, focused, checked, onToggle, onOpen, onDuplicate, onMove, onDel
           }
           items={[
             { label: 'Open', icon: ExternalLink, onClick: onOpen },
-            { label: 'Edit', icon: Pencil, onClick: onOpen },
+            { label: 'Edit', icon: Pencil, onClick: onEdit },
             { label: 'Duplicate', icon: Copy, onClick: onDuplicate },
             { label: 'Preview', icon: Eye, onClick: onOpen },
             {

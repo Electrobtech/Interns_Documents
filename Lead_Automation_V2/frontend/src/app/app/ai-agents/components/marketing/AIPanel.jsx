@@ -74,7 +74,7 @@ export default function AIPanel({ open, onClose, sectionId, sectionLabel }) {
                 onClick={() => ask(a)}
                 disabled={run.isPending}
                 className="w-full text-left text-[12px] px-3 py-2 rounded-xl border border-[#E4E8F0]
-                           text-slate-600 hover:bg-violet-50/60 hover:border-violet-200 hover:text-violet-700
+                           text-slate-600 hover:bg-rose-50/60 hover:border-rose-200 hover:text-rose-700
                            transition-all disabled:opacity-50"
               >
                 {a}
@@ -93,7 +93,7 @@ export default function AIPanel({ open, onClose, sectionId, sectionLabel }) {
             rows={3}
             placeholder="Ask the Marketing Agent…"
             className="w-full text-[13px] rounded-xl border border-[#E4E8F0] px-3 py-2.5 outline-none resize-y
-                       focus:border-violet-300 focus:ring-2 focus:ring-violet-100 transition-all
+                       focus:border-rose-300 focus:ring-2 focus:ring-rose-100 transition-all
                        placeholder:text-slate-300 text-slate-700"
           />
           <button
@@ -101,7 +101,7 @@ export default function AIPanel({ open, onClose, sectionId, sectionLabel }) {
             disabled={run.isPending || !prompt.trim()}
             className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl
                        text-sm font-medium text-white shadow-sm disabled:opacity-50 transition-all"
-            style={{ background: `linear-gradient(135deg, ${ACCENT} 0%, #5B3AED 100%)` }}
+            style={{ background: `linear-gradient(135deg, ${ACCENT} 0%, #FB923C 100%)` }}
           >
             {run.isPending ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
             {run.isPending ? 'Thinking…' : 'Ask'}
@@ -155,7 +155,7 @@ export function AIPanelToggle({ onClick }) {
       onClick={onClick}
       className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium text-white
                  shadow-sm hover:opacity-90 transition-all"
-      style={{ background: `linear-gradient(135deg, ${ACCENT} 0%, #5B3AED 100%)` }}
+      style={{ background: `linear-gradient(135deg, ${ACCENT} 0%, #FB923C 100%)` }}
     >
       <Sparkles size={14} />
       Ask Marketing Agent

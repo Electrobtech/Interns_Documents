@@ -496,3 +496,134 @@ h1, h2, h3, h4, h5, h6 {
   50%      { opacity: 0.55; }
 }
 .animate-soft-throb { animation: softThrob 2.2s ease-in-out infinite; }
+
+/* Sample-data stripe — makes a demo chart visually distinct from a live one
+   even in a screenshot with the banner cropped out. */
+.demo-striped {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(245, 158, 11, 0.05) 0px,
+    rgba(245, 158, 11, 0.05) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+}
+
+/* Marketing Hub motion — ported from the reference build. */
+@keyframes mh-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes mh-slide-left { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+.mh-page { animation: mh-fade-in 0.28s cubic-bezier(0.25,0.46,0.45,0.94); }
+.mh-stagger > * { animation: mh-slide-left 0.3s cubic-bezier(0.25,0.46,0.45,0.94) backwards; }
+.mh-stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.mh-stagger > *:nth-child(2) { animation-delay: 0.06s; }
+.mh-stagger > *:nth-child(3) { animation-delay: 0.10s; }
+.mh-stagger > *:nth-child(4) { animation-delay: 0.14s; }
+@media (prefers-reduced-motion: reduce) {
+  .mh-page, .mh-stagger > * { animation: none !important; }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   Marketing Hub — reference design tokens, light.
+
+   Variable NAMES are kept identical to the reference build so its
+   components port across unchanged; only the VALUES are re-pitched from
+   the dark canvas (#07070f) to the product's light surface.
+   ────────────────────────────────────────────────────────────────────── */
+.mhub {
+  --bg:          #F4F6FA;
+  --bg-subtle:   #EEF1F7;
+  --surface:     #FFFFFF;
+  --surface-2:   #F7F8FC;
+  --surface-3:   #EEF1F7;
+
+  --card:        #FFFFFF;
+  --card-solid:  #FFFFFF;
+  --card-hover:  #FAFBFE;
+
+  --text:        #0F1929;
+  --text-2:      #475569;
+  --text-3:      #94A3B8;
+  --text-4:      #CBD5E1;
+
+  --primary:     #6D28D9;
+  --primary-dim: rgba(109, 40, 217, 0.10);
+  --primary-glow:rgba(109, 40, 217, 0.18);
+
+  --ai-from:     #A855F7;
+  --ai-mid:      #6D28D9;
+  --ai-to:       #3B82F6;
+  --ai-gradient: linear-gradient(135deg, #A855F7 0%, #6D28D9 50%, #3B82F6 100%);
+  --ai-subtle:   linear-gradient(135deg, rgba(168,85,247,0.10) 0%, rgba(109,40,217,0.08) 50%, rgba(59,130,246,0.06) 100%);
+
+  --green:       #059669;  --green-dim: rgba(5, 150, 105, 0.10);
+  --amber:       #D97706;  --amber-dim: rgba(217, 119, 6, 0.10);
+  --red:         #DC2626;  --red-dim:   rgba(220, 38, 38, 0.10);
+  --blue:        #2563EB;  --blue-dim:  rgba(37, 99, 235, 0.10);
+
+  --border:      #E4E8F0;
+  --border-2:    #D7DDE9;
+  --border-focus:rgba(109, 40, 217, 0.45);
+
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 18px; --r-2xl: 24px;
+
+  --shadow-sm:  0 1px 2px rgba(15,25,41,0.05);
+  --shadow-md:  0 4px 12px rgba(15,25,41,0.07), 0 1px 3px rgba(15,25,41,0.05);
+  --shadow-lg:  0 12px 32px rgba(15,25,41,0.10), 0 4px 8px rgba(15,25,41,0.05);
+  --shadow-xl:  0 24px 56px rgba(15,25,41,0.13);
+  --shadow-glow:0 0 24px rgba(109,40,217,0.12);
+  --shadow-ai:  0 4px 20px rgba(168,85,247,0.18);
+
+  --font-display: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --font-body:    'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    ui-monospace, 'Geist Mono', 'SF Mono', Menlo, monospace;
+
+  --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  font-family: var(--font-body);
+  color: var(--text);
+}
+
+/* Buttons — same class names as the reference */
+.mhub .btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: var(--r-md); font-family: var(--font-body);
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+  transition: all 0.15s var(--ease); white-space: nowrap;
+  border: 1px solid transparent; padding: 8px 14px;
+}
+.mhub .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.mhub .btn-ghost {
+  background: var(--surface); border-color: var(--border); color: var(--text-2);
+  box-shadow: var(--shadow-sm);
+}
+.mhub .btn-ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border-2); color: var(--text); }
+.mhub .btn-primary { background: var(--primary); color: #fff; box-shadow: var(--shadow-sm); }
+.mhub .btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.mhub .btn-ai { background: var(--ai-gradient); color: #fff; box-shadow: var(--shadow-ai); }
+.mhub .btn-ai:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
+.mhub .btn-danger { background: var(--surface); border-color: #FECACA; color: var(--red); }
+.mhub .btn-danger:hover:not(:disabled) { background: #FEF2F2; }
+
+.mhub .ai-text {
+  background: var(--ai-gradient);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.mhub input, .mhub textarea, .mhub select { font-family: var(--font-body); }
+.mhub input:focus, .mhub textarea:focus, .mhub select:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--primary-dim);
+}
+
+.mhub ::-webkit-scrollbar { width: 6px; height: 6px; }
+.mhub ::-webkit-scrollbar-track { background: transparent; }
+.mhub ::-webkit-scrollbar-thumb { background: #D7DDE9; border-radius: 99px; }
+.mhub ::-webkit-scrollbar-thumb:hover { background: #C3CBDA; }
+
+@keyframes mh-shimmer { 0% { background-position: -400% 0; } 100% { background-position: 400% 0; } }
+@keyframes mh-scale-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes mh-slide-right { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+.mhub .scale-in { animation: mh-scale-in 0.2s var(--ease); }
+.mhub .slide-right { animation: mh-slide-right 0.25s var(--ease); }
