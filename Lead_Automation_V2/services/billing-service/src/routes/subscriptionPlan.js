@@ -15,7 +15,7 @@
 // 'active' at registration time instead (see companyController.js).
 const express = require('express');
 const { pool, requireRole, paymentModel } = require('@lead/shared');
-const { razorpay, toPaise, verifyCheckoutSignature, KEY_ID } = require('../lib/razorpay');
+const { razorpay, createOrder, toPaise, verifyCheckoutSignature, KEY_ID } = require('../lib/razorpay');
 
 const router = express.Router();
 
@@ -54,7 +54,7 @@ router.post('/checkout', requireRole('owner', 'admin'), async (req, res) => {
   }
 
   try {
-    const order = await razorpay.orders.create({
+    const order = await createOrder({
       amount: toPaise(amount),
       currency: 'INR',
       notes: { organization_id: req.user.organizationId, purpose: 'SUBSCRIPTION', plan: subscription.plan },
