@@ -8,17 +8,33 @@
  * invention, so the UI shows how much of a snapshot is unsupported.
  */
 import { useState } from 'react';
-import { BarChart2, Plus, ChevronRight, Loader2, AlertTriangle } from 'lucide-react';
+import { BarChart2, Plus, ChevronRight, Loader2, AlertTriangle, Pencil, Trash2 } from 'lucide-react';
 
 import {
   useCompetitors, useCreateCompetitor, useCompetitorSnapshots, useAddCompetitorSnapshot,
+  useCompetitor, useUpdateCompetitor, useDeleteCompetitor, useDeleteSnapshot,
 } from '@/lib/queries/marketing';
 import { Card, Badge, Button, EmptyState, SectionTitle } from '../MarketingUI';
-import { AIPanel, Modal, Field, Input, TagsInput, ErrorNote, timeAgo, fmtDate } from './Shared';
+import {
+  PageHeader, Toolbar, ToolButton, ToolSearch, StatsStrip,
+} from '../HubUI';
+import {
+  AIPanel, Modal, Field, Input, TagsInput, ErrorNote, timeAgo, fmtDate, ConfirmDialog,
+} from './Shared';
 
 export default function CompetitorAnalysis() {
   const [createOpen, setCreateOpen] = useState(false);
   const [activeId, setActiveId] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [compareIds, setCompareIds] = useState([]);
+  const del = useDeleteCompetitor();
+
+  // Two or three reads well side by side; more becomes unreadable columns.
+  const toggleCompare = (id) =>
+    setCompareIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= 3 ? prev : [...prev, id],
+    );
 
   const { data: competitors = [], isLoading } = useCompetitors();
   const active = competitors.find((c) => c.id === activeId) || competitors[0] || null;
@@ -42,6 +58,35 @@ export default function CompetitorAnalysis() {
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title="Competitor Analysis"
+        subtitle="Snapshots carry their own unverified-claim count. Check it before acting on one."
+        count={competitors.length}
+      />
+
+      <Toolbar
+        right={
+          compareIds.length > 0 && (
+            <ToolButton onClick={() => setCompareIds([])}>Clear comparison ({compareIds.length})</ToolButton>
+          )
+        }
+      >
+        <Button variant="primary" icon={Plus} onClick={() => setCreateOpen(true)} className="!py-1.5 !px-3 !text-[12px]">
+          Add competitor
+        </Button>
+        <ToolButton icon={Pencil} disabled title="Hover a competitor card to edit it">Edit</ToolButton>
+      </Toolbar>
+
+      <StatsStrip
+        items={[
+          { label: 'Tracked', value: competitors.length, tone: 'violet' },
+          { label: 'Snapshots', value: competitors.reduce((s, c) => s + (c.snapshot_count || 0), 0), tone: 'blue' },
+          { label: 'Analyzed', value: competitors.filter((c) => c.last_analyzed_at).length, tone: 'green' },
+          { label: 'Never analyzed', value: competitors.filter((c) => !c.last_analyzed_at).length, tone: 'amber' },
+          { label: 'Auto-refresh', value: null, tone: 'slate', note: 'no scheduled job yet' },
+        ]}
+      />
+
       <AIPanel
         capability="competitor_intel"
         placeholder="e.g. Compare us against Wati and AiSensy on positioning and pricing"
@@ -98,16 +143,47 @@ export default function CompetitorAnalysis() {
         ) : (
           <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">
             {competitors.map((c) => (
-              <button
+              <div
                 key={c.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => setActiveId(c.id)}
-                className={`text-left rounded-xl border px-3.5 py-3 transition-all ${
-                  active?.id === c.id ? 'border-violet-300 bg-violet-50/50' : 'border-[#E4E8F0] hover:bg-slate-50'
+                onKeyDown={(e) => e.key === 'Enter' && setActiveId(c.id)}
+                className={`group text-left rounded-xl border px-3.5 py-3 transition-all cursor-pointer ${
+                  active?.id === c.id ? 'border-rose-300 bg-rose-50/50' : 'border-[#E4E8F0] hover:bg-slate-50'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-[#0F1929] truncate">{c.name}</p>
-                  <ChevronRight size={14} className="text-slate-300 flex-shrink-0" />
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <label
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1 text-[10px] text-slate-400 cursor-pointer"
+                      title="Compare side by side"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={compareIds.includes(c.id)}
+                        onChange={() => toggleCompare(c.id)}
+                        className="rounded"
+                      />
+                    </label>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditing(c); }}
+                      title="Edit"
+                      className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded text-slate-400 hover:bg-slate-100 flex items-center justify-center"
+                    >
+                      <Pencil size={11} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setConfirmDelete(c); }}
+                      title="Delete"
+                      className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded text-red-400 hover:bg-red-50 flex items-center justify-center"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                    <ChevronRight size={14} className="text-slate-300" />
+                  </div>
                 </div>
                 <p className="text-[11px] text-slate-400 truncate">{c.domain || 'No domain set'}</p>
                 {c.positioning && (
@@ -117,21 +193,158 @@ export default function CompetitorAnalysis() {
                   <span>{c.snapshot_count} snapshot{c.snapshot_count === 1 ? '' : 's'}</span>
                   <span>{c.last_analyzed_at ? fmtDate(c.last_analyzed_at) : 'never analyzed'}</span>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}
       </Card>
 
+      {compareIds.length >= 2 && (
+        <ComparisonView
+          competitors={competitors.filter((c) => compareIds.includes(c.id))}
+          onClear={() => setCompareIds([])}
+        />
+      )}
+
       {active && <SnapshotHistory competitor={active} />}
 
       <AddCompetitorModal open={createOpen} onClose={() => setCreateOpen(false)} />
+
+      {editing && <EditCompetitorModal competitor={editing} onClose={() => setEditing(null)} />}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={async () => {
+          await del.mutateAsync(confirmDelete.id);
+          if (activeId === confirmDelete.id) setActiveId(null);
+          setConfirmDelete(null);
+        }}
+        busy={del.isPending}
+        title="Stop tracking this competitor?"
+        message={`Remove "${confirmDelete?.name}"? Its snapshots stay on file — they record what was believed and when.`}
+      />
     </div>
+  );
+}
+
+/** Side-by-side latest snapshots.
+ *
+ *  Composed client-side from data each card already has, plus a per-competitor
+ *  detail fetch — no comparison endpoint needed for a first version. */
+function ComparisonView({ competitors, onClear }) {
+  return (
+    <Card className="p-4">
+      <SectionTitle
+        title={`Comparing ${competitors.length}`}
+        subtitle="Latest snapshot from each, side by side"
+        action={<Button onClick={onClear}>Clear</Button>}
+      />
+      <div className="overflow-x-auto">
+        <div
+          className="grid gap-3"
+          style={{ gridTemplateColumns: `repeat(${competitors.length}, minmax(240px, 1fr))` }}
+        >
+          {competitors.map((c) => (
+            <ComparisonColumn key={c.id} competitorId={c.id} fallbackName={c.name} />
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function ComparisonColumn({ competitorId, fallbackName }) {
+  const { data, isLoading } = useCompetitor(competitorId);
+  const snap = data?.latest_snapshot;
+
+  return (
+    <div className="rounded-xl border border-[#E4E8F0] p-3">
+      <p className="text-sm font-semibold text-[#0F1929] truncate mb-0.5">{data?.name || fallbackName}</p>
+      <p className="text-[11px] text-slate-400 truncate mb-2">{data?.domain || 'No domain'}</p>
+
+      {isLoading ? (
+        <p className="text-[11px] text-slate-300">Loading…</p>
+      ) : !snap ? (
+        <p className="text-[11px] text-slate-400">No snapshot yet — run the agent to build one.</p>
+      ) : (
+        <div className="space-y-2.5">
+          <div className="flex flex-wrap gap-1.5">
+            {snap.confidence != null && <Badge tone="slate">{Math.round(snap.confidence * 100)}% conf.</Badge>}
+            {snap.unverified_claim_count > 0 && (
+              <Badge tone="amber">{snap.unverified_claim_count} unverified</Badge>
+            )}
+          </div>
+          <ItemList label="Strengths" items={snap.strengths} />
+          <ItemList label="Weaknesses" items={snap.weaknesses} tone="green" />
+          <ItemList label="Pricing" items={snap.pricing_notes} />
+          {snap.data_gaps?.length > 0 && (
+            <p className="text-[10px] text-amber-700">
+              {snap.data_gaps.length} data gap{snap.data_gaps.length === 1 ? '' : 's'}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditCompetitorModal({ competitor, onClose }) {
+  const update = useUpdateCompetitor();
+  const [form, setForm] = useState({
+    name: competitor.name ?? '',
+    domain: competitor.domain ?? '',
+    positioning: competitor.positioning ?? '',
+    target_segments: competitor.target_segments ?? [],
+  });
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const submit = async () => {
+    await update.mutateAsync({
+      id: competitor.id,
+      name: form.name.trim(),
+      domain: form.domain.trim() || null,
+      positioning: form.positioning.trim() || null,
+      target_segments: form.target_segments,
+    });
+    onClose();
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Edit competitor"
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={!form.name.trim() || update.isPending}>
+            {update.isPending ? 'Saving…' : 'Save changes'}
+          </Button>
+        </>
+      }
+    >
+      <ErrorNote error={update.error} />
+      <Field label="Name" required><Input value={form.name} onChange={set('name')} /></Field>
+      <Field label="Domain"><Input value={form.domain} onChange={set('domain')} placeholder="rival.com" /></Field>
+      <Field label="Positioning">
+        <Input value={form.positioning} onChange={set('positioning')} placeholder="Low-cost challenger" />
+      </Field>
+      <Field label="Target segments">
+        <TagsInput
+          value={form.target_segments}
+          onChange={(v) => setForm((f) => ({ ...f, target_segments: v }))}
+          placeholder="smb, enterprise"
+        />
+      </Field>
+    </Modal>
   );
 }
 
 function SnapshotHistory({ competitor }) {
   const { data: snapshots = [], isLoading } = useCompetitorSnapshots(competitor.id);
+  const delSnap = useDeleteSnapshot();
+  const [confirmSnap, setConfirmSnap] = useState(null);
 
   if (isLoading) {
     return <Card className="p-8 flex justify-center text-slate-300"><Loader2 size={18} className="animate-spin" /></Card>;
@@ -155,6 +368,14 @@ function SnapshotHistory({ competitor }) {
               {s.unverified_claim_count > 0 && (
                 <Badge tone="amber">{s.unverified_claim_count} unverified</Badge>
               )}
+              {/* Deleting is allowed — duplicates and bad runs happen — but
+                  confirmed, because a snapshot is an audit record of what was
+                  believed at a point in time. */}
+              <Button
+                variant="danger" icon={Trash2}
+                onClick={() => setConfirmSnap(s)}
+                className="!px-2 !py-1"
+              />
             </div>
           </div>
 
@@ -186,6 +407,18 @@ function SnapshotHistory({ competitor }) {
           )}
         </Card>
       ))}
+
+      <ConfirmDialog
+        open={!!confirmSnap}
+        onClose={() => setConfirmSnap(null)}
+        onConfirm={async () => {
+          await delSnap.mutateAsync({ competitorId: competitor.id, snapshotId: confirmSnap.id });
+          setConfirmSnap(null);
+        }}
+        busy={delSnap.isPending}
+        title="Delete this snapshot?"
+        message="Snapshots record what was believed about a competitor at a point in time. Delete it only if it was a duplicate or a bad run."
+      />
     </div>
   );
 }

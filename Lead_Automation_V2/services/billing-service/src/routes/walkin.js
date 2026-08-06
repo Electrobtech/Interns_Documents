@@ -9,7 +9,7 @@
 // 'cash' vs 'prepaid').
 const express = require('express');
 const { pool, paymentModel } = require('@lead/shared');
-const { razorpay, toPaise, KEY_ID } = require('../lib/razorpay');
+const { razorpay, createPaymentLink, cancelPaymentLink, toPaise, KEY_ID } = require('../lib/razorpay');
 
 const router = express.Router();
 
@@ -71,7 +71,7 @@ router.post('/qr', async (req, res) => {
   });
 
   try {
-    const link = await razorpay.paymentLink.create({
+    const link = await createPaymentLink({
       amount: toPaise(amount),
       currency: 'INR',
       description: description || 'Walk-in purchase',
@@ -133,7 +133,7 @@ router.post('/:paymentId/cancel', async (req, res) => {
 
   if (payment.gateway_order_id) {
     try {
-      await razorpay.paymentLink.cancel(payment.gateway_order_id);
+      await cancelPaymentLink(payment.gateway_order_id);
     } catch (e) {
       console.warn('[billing] payment link cancel failed (may already be expired)', e.message);
     }

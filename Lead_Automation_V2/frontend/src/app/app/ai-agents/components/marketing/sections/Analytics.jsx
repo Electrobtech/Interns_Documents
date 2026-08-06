@@ -5,6 +5,9 @@ import { useState } from 'react';
 import { PieChart } from 'lucide-react';
 import { useAgentAnalytics } from '@/lib/queries/aiAgents';
 import { Card, SectionTitle, Stat, DataTable, Badge, EmptyState, ProgressBar, NotConnected } from '../MarketingUI';
+import {
+  PageHeader, Toolbar, ToolButton, ToolSearch, StatsStrip, ViewSwitcher, SplitPane,
+} from '../HubUI';
 
 const RANGES = ['24h', '7d', '30d', '90d'];
 
@@ -21,6 +24,23 @@ export default function Analytics() {
 
   return (
     <div className="space-y-5">
+      <PageHeader
+        title="Analytics"
+        subtitle="Agent activity — how often the Marketing Agent ran and how confident it was. Campaign delivery performance is a separate surface and is not shown here."
+      />
+
+      <Toolbar
+        right={
+          <div className="flex items-center gap-1">
+            {['24h', '7d', '30d', '90d'].map((r) => (
+              <ToolButton key={r} active={range === r} onClick={() => setRange(r)}>{r}</ToolButton>
+            ))}
+          </div>
+        }
+      >
+        <span className="text-[12px] text-slate-500 px-1">Agent activity across the marketing workspace</span>
+      </Toolbar>
+
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex gap-8">
           <Stat label="Runs" value={isLoading ? null : totalRuns} />
@@ -33,7 +53,7 @@ export default function Analytics() {
               key={r}
               onClick={() => setRange(r)}
               className={`text-xs px-2.5 py-1.5 rounded-lg transition-colors ${
-                r === range ? 'bg-violet-50 text-violet-700 font-semibold' : 'text-slate-400 hover:text-slate-600'
+                r === range ? 'bg-rose-50 text-rose-700 font-semibold' : 'text-slate-400 hover:text-slate-600'
               }`}
             >
               {r}

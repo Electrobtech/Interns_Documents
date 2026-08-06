@@ -8,12 +8,16 @@
  * invented search volume is worse than an empty cell.
  */
 import { useState } from 'react';
-import { Search, Plus, Loader2, ChevronRight } from 'lucide-react';
+import { Search, Plus, Loader2, ChevronRight, Trash2, ClipboardCheck } from 'lucide-react';
 
 import {
-  useSeoProjects, useCreateSeoProject, useSeoKeywords, useAddSeoKeyword, KEYWORD_INTENTS,
+  useSeoProjects, useCreateSeoProject, useSeoKeywords, useAddSeoKeyword,
+  useUpdateSeoProject, useUpdateSeoKeyword, useDeleteSeoKeyword, KEYWORD_INTENTS,
 } from '@/lib/queries/marketing';
 import { Card, Badge, Button, EmptyState, SectionTitle, fmt } from '../MarketingUI';
+import {
+  PageHeader, Toolbar, ToolButton, ToolSearch, StatsStrip,
+} from '../HubUI';
 import { AIPanel, Modal, Field, Input, Select, TagsInput, ErrorNote, fmtDate } from './Shared';
 
 const PRIORITY_TONE = { high: 'red', medium: 'amber', low: 'slate' };
@@ -26,6 +30,13 @@ export default function SEO() {
   const { data: projects = [], isLoading } = useSeoProjects();
   const active = projects.find((p) => p.id === activeId) || projects[0] || null;
   const addKeyword = useAddSeoKeyword();
+
+  // Averaged over projects that actually have a score. Averaging in the
+  // unaudited ones as zero would drag it down and read as a real decline.
+  const scored = projects.filter((p) => p.latest_score != null);
+  const avgScore = scored.length
+    ? Math.round(scored.reduce((sum, p) => sum + p.latest_score, 0) / scored.length)
+    : null;
 
   const saveKeywordsFromAI = async (out) => {
     if (!active) return;
@@ -46,6 +57,33 @@ export default function SEO() {
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title="SEO"
+        subtitle="Projects and tracked keywords. Volume and difficulty stay blank until a keyword tool is connected."
+        count={projects.length}
+      />
+
+      <Toolbar
+        right={<span className="text-[11px] text-slate-400">Volume &amp; difficulty need a keyword tool</span>}
+      >
+        <Button variant="primary" icon={Plus} onClick={() => setProjectOpen(true)} className="!py-1.5 !px-3 !text-[12px]">
+          New project
+        </Button>
+        <ToolButton icon={ClipboardCheck} disabled={!active} onClick={() => active && setProjectOpen(false)}>
+          Record audit
+        </ToolButton>
+      </Toolbar>
+
+      <StatsStrip
+        items={[
+          { label: 'Projects', value: projects.length, tone: 'violet' },
+          { label: 'Keywords', value: projects.reduce((s, p) => s + (p.keyword_count || 0), 0), tone: 'blue' },
+          { label: 'Audited', value: projects.filter((p) => p.last_audit_at).length, tone: 'green' },
+          { label: 'Avg score', value: avgScore, tone: 'amber' },
+          { label: 'Search volume', value: null, tone: 'slate', note: 'needs a keyword tool' },
+        ]}
+      />
+
       <AIPanel
         capability="seo"
         placeholder="e.g. Build an SEO keyword plan for WhatsApp lead automation targeting mid-market SaaS"
@@ -105,7 +143,7 @@ export default function SEO() {
                 onClick={() => setActiveId(p.id)}
                 className={`text-left rounded-xl border px-3.5 py-3 transition-all ${
                   active?.id === p.id
-                    ? 'border-violet-300 bg-violet-50/50'
+                    ? 'border-rose-300 bg-rose-50/50'
                     : 'border-[#E4E8F0] hover:bg-slate-50'
                 }`}
               >
@@ -134,9 +172,54 @@ export default function SEO() {
   );
 }
 
+/** Inline-editable rank. Only this column is writable: the others have no
+ *  source, and letting a user type a search volume would manufacture data. */
+function RankCell({ projectId, keyword }) {
+  const update = useUpdateSeoKeyword();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(keyword.current_rank ?? '');
+
+  const save = async () => {
+    setEditing(false);
+    const n = value === '' ? null : Number(value);
+    if (n === keyword.current_rank) return;
+    if (n !== null && (!Number.isFinite(n) || n < 1)) return;
+    await update.mutateAsync({ projectId, keywordId: keyword.id, current_rank: n });
+  };
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        title="Click to set the rank you see in Search Console"
+        className="font-mono text-[12px] text-slate-500 hover:text-rose-600"
+      >
+        {fmt(keyword.current_rank)}
+      </button>
+    );
+  }
+  return (
+    <input
+      autoFocus
+      type="number"
+      min={1}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') save();
+        if (e.key === 'Escape') { setValue(keyword.current_rank ?? ''); setEditing(false); }
+      }}
+      className="w-16 font-mono text-[12px] px-1.5 py-0.5 rounded border border-rose-300 outline-none"
+    />
+  );
+}
+
 function KeywordTable({ project }) {
   const { data: keywords = [], isLoading } = useSeoKeywords(project.id);
   const [open, setOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const del = useDeleteSeoKeyword();
 
   return (
     <>
@@ -144,8 +227,13 @@ function KeywordTable({ project }) {
         <div className="px-4 pt-4">
           <SectionTitle
             title={`Keywords — ${project.name}`}
-            subtitle="Volume, difficulty and rank stay blank until a real data source fills them."
-            action={<Button icon={Plus} onClick={() => setOpen(true)}>Add keyword</Button>}
+            subtitle="Volume and difficulty stay blank until a keyword tool is connected. Rank is editable."
+            action={
+              <div className="flex items-center gap-1.5">
+                <Button icon={ClipboardCheck} onClick={() => setAuditOpen(true)}>Record audit</Button>
+                <Button icon={Plus} onClick={() => setOpen(true)}>Add keyword</Button>
+              </div>
+            }
           />
         </div>
         {isLoading ? (
@@ -157,7 +245,7 @@ function KeywordTable({ project }) {
             <table className="w-full text-sm min-w-[760px]">
               <thead>
                 <tr className="border-b border-[#EEF1F6]">
-                  {['Keyword', 'Intent', 'Priority', 'Volume', 'Difficulty', 'Rank', 'Source'].map((h) => (
+                  {['Keyword', 'Intent', 'Priority', 'Volume', 'Difficulty', 'Rank', 'Source', ''].map((h) => (
                     <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
                       {h}
                     </th>
@@ -175,11 +263,28 @@ function KeywordTable({ project }) {
                     <td className="px-4 py-3">
                       {k.priority ? <Badge tone={PRIORITY_TONE[k.priority]}>{k.priority}</Badge> : '—'}
                     </td>
-                    <td className="px-4 py-3 font-mono text-[12px] text-slate-500">{fmt(k.search_volume)}</td>
-                    <td className="px-4 py-3 font-mono text-[12px] text-slate-500">{fmt(k.difficulty)}</td>
-                    <td className="px-4 py-3 font-mono text-[12px] text-slate-500">{fmt(k.current_rank)}</td>
+                    <td className="px-4 py-3 font-mono text-[12px] text-slate-500" title="No keyword tool is connected">
+                      {fmt(k.search_volume)}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[12px] text-slate-500" title="No keyword tool is connected">
+                      {fmt(k.difficulty)}
+                    </td>
+                    {/* Rank is the one number a human plausibly knows, from
+                        reading Search Console — so it's the one that's editable.
+                        Saving it flips data_source to "manual", which is why the
+                        Source badge sits right beside it. */}
+                    <td className="px-4 py-3">
+                      <RankCell projectId={project.id} keyword={k} />
+                    </td>
                     <td className="px-4 py-3">
                       <Badge tone={SOURCE_TONE[k.data_source] || 'slate'}>{k.data_source.replace('_', ' ')}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Button
+                        variant="danger" icon={Trash2}
+                        onClick={() => del.mutate({ projectId: project.id, keywordId: k.id })}
+                        className="!px-2 !py-1"
+                      />
                     </td>
                   </tr>
                 ))}
@@ -189,7 +294,46 @@ function KeywordTable({ project }) {
         )}
       </Card>
       <AddKeywordModal open={open} onClose={() => setOpen(false)} projectId={project.id} />
+      <RecordAuditModal open={auditOpen} onClose={() => setAuditOpen(false)} project={project} />
     </>
+  );
+}
+
+/** Writes `latest_score` + `last_audit_at` back to the project.
+ *
+ *  Without this the project showed "never audited" no matter how many times
+ *  the `seo` capability had been run against it — there was no PUT to write
+ *  the result anywhere. */
+function RecordAuditModal({ open, onClose, project }) {
+  const update = useUpdateSeoProject();
+  const [score, setScore] = useState(project.latest_score ?? '');
+
+  const submit = async () => {
+    const n = Number(score);
+    if (!Number.isFinite(n) || n < 0 || n > 100) return;
+    await update.mutateAsync({ id: project.id, latest_score: Math.round(n), mark_audited: true });
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Record an audit"
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={score === '' || update.isPending}>
+            {update.isPending ? 'Saving…' : 'Record'}
+          </Button>
+        </>
+      }
+    >
+      <ErrorNote error={update.error} />
+      <Field label="Score (0–100)" required hint="Stamps the audit date so “last audited” stops being stale.">
+        <Input type="number" min={0} max={100} value={score} onChange={(e) => setScore(e.target.value)} />
+      </Field>
+    </Modal>
   );
 }
 

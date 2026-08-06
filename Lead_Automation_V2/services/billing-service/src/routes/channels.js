@@ -11,7 +11,7 @@
 
 const express = require('express');
 const { pool, requireRole, paymentModel } = require('@lead/shared');
-const { razorpay, toPaise, verifyCheckoutSignature, KEY_ID } = require('../lib/razorpay');
+const { razorpay, createOrder, toPaise, verifyCheckoutSignature, KEY_ID } = require('../lib/razorpay');
 
 const router = express.Router();
 
@@ -182,7 +182,7 @@ router.post('/subscription/checkout', requireRole('admin', 'owner'), async (req,
   const totalAmount = pending.reduce((sum, s) => sum + Number(s.price_amount), 0);
 
   try {
-    const order = await razorpay.orders.create({
+    const order = await createOrder({
       amount: toPaise(totalAmount),
       currency: 'INR',
       notes: { organization_id: req.user.organizationId, purpose: 'CHANNEL_SUBSCRIPTION' },

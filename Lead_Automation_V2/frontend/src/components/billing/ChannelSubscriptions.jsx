@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { MessageSquare, Instagram, Linkedin, Mail, Smartphone, Send, AlertTriangle, Loader2 } from 'lucide-react';
+import { MessageSquare, Instagram, Linkedin, Mail, Smartphone, Send, AlertTriangle, Loader2, Layers, Wallet, Sparkles, ShieldAlert } from 'lucide-react';
 import { useApi } from '@/lib/useApi';
 import { inr, openCheckout } from '@/lib/billing';
 
@@ -16,25 +16,74 @@ const CHANNEL_META = {
 const CATEGORY_LABEL = { marketing: 'Marketing', utility: 'Utility', authentication: 'Auth', service: 'Service' };
 const SMS_ROUTE_LABEL = { promotional: 'Promo', transactional: 'Transactional', otp: 'OTP' };
 
-// Small status pill shown under the on/off toggle: green when the channel
-// subscription is actually active on the backend, red when it's been
-// cancelled/paused (was on, now isn't), and a neutral white/outline pill
-// for anything in between (never subscribed, or mid-payment) — that's
-// "neither" active nor inactive yet.
-function statusPill(status) {
-  if (status === 'active') return { text: 'Active', className: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
-  if (status === 'cancelled' || status === 'paused') return { text: 'Inactive', className: 'text-red-700 bg-red-50 border-red-200' };
-  if (status === 'pending_payment') return { text: 'Pending', className: 'text-slate-400 bg-white border-slate-200' };
-  return { text: 'Not subscribed', className: 'text-slate-400 bg-white border-slate-200' };
+// A channel card has four visual states, driven off the subscription
+// record for that channel:
+//   - 'connected' — billing status is active and the integration is
+//     healthy (green card, "Active" badge)
+//   - 'failed'    — billing status is active but the integration itself
+//     is broken (expired token, webhook failure, OAuth error — carried
+//     on subscription.connection_error / connection_status from the
+//     integration health check). Red card, "Failed" badge, toggle stays
+//     on since the person did try to enable it.
+//   - 'pending'   — subscription charged but payment not yet confirmed.
+//     Neutral/white with its own amber "Pending payment" badge.
+//   - 'none'      — never subscribed, or switched off. Plain white, no
+//     badge at all.
+function cardState(status, hasConnectionError) {
+  if (status === 'pending_payment') return 'pending';
+  if (status === 'active') return hasConnectionError ? 'failed' : 'connected';
+  return 'none';
 }
 
-function StatusPill({ status }) {
-  const { text, className } = statusPill(status);
-  return (
-    <span className={`text-[10px] font-medium rounded-full border px-2 py-0.5 whitespace-nowrap ${className}`}>
-      {text}
-    </span>
-  );
+const CARD_STYLES = {
+  connected: {
+    card: 'border-[#22C55E] bg-[#E8F8EC] hover:shadow-card-hover',
+    iconBadge: 'bg-emerald-100 text-emerald-600',
+    toggleOn: 'bg-emerald-500',
+  },
+  failed: {
+    card: 'border-[#EF4444] bg-[#FDECEC] hover:shadow-card-hover',
+    iconBadge: 'bg-rose-100 text-rose-600',
+    toggleOn: 'bg-rose-500',
+  },
+  pending: {
+    card: 'border-[#EF4444] bg-[#FDECEC] hover:shadow-card-hover',
+    iconBadge: 'bg-rose-100 text-rose-600',
+    toggleOn: 'bg-rose-500',
+  },
+  none: {
+    card: 'border-[#E5E7EB] bg-white hover:shadow-card-hover hover:border-slate-300',
+    iconBadge: 'bg-slate-100 text-slate-500',
+    toggleOn: 'bg-slate-300',
+  },
+};
+
+function StatusBadge({ state, errorMessage }) {
+  if (state === 'connected') {
+    return (
+      <span className="text-[10px] font-semibold rounded-full border px-2 py-0.5 whitespace-nowrap text-emerald-700 bg-emerald-50 border-emerald-200">
+        Active
+      </span>
+    );
+  }
+  if (state === 'failed') {
+    return (
+      <span
+        title={errorMessage || 'Authentication failed'}
+        className="flex items-center gap-1 text-[10px] font-semibold rounded-full border px-2 py-0.5 whitespace-nowrap text-rose-700 bg-rose-50 border-rose-200"
+      >
+        <ShieldAlert size={11} /> Failed
+      </span>
+    );
+  }
+  if (state === 'pending') {
+    return (
+      <span className="text-[10px] font-semibold rounded-full border px-2 py-0.5 whitespace-nowrap text-amber-700 bg-amber-50 border-amber-200">
+        Pending payment
+      </span>
+    );
+  }
+  return null; // not connected / disabled — no badge
 }
 
 // Usage-rate line under a channel card — the per-message cost on top of
@@ -97,7 +146,19 @@ export default function ChannelSubscriptions() {
 
   useEffect(() => { load(); }, [load]);
 
-  const statusFor = (channelType) => subscription?.subscriptions.find((s) => s.channel_type === channelType)?.status;
+  const recordFor = (channelType) => subscription?.subscriptions.find((s) => s.channel_type === channelType);
+  const statusFor = (channelType) => recordFor(channelType)?.status;
+  // Optional connection-health signal from the backend — not every
+  // integration reports this yet, so it defaults to "no error" (i.e. the
+  // card just reflects billing status) until that data is wired up.
+  const connectionErrorFor = (channelType) => {
+    const rec = recordFor(channelType);
+    if (!rec) return null;
+    if (rec.connection_status === 'failed' || rec.connection_error) {
+      return rec.error_message || rec.connection_error || 'Authentication failed';
+    }
+    return null;
+  };
 
   function toggle(channelType) {
     setConflict(null);
@@ -129,8 +190,15 @@ export default function ChannelSubscriptions() {
       });
     } catch (e) {
       // "Payment cancelled" (sheet dismissed) isn't really an error state —
-      // the pending_payment rows just sit there until retried.
-      if (e.message !== 'Payment cancelled') setError(e.message);
+      // the pending_payment rows just sit there until retried. For real
+      // failures, surface the backend's `detail` (e.g. Razorpay's own error
+      // text) alongside the generic message — "Could not create Razorpay
+      // order" alone doesn't say *why*, and that's almost always a
+      // config/account issue (bad or unverified keys) rather than something
+      // wrong with this request.
+      if (e.message !== 'Payment cancelled') {
+        setError(e.data?.detail ? `${e.message}: ${e.data.detail}` : e.message);
+      }
     } finally {
       setPayingFor(null);
       load();
@@ -166,34 +234,58 @@ export default function ChannelSubscriptions() {
   }
 
   const anyPending = subscription?.subscriptions.some((s) => s.status === 'pending_payment');
+  const activeCount = subscription?.subscriptions.filter((s) => s.status === 'active').length ?? 0;
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <p className="text-xs text-slate-500">Active Channels</p>
-          <p className="text-2xl font-bold mt-1">
-            {subscription?.subscriptions.filter((s) => s.status === 'active').length ?? '—'}
-          </p>
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/80 shadow-card p-5">
+          <div className="absolute -right-4 -top-4 w-20 h-20 rounded-full bg-gradient-to-br from-violet-100 to-rose-100 opacity-70" />
+          <div className="relative flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-500">Active Channels</p>
+              <p className="text-3xl font-bold mt-1.5 bg-gradient-to-r from-violet-600 to-rose-500 bg-clip-text text-transparent">
+                {subscription ? activeCount : '—'}
+              </p>
+            </div>
+            <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-rose-100 text-violet-600">
+              <Layers size={18} />
+            </div>
+          </div>
         </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:col-span-2">
-          <p className="text-xs text-slate-500">Monthly Platform Fee (SaaS fee only)</p>
-          <p className="text-2xl font-bold mt-1">{subscription ? inr(subscription.monthly_saas_total) : '—'}</p>
-          <p className="text-xs text-slate-400 mt-1">
-            Usage rates shown per channel below already include your markup + GST — that's what actually lands on your invoice.
-          </p>
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/80 shadow-card p-5 sm:col-span-2">
+          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-violet-100 to-rose-100 opacity-60" />
+          <div className="relative flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium text-slate-500">Monthly Platform Fee (SaaS fee only)</p>
+              <p className="text-3xl font-bold mt-1.5 text-slate-800">
+                {subscription ? inr(subscription.monthly_saas_total) : '—'}
+              </p>
+              <p className="text-xs text-slate-400 mt-2 max-w-md">
+                Usage rates shown per channel below already include your markup + GST — that&apos;s what actually lands on your invoice.
+              </p>
+            </div>
+            <div className="p-2 rounded-xl bg-gradient-to-br from-violet-50 to-rose-100 text-violet-600 shrink-0">
+              <Wallet size={18} />
+            </div>
+          </div>
         </div>
       </div>
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && (
+        <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">{error}</p>
+      )}
 
       {anyPending && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 flex items-center justify-between gap-3">
-          <span>You have a channel change awaiting payment.</span>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-sm text-amber-800 flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2">
+            <Sparkles size={15} className="shrink-0" />
+            You have a channel change awaiting payment.
+          </span>
           <button
             onClick={payForPending}
             disabled={payingFor === 'checkout'}
-            className="text-xs font-medium underline shrink-0 flex items-center gap-1"
+            className="text-xs font-semibold underline shrink-0 flex items-center gap-1 hover:text-amber-900"
           >
             {payingFor === 'checkout' && <Loader2 size={12} className="animate-spin" />}
             Complete Payment
@@ -202,7 +294,7 @@ export default function ChannelSubscriptions() {
       )}
 
       {conflict && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800 flex items-start gap-2">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-sm text-amber-800 flex items-start gap-2">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" />
           <div>
             <p>
@@ -211,7 +303,7 @@ export default function ChannelSubscriptions() {
             </p>
             <button
               onClick={() => save(true)}
-              className="mt-2 text-xs font-medium underline"
+              className="mt-2 text-xs font-semibold underline hover:text-amber-900"
               disabled={saving}
             >
               Disable anyway
@@ -220,42 +312,50 @@ export default function ChannelSubscriptions() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
         {plans.map((plan) => {
           const meta = CHANNEL_META[plan.channel_type] || { label: plan.channel_type, icon: MessageSquare };
           const Icon = meta.icon;
           const isOn = selected.has(plan.channel_type);
           const status = statusFor(plan.channel_type);
+          const errorMessage = connectionErrorFor(plan.channel_type);
+          const state = cardState(status, Boolean(errorMessage));
+          const styles = CARD_STYLES[state];
           return (
             <button
               key={plan.id}
               onClick={() => toggle(plan.channel_type)}
-              className={`text-left rounded-xl border p-4 transition ${
-                isOn ? 'border-brand bg-brand/5' : 'border-slate-200 bg-white'
-              }`}
+              className={`group text-left rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-0.5 ${styles.card}`}
             >
               <div className="flex items-center justify-between">
-                <span className="flex items-center gap-2 font-medium text-sm">
-                  <Icon size={16} /> {meta.label}
-                  {status === 'pending_payment' && (
-                    <span className="text-[10px] uppercase tracking-wide bg-amber-100 text-amber-700 rounded px-1.5 py-0.5">
-                      Pending payment
-                    </span>
-                  )}
+                <span className="flex items-center gap-2.5 font-semibold text-sm text-slate-800">
+                  <span className={`p-1.5 rounded-lg transition-colors ${styles.iconBadge}`}>
+                    <Icon size={15} />
+                  </span>
+                  {meta.label}
                 </span>
                 <span className="flex flex-col items-end gap-1.5 shrink-0">
                   <span
-                    className={`w-9 h-5 rounded-full relative transition ${isOn ? 'bg-brand' : 'bg-slate-300'}`}
+                    className={`w-9 h-5 rounded-full relative transition-colors duration-200 ${
+                      isOn ? styles.toggleOn : 'bg-slate-300'
+                    }`}
                   >
                     <span
-                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition ${isOn ? 'translate-x-4' : ''}`}
+                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                        isOn ? 'translate-x-4' : ''
+                      }`}
                     />
                   </span>
-                  <StatusPill status={status} />
+                  <StatusBadge state={state} errorMessage={errorMessage} />
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-2">Platform fee</p>
-              <p className="text-lg font-semibold">{inr(plan.our_fee_amount)}/mo</p>
+              {state === 'failed' && (
+                <p className="text-[11px] text-rose-600 mt-2 flex items-center gap-1">
+                  <AlertTriangle size={11} className="shrink-0" /> {errorMessage}
+                </p>
+              )}
+              <p className="text-xs text-slate-500 mt-3">Platform fee</p>
+              <p className="text-lg font-bold text-slate-800">{inr(plan.our_fee_amount)}/mo</p>
               <UsageRates channelType={plan.channel_type} rates={usageRates} />
             </button>
           );
@@ -265,7 +365,7 @@ export default function ChannelSubscriptions() {
       <button
         onClick={() => save(false)}
         disabled={saving || payingFor}
-        className="flex items-center gap-2 bg-brand text-white rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+        className="flex items-center gap-2 bg-gradient-brand text-white rounded-xl px-5 py-2.5 text-sm font-semibold shadow-brand hover:shadow-brand-lg transition-shadow disabled:opacity-50 disabled:shadow-none"
       >
         {(saving || payingFor) && <Loader2 size={14} className="animate-spin" />}
         {payingFor ? 'Processing payment…' : saving ? 'Saving…' : 'Save Channel Subscriptions'}

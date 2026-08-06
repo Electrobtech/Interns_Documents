@@ -53,7 +53,7 @@ export default function AgentSection({
             placeholder={placeholder}
             rows={3}
             className="w-full text-sm rounded-xl border border-[#E4E8F0] px-3.5 py-3 outline-none resize-y
-                       focus:border-violet-300 focus:ring-2 focus:ring-violet-100 transition-all
+                       focus:border-rose-300 focus:ring-2 focus:ring-rose-100 transition-all
                        placeholder:text-slate-300 text-slate-700"
           />
           <div className="flex items-center justify-between gap-3 flex-wrap">

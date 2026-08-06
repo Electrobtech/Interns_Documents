@@ -9,14 +9,16 @@
 import { useEffect, useState } from 'react';
 import {
   FolderOpen, Folder, Upload, Trash2, Plus, Loader2, Download,
-  Image as ImageIcon, Video, FileText, Music, File,
-} from 'lucide-react';
+  Image as ImageIcon, Video, FileText, Music, File, LayoutGrid, List, FolderPlus} from 'lucide-react';
 
 import {
   useAssets, useAssetFolders, useCreateAssetFolder, useUploadAsset, useDeleteAsset, ASSET_TYPES,
 } from '@/lib/queries/marketing';
 import { getToken } from '@/lib/auth';
 import { Card, Badge, Button, EmptyState, SectionTitle } from '../MarketingUI';
+import {
+  PageHeader, Toolbar, ToolButton, ToolSearch, StatsStrip, ViewSwitcher, SplitPane,
+} from '../HubUI';
 import { Modal, Field, Input, Select, SearchInput, ErrorNote, timeAgo } from './Shared';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
@@ -38,6 +40,7 @@ export default function AssetsLibrary() {
   const [typeFilter, setTypeFilter] = useState('');
   const [folderId, setFolderId] = useState('');
   const [folderOpen, setFolderOpen] = useState(false);
+  const [view, setView] = useState('grid');
 
   const { data: folders = [] } = useAssetFolders();
   const { data: assets = [], isLoading } = useAssets({
@@ -59,6 +62,42 @@ export default function AssetsLibrary() {
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title="Assets Library"
+        subtitle="Images, video, and documents. Downloads are gated on a clean virus scan."
+        count={assets.length}
+      />
+
+      <Toolbar
+        right={
+          <>
+            <ToolSearch value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search assets…" />
+            <ViewSwitcher
+              value={view}
+              onChange={setView}
+              views={[
+                { id: 'grid', icon: LayoutGrid, label: 'Grid' },
+                { id: 'list', icon: List, label: 'List' },
+              ]}
+            />
+          </>
+        }
+      >
+        <ToolButton icon={FolderPlus} onClick={() => setFolderOpen(true)}>New folder</ToolButton>
+        <ToolButton icon={Upload} disabled title="Use the drop zone below to upload">Upload</ToolButton>
+      </Toolbar>
+
+      <StatsStrip
+        items={[
+          { label: 'Assets', value: assets.length, tone: 'violet' },
+          { label: 'Folders', value: folders.length, tone: 'slate' },
+          { label: 'Images', value: assets.filter((a) => a.asset_type === 'image').length, tone: 'blue' },
+          { label: 'Video', value: assets.filter((a) => a.asset_type === 'video').length, tone: 'green' },
+          { label: 'Documents', value: assets.filter((a) => ['pdf', 'document'].includes(a.asset_type)).length, tone: 'amber' },
+          { label: 'Total size', value: Math.round(assets.reduce((s, a) => s + (a.byte_size || 0), 0) / 1048576), suffix: ' MB', tone: 'slate' },
+        ]}
+      />
+
       <Card className="p-4">
         <SectionTitle
           title="Assets Library"
@@ -71,7 +110,7 @@ export default function AssetsLibrary() {
                 <span
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium text-white
                              shadow-sm cursor-pointer hover:opacity-90 transition-all"
-                  style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #5B3AED 100%)' }}
+                  style={{ background: 'linear-gradient(135deg, #E11D48 0%, #FB923C 100%)' }}
                 >
                   {upload.isPending ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                   {upload.isPending ? 'Uploading…' : 'Upload'}
@@ -104,7 +143,7 @@ export default function AssetsLibrary() {
             <button
               onClick={() => setFolderId('')}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[13px] transition-all ${
-                !folderId ? 'border-violet-300 bg-violet-50/50 text-violet-700' : 'border-[#E4E8F0] text-slate-600 hover:bg-slate-50'
+                !folderId ? 'border-rose-300 bg-rose-50/50 text-rose-700' : 'border-[#E4E8F0] text-slate-600 hover:bg-slate-50'
               }`}
             >
               <FolderOpen size={14} /> All
@@ -114,7 +153,7 @@ export default function AssetsLibrary() {
                 key={f.id}
                 onClick={() => setFolderId(f.id)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[13px] transition-all ${
-                  folderId === f.id ? 'border-violet-300 bg-violet-50/50 text-violet-700' : 'border-[#E4E8F0] text-slate-600 hover:bg-slate-50'
+                  folderId === f.id ? 'border-rose-300 bg-rose-50/50 text-rose-700' : 'border-[#E4E8F0] text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 <Folder size={14} /> {f.name}
