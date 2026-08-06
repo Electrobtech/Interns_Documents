@@ -139,7 +139,7 @@ function AgentCard({ agent, onOpen }) {
         </div>
 
         <div className="flex flex-wrap gap-1.5 mb-5">
-          {agent.capabilities.map(c => (
+          {(agent.capabilities || []).map(c => (
             <span key={c} className="text-xs px-2 py-1 rounded-lg border border-[#E4E8F0] text-slate-500 bg-white">{c}</span>
           ))}
         </div>
@@ -177,7 +177,21 @@ export default function Dashboard({ onNavigate }) {
   const { data, isLoading, isError, error, dataUpdatedAt } = useAgentStatus();
 
   const agents = data?.agents?.length
-    ? data.agents.map((a) => ({ ...AGENT_SKIN[a.id], ...a }))
+    ? data.agents.map((a) => {
+        // Backend currently keys each agent by `type` (e.g. "marketing"),
+        // not `id`, and only sends { type, status, chunk_count } — none of
+        // the card fields below (confidence, queue, capabilities, ...) are
+        // guaranteed to be present. Normalize here so AgentCard always gets
+        // a safe, fully-shaped object no matter what the API returns.
+        const id = a.id ?? a.type;
+        return {
+          ...PLACEHOLDER_AGENTS.find((p) => p.id === id),
+          ...AGENT_SKIN[id],
+          ...a,
+          id,
+          capabilities: Array.isArray(a.capabilities) ? a.capabilities : [],
+        };
+      })
     : PLACEHOLDER_AGENTS.map((a) => (isError ? { ...a, status: 'error' } : a));
 
   const s = data?.summary ?? {};

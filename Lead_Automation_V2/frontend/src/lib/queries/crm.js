@@ -11,6 +11,26 @@ export function useLeads() {
   return useQuery({ queryKey: ['leads', 'list'], queryFn: () => call('/leads') });
 }
 
+// GET /leads/fields — real numeric leads.* columns a dashboard could
+// aggregate into a dollar figure, e.g. [{ key: 'deal_value', label: 'Deal
+// Value', type: 'numeric' }, ...]. Backs the Sales Agent's "Configure Deal
+// Field" modal so it only ever offers fields that actually exist.
+export function useLeadFields() {
+  const { call } = useApi();
+  return useQuery({ queryKey: ['leads', 'fields'], queryFn: () => call('/leads/fields'), staleTime: 5 * 60_000 });
+}
+
+// PUT /leads/:id — partial update (score / stage / deal_value). COALESCE
+// server-side, so sending just { deal_value } leaves score/stage untouched.
+export function useUpdateLead() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }) => call(`/leads/${id}`, { method: 'PUT', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['leads', 'list'] }),
+  });
+}
+
 // GET /contacts — { id, name, email, phone, source, tags, ... }
 export function useContacts() {
   const { call } = useApi();

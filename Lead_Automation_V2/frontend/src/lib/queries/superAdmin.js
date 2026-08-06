@@ -359,6 +359,50 @@ export function useAnalyticsAutomation(rangeParams) {
   });
 }
 
+// Sales AI / Marketing AI / Support AI / Finance & Billing tabs — same
+// resolveRange()-backed pattern as the three hooks above, against the
+// platformAnalyticsModel.salesPerformance/marketingPerformance/
+// supportPerformance/financePerformance functions (shared/src/models/
+// platformAnalyticsModel.js), which already existed and were exported
+// but had no route or hook wired up to them, causing
+// "useAnalyticsSales is not a function" client-side exceptions when
+// these tabs were opened.
+export function useAnalyticsSales(rangeParams) {
+  const { call } = useSuperAdminApi();
+  const params = new URLSearchParams(rangeParams).toString();
+  return useQuery({
+    queryKey: ['super-admin', 'analytics', 'sales', rangeParams],
+    queryFn: () => call(`/super-admin/analytics/sales?${params}`),
+  });
+}
+
+export function useAnalyticsMarketing(rangeParams) {
+  const { call } = useSuperAdminApi();
+  const params = new URLSearchParams(rangeParams).toString();
+  return useQuery({
+    queryKey: ['super-admin', 'analytics', 'marketing', rangeParams],
+    queryFn: () => call(`/super-admin/analytics/marketing?${params}`),
+  });
+}
+
+export function useAnalyticsSupport(rangeParams) {
+  const { call } = useSuperAdminApi();
+  const params = new URLSearchParams(rangeParams).toString();
+  return useQuery({
+    queryKey: ['super-admin', 'analytics', 'support', rangeParams],
+    queryFn: () => call(`/super-admin/analytics/support?${params}`),
+  });
+}
+
+export function useAnalyticsFinance(rangeParams) {
+  const { call } = useSuperAdminApi();
+  const params = new URLSearchParams(rangeParams).toString();
+  return useQuery({
+    queryKey: ['super-admin', 'analytics', 'finance', rangeParams],
+    queryFn: () => call(`/super-admin/analytics/finance?${params}`),
+  });
+}
+
 // ---------- Governance & System Health (Module 4) ----------
 export function useCurrentAdmin() {
   const { call } = useSuperAdminApi();

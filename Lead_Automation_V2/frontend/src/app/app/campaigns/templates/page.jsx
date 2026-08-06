@@ -158,7 +158,7 @@ export default function TemplatesPage() {
             {hasFilters ? 'No templates match your filters' : 'No templates yet'}
           </p>
           <p className="text-xs text-slate-300 mt-1 max-w-sm mx-auto">
-            {hasFilters ? 'Adjust your filters or create a new template.' : 'Reusable WhatsApp / RCS / SMS / Email templates you build here show up in the Bulk Campaign builder once approved.'}
+            {hasFilters ? 'Adjust your filters or create a new template.' : 'Reusable WhatsApp / RCS / SMS / Email templates you build here show up in the Broadcast builder once approved.'}
           </p>
           <Link href="/app/campaigns/templates/new" className="btn-primary mt-5 btn-sm">
             <Plus size={13} /> New Template

@@ -72,6 +72,28 @@ async def get_leads(organization_id: uuid.UUID, limit: int = 300) -> list[dict] 
         return None
 
 
+async def get_follow_ups(organization_id: uuid.UUID, bucket: str | None = None) -> list[dict] | None:
+    """Best-effort fetch of CRM follow-up reminders (contact-service owns
+    /follow-ups). Used to build the Sales Agent's real task queue
+    (GET /ai-agents/sales/queue) instead of the hardcoded "12 tasks queued"
+    header badge. Returns None on any failure — the queue endpoint degrades
+    to handoffs-only rather than hard-failing."""
+    settings = get_settings()
+    token = sign_service_token(organization_id)
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.CONTACT_SERVICE_URL}/follow-ups",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"bucket": bucket} if bucket else None,
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except Exception:
+        logger.warning("follow_up_fetch_failed (non-fatal)", exc_info=True)
+        return None
+
+
 async def create_campaign(organization_id: uuid.UUID, *, name: str, type_: str, channel_type: str, message_body: str, status: str = "draft") -> dict:
     """Not best-effort — the caller (convert-plan-item route) needs a real
     result or a real error to show the user."""

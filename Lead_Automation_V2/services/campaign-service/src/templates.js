@@ -54,6 +54,29 @@ function normalizeButtons(value) {
     }));
 }
 
+// message_templates.created_by is a nullable FK to users(id) (see
+// infra/db/migrations/025_message_templates.sql) specifically so a
+// missing/unresolvable user context degrades to NULL instead of a
+// failed insert. req.user.userId *should* always be a real users.id
+// (every JWT-issuing route signs it from a row it just read/created —
+// see shared/src/auth.js), but a stale token surviving a user deletion,
+// or any other drift between the token and the current `users` table,
+// would otherwise surface as
+// `insert or update on table "message_templates" violates foreign key
+// constraint "message_templates_created_by_fkey"` at save time. Confirm
+// the id actually resolves under this request's own tenant scope before
+// using it, rather than trusting the token blindly.
+async function resolveCreatedBy(req) {
+  const userId = req.user && req.user.userId;
+  if (!userId) return null;
+  try {
+    const { rows } = await pool.query(`SELECT 1 FROM users WHERE id = $1`, [userId]);
+    return rows.length ? userId : null;
+  } catch {
+    return null;
+  }
+}
+
 function validateBody(b) {
   if (!b.name || !String(b.name).trim()) return 'name is required.';
   if (b.category && !CATEGORIES.includes(b.category)) return `category must be one of ${CATEGORIES.join(', ')}.`;
@@ -107,6 +130,7 @@ router.post('/templates', canWrite, async (req, res) => {
   if (error) return res.status(400).json({ error });
 
   try {
+    const createdBy = await resolveCreatedBy(req);
     const { rows } = await pool.query(
       `INSERT INTO message_templates (
          organization_id, name, category, language, channels, status,
@@ -121,7 +145,7 @@ router.post('/templates', canWrite, async (req, res) => {
         b.header_type || null, b.header_text || null, b.header_media_url || null,
         String(b.body).trim(), JSON.stringify(b.body_variables || {}),
         b.footer || null, JSON.stringify(normalizeButtons(b.buttons)),
-        req.user.userId || null,
+        createdBy,
       ]
     );
     logAudit(req, 'template.create', { id: rows[0].id, name: rows[0].name });
@@ -230,6 +254,7 @@ router.post('/templates/:id/clone', canWrite, async (req, res) => {
       name = `${baseName}_${n}`;
     }
 
+    const createdBy = await resolveCreatedBy(req);
     const { rows } = await pool.query(
       `INSERT INTO message_templates (
          organization_id, name, category, language, channels, status,
@@ -241,7 +266,7 @@ router.post('/templates/:id/clone', canWrite, async (req, res) => {
         req.user.organizationId, name, t.category, t.language, t.channels,
         t.header_type, t.header_text, t.header_media_url,
         t.body, t.body_variables, t.footer, t.buttons,
-        req.user.userId || null,
+        createdBy,
       ]
     );
     logAudit(req, 'template.clone', { sourceId: t.id, id: rows[0].id, name });

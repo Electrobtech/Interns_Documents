@@ -7,8 +7,9 @@ import {
   Smartphone, MessageCircle, Instagram, MessageSquare,
   Sparkles, TrendingUp, Send, MoreHorizontal,
   BarChart3, AlertTriangle, ChevronDown, ShieldCheck, Check,
+  Eye, Users,
 } from 'lucide-react';
-import { useCampaigns, useUpdateCampaign, useCampaignDecision } from '@/lib/queries/crm';
+import { useCampaigns, useUpdateCampaign, useCampaignDecision, useCampaignRecipients } from '@/lib/queries/crm';
 import { useTemplatesForCampaign } from '@/lib/queries/templates';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '@/lib/useApi';
@@ -97,60 +98,204 @@ function StatusChip({ status }) {
   );
 }
 
+/* ─── circular progress ring (Processed / Delivered / Read) ───────
+   QuickReply's broadcast table shows each of these as a small ring +
+   count rather than a plain number. `value`/`total` drive the fill;
+   `total === 0` (nothing sent yet, e.g. a draft) renders an empty grey
+   ring rather than a division-by-zero 0% or NaN. */
+const RING_COLORS = {
+  violet:  '#7c3aed',
+  emerald: '#10b981',
+  amber:   '#f59e0b',
+};
+function CircularProgress({ value = 0, total = 0, color = 'violet', size = 34 }) {
+  const stroke = 3.5;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = total > 0 ? Math.min(1, value / total) : 0;
+  return (
+    <div className="inline-flex items-center gap-2">
+      <svg width={size} height={size} className="shrink-0 -rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={stroke} />
+        {pct > 0 && (
+          <circle
+            cx={size / 2} cy={size / 2} r={r} fill="none"
+            stroke={RING_COLORS[color] || RING_COLORS.violet}
+            strokeWidth={stroke}
+            strokeDasharray={c}
+            strokeDashoffset={c - pct * c}
+            strokeLinecap="round"
+          />
+        )}
+      </svg>
+      <span className="text-xs font-semibold text-slate-600 tabular-nums">{value}</span>
+    </div>
+  );
+}
+
 /* ─── unified campaign table row ────────────────────────── */
-function CampaignRow({ c, onDelete, onSubmitForApproval, idx }) {
+function CampaignRow({ c, onDelete, onSubmitForApproval, onDetails, idx }) {
   const [menu, setMenu] = useState(false);
+  const totalRecipients = c.total_recipients || 0;
+  const processed = (c.sent_count || 0) + (c.failed_count || 0);
+  const delivered = c.delivered_count || 0;
+  const read = c.read_count || 0;
 
   return (
     <tr className="border-b border-slate-50 hover:bg-violet-50/30 transition-colors animate-slide-up" style={{ animationDelay: `${idx * 30}ms` }}>
       <td className="px-4 py-3 min-w-0 max-w-xs">
-        <p className="text-sm font-semibold text-slate-800 truncate">{c.name}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-sm font-semibold text-slate-800 truncate">{c.name}</p>
+          <TypeChip type={c.type} />
+        </div>
         {c.message_body && <p className="text-[11px] text-slate-400 truncate mt-0.5">{c.message_body}</p>}
       </td>
-      <td className="px-4 py-3"><TypeChip type={c.type} /></td>
       <td className="px-4 py-3"><ChannelChip channelType={c.channel_type} /></td>
       <td className="px-4 py-3"><StatusChip status={c.status} /></td>
       <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+        <div className="flex items-center gap-1.5">
+          <Calendar size={11} className="text-slate-400" /> {fmtDate(c.created_at)} {fmtTime(c.created_at)}
+        </div>
         {c.scheduled_at ? (
-          <span className="flex items-center gap-1.5">
-            <Calendar size={11} className="text-violet-400" /> {fmtDate(c.scheduled_at)} {fmtTime(c.scheduled_at)}
-          </span>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <Clock size={11} className="text-violet-400" /> {fmtDate(c.scheduled_at)} {fmtTime(c.scheduled_at)}
+          </div>
         ) : (
-          <span className="text-slate-400">Not scheduled</span>
+          <p className="text-slate-300 mt-0.5">Not scheduled</p>
         )}
       </td>
+      <td className="px-4 py-3 text-sm text-slate-600 tabular-nums whitespace-nowrap">
+        <span className="inline-flex items-center gap-1.5">
+          <Users size={12} className="text-slate-400" /> {totalRecipients}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <CircularProgress value={processed} total={totalRecipients} color="violet" />
+      </td>
+      <td className="px-4 py-3">
+        <CircularProgress value={delivered} total={totalRecipients} color="emerald" />
+      </td>
+      <td className="px-4 py-3">
+        <CircularProgress value={read} total={totalRecipients} color="amber" />
+      </td>
       <td className="px-4 py-3 text-right">
-        <div className="relative inline-block">
+        <div className="flex items-center justify-end gap-1">
           <button
-            onClick={() => setMenu((p) => !p)}
-            className="p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-all"
+            title="Edit"
+            className="p-1.5 rounded-lg text-slate-300 hover:text-violet-600 hover:bg-violet-50 transition-all"
           >
-            <MoreHorizontal size={14} />
+            <Edit size={13} />
           </button>
-          {menu && (
-            <div className="absolute right-0 top-8 z-20 bg-white rounded-xl shadow-card-lg border border-slate-200 py-1 w-44 animate-scale-in text-left">
-              <button className="flex items-center gap-2 w-full px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">
-                <Edit size={12} /> Edit
-              </button>
-              {c.status === 'draft' && (
+          <button
+            onClick={() => onDetails(c)}
+            title="Details"
+            className="p-1.5 rounded-lg text-slate-300 hover:text-violet-600 hover:bg-violet-50 transition-all"
+          >
+            <Eye size={13} />
+          </button>
+          <div className="relative inline-block">
+            <button
+              onClick={() => setMenu((p) => !p)}
+              className="p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-all"
+            >
+              <MoreHorizontal size={14} />
+            </button>
+            {menu && (
+              <div className="absolute right-0 top-8 z-20 bg-white rounded-xl shadow-card-lg border border-slate-200 py-1 w-44 animate-scale-in text-left">
+                {c.status === 'draft' && (
+                  <button
+                    onClick={() => { onSubmitForApproval(c.id); setMenu(false); }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-xs text-violet-600 hover:bg-violet-50"
+                  >
+                    <ShieldCheck size={12} /> Submit for Approval
+                  </button>
+                )}
                 <button
-                  onClick={() => { onSubmitForApproval(c.id); setMenu(false); }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-xs text-violet-600 hover:bg-violet-50"
+                  onClick={() => { onDelete(c.id); setMenu(false); }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-500 hover:bg-red-50"
                 >
-                  <ShieldCheck size={12} /> Submit for Approval
+                  <Trash2 size={12} /> Delete
                 </button>
-              )}
-              <button
-                onClick={() => { onDelete(c.id); setMenu(false); }}
-                className="flex items-center gap-2 w-full px-3 py-2 text-xs text-red-500 hover:bg-red-50"
-              >
-                <Trash2 size={12} /> Delete
-              </button>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       </td>
     </tr>
+  );
+}
+
+/* ─── Details modal — per-recipient send status (GET /campaigns/:id/recipients) ─── */
+function DetailsModal({ campaign, onClose }) {
+  const { data, isLoading, isError } = useCampaignRecipients(campaign.id);
+  const recipients = Array.isArray(data) ? data : [];
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-card-lg w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col animate-scale-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">{campaign.name}</h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">Per-recipient send status</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-300 hover:text-slate-600 hover:bg-slate-100">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-4 px-5 py-3 border-b border-slate-100 bg-slate-50/50 text-xs">
+          <span className="flex items-center gap-1.5 text-slate-500"><Users size={12} /> {campaign.total_recipients || 0} contacts</span>
+          <span className="flex items-center gap-1.5 text-violet-600"><Send size={12} /> {(campaign.sent_count || 0) + (campaign.failed_count || 0)} processed</span>
+          <span className="flex items-center gap-1.5 text-emerald-600"><CheckCircle2 size={12} /> {campaign.delivered_count || 0} delivered</span>
+          <span className="flex items-center gap-1.5 text-amber-600"><Eye size={12} /> {campaign.read_count || 0} read</span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {isLoading && (
+            <div className="p-5 space-y-2">
+              {[0, 1, 2].map((i) => <div key={i} className="h-8 w-full skeleton rounded-lg" />)}
+            </div>
+          )}
+          {isError && (
+            <p className="text-sm text-red-600 p-5">Failed to load recipient details.</p>
+          )}
+          {!isLoading && !isError && recipients.length === 0 && (
+            <p className="text-sm text-slate-400 p-5 text-center">No recipients recorded for this campaign.</p>
+          )}
+          {!isLoading && recipients.length > 0 && (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-white">
+                <tr className="text-left text-slate-400 uppercase text-[10px]">
+                  <th className="px-5 py-2 font-medium">Contact</th>
+                  <th className="px-5 py-2 font-medium">Status</th>
+                  <th className="px-5 py-2 font-medium">Sent At</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recipients.map((r) => (
+                  <tr key={r.id} className="border-t border-slate-50">
+                    <td className="px-5 py-2">
+                      <p className="font-semibold text-slate-700">{r.name || r.phone}</p>
+                      <p className="text-slate-400">{r.phone}</p>
+                    </td>
+                    <td className="px-5 py-2">
+                      <StatusChip status={r.status} />
+                      {r.error && <p className="text-[10px] text-red-400 mt-0.5 truncate max-w-[220px]">{r.error}</p>}
+                    </td>
+                    <td className="px-5 py-2 text-slate-500 whitespace-nowrap">
+                      {r.sent_at ? `${fmtDate(r.sent_at)} ${fmtTime(r.sent_at)}` : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -338,6 +483,7 @@ export default function CampaignsPage() {
   const decide = useCampaignDecision();
 
   const [showCreate,     setCreate]   = useState(false);
+  const [detailsCampaign, setDetailsCampaign] = useState(null);
   const [search,         setSearch]   = useState('');
   const [filterChannel,  setChannel]  = useState('all');
   const [filterStatus,   setStatus]   = useState('all');
@@ -681,17 +827,27 @@ export default function CampaignsPage() {
               <table className="table-premium w-full">
                 <thead>
                   <tr>
-                    <th className="px-4 py-3">Name</th>
-                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Broadcast</th>
                     <th className="px-4 py-3">Channel</th>
                     <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Scheduled</th>
+                    <th className="px-4 py-3">Created / Scheduled</th>
+                    <th className="px-4 py-3">Contacts</th>
+                    <th className="px-4 py-3">Processed</th>
+                    <th className="px-4 py-3">Delivered</th>
+                    <th className="px-4 py-3">Read</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((c, i) => (
-                    <CampaignRow key={c.id} c={c} onDelete={handleDelete} onSubmitForApproval={handleSubmitForApproval} idx={i} />
+                    <CampaignRow
+                      key={c.id}
+                      c={c}
+                      onDelete={handleDelete}
+                      onSubmitForApproval={handleSubmitForApproval}
+                      onDetails={setDetailsCampaign}
+                      idx={i}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -703,6 +859,11 @@ export default function CampaignsPage() {
       {/* create modal */}
       {showCreate && (
         <CreateModal onClose={() => setCreate(false)} onCreate={handleCreate} />
+      )}
+
+      {/* details modal */}
+      {detailsCampaign && (
+        <DetailsModal campaign={detailsCampaign} onClose={() => setDetailsCampaign(null)} />
       )}
     </div>
   );

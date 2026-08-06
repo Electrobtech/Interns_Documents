@@ -243,7 +243,7 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
           Simulate
         </TabButton>
         <TabButton active={tab === 'bulk'} onClick={() => setTab('bulk')}>
-          Bulk Campaign
+          Broadcast
         </TabButton>
         <div className="flex-1" />
         <ViewPreferenceToggle value={viewPreference} onChange={handleViewPreferenceChange} />
