@@ -113,7 +113,10 @@ export function TabNav({ tabs, active, onChange }) {
 }
 
 // ─── Workspace Header ─────────────────────────────────────────────────────────
-export function WorkspaceHeader({ name, icon, badge, confidence, color, bgColor, description }) {
+export function WorkspaceHeader({
+  name, icon, badge, confidence, color, bgColor, description,
+  onExport, exportBusy, onBadgeClick, onSettingsClick,
+}) {
   return (
     <div className="px-8 pt-8 pb-6">
       <div className="flex items-start justify-between">
@@ -127,15 +130,32 @@ export function WorkspaceHeader({ name, icon, badge, confidence, color, bgColor,
           </div>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl" style={{ background: bgColor }}>
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
+            style={{ background: bgColor, cursor: onBadgeClick ? 'pointer' : 'default' }}
+            onClick={onBadgeClick}
+            role={onBadgeClick ? 'button' : undefined}
+            tabIndex={onBadgeClick ? 0 : undefined}
+          >
             <StatusDot status="active" />
             <span className="text-xs font-medium" style={{ color }}>{badge}</span>
           </div>
           <div className="px-3 py-1.5 rounded-xl border" style={{ borderColor: `${color}30`, background: `${color}08` }}>
             <span className="text-xs font-semibold" style={{ fontFamily: "'JetBrains Mono', monospace", color }}>{confidence}% confidence</span>
           </div>
-          <button className="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-500 border border-[#E4E8F0] bg-white hover:bg-slate-50 transition-all">Export</button>
-          <button className="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-500 border border-[#E4E8F0] bg-white hover:bg-slate-50 transition-all">Settings</button>
+          <button
+            onClick={onExport}
+            disabled={exportBusy}
+            className="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-500 border border-[#E4E8F0] bg-white hover:bg-slate-50 transition-all disabled:opacity-50"
+          >
+            {exportBusy ? 'Exporting…' : 'Export'}
+          </button>
+          <button
+            onClick={onSettingsClick}
+            className="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-500 border border-[#E4E8F0] bg-white hover:bg-slate-50 transition-all"
+          >
+            Settings
+          </button>
         </div>
       </div>
     </div>
@@ -206,57 +226,85 @@ export function BrainLog({ entries }) {
 }
 
 // ─── Task Queue ───────────────────────────────────────────────────────────────
-export function TaskQueue({ tasks }) {
+export function TaskQueue({ tasks, emptyLabel = 'Nothing queued right now.' }) {
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between mb-4">
         <SectionTitle>Task Queue</SectionTitle>
         <Badge variant="info">{tasks.filter(t => t.status !== 'done').length} pending</Badge>
       </div>
-      <div className="space-y-2">
-        {tasks.map((task, i) => (
-          <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors">
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${task.status === 'running' ? 'bg-blue-400 animate-pulse' : task.status === 'queued' ? 'bg-amber-400' : 'bg-green-400'}`} />
-            <span className="text-xs text-slate-700 flex-1">{task.title}</span>
-            {task.priority === 'high' && <span className="text-xs text-red-500 font-medium">High</span>}
-          </div>
-        ))}
-      </div>
+      {tasks.length === 0 ? (
+        <p className="text-xs text-slate-400 py-2">{emptyLabel}</p>
+      ) : (
+        <div className="space-y-2">
+          {tasks.map((task, i) => (
+            <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors">
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${task.status === 'running' ? 'bg-blue-400 animate-pulse' : task.status === 'queued' ? 'bg-amber-400' : 'bg-green-400'}`} />
+              <div className="flex-1 min-w-0">
+                <span className="text-xs text-slate-700 block truncate">{task.title}</span>
+                {task.sub && <span className="text-[11px] text-slate-400 block truncate">{task.sub}</span>}
+              </div>
+              {task.priority === 'high' && <span className="text-xs text-red-500 font-medium shrink-0">High</span>}
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
 
 // ─── Approval Queue ───────────────────────────────────────────────────────────
-export function ApprovalQueue({ items }) {
+export function ApprovalQueue({ items, onApprove, onReject, busyId, emptyLabel = 'Nothing waiting on review.' }) {
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between mb-4">
         <SectionTitle>Pending Approvals</SectionTitle>
         <Badge variant="warning">{items.length} waiting</Badge>
       </div>
-      <div className="space-y-3">
-        {items.map((item, i) => (
-          <div key={i} className="p-3 rounded-xl border border-[#E4E8F0] hover:border-amber-200 transition-colors">
-            <div className="text-xs font-medium text-slate-700 mb-2.5">{item.title}</div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">{item.agent} · <Mono color="#94A3B8">{item.confidence}%</Mono> confident</span>
-              <div className="flex items-center gap-2">
-                <button className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium transition-colors">
-                  <XCircle size={12} /> Reject
-                </button>
-                <button className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 font-medium transition-colors">
-                  <CheckCircle2 size={12} /> Approve
-                </button>
+      {items.length === 0 ? (
+        <p className="text-xs text-slate-400 py-2">{emptyLabel}</p>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item, i) => {
+            const busy = busyId != null && busyId === item.id;
+            return (
+              <div key={item.id ?? i} className="p-3 rounded-xl border border-[#E4E8F0] hover:border-amber-200 transition-colors">
+                <div className="text-xs font-medium text-slate-700 mb-2.5">{item.title}</div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400">
+                    {item.agent}
+                    {item.confidence != null && <> · <Mono color="#94A3B8">{item.confidence}%</Mono> confident</>}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={busy}
+                      onClick={() => onReject?.(item)}
+                      className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium transition-colors disabled:opacity-50"
+                    >
+                      <XCircle size={12} /> Reject
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() => onApprove?.(item)}
+                      className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 font-medium transition-colors disabled:opacity-50"
+                    >
+                      <CheckCircle2 size={12} /> Approve
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 }
 
 // ─── Metrics Row ──────────────────────────────────────────────────────────────
+// `cta: { label, onClick }` renders a clickable link instead of the plain
+// `sub` line — used by cards that are a configuration gate away from a real
+// number (Pipeline Value, AI Confidence) rather than permanently empty.
 export function MetricsRow({ metrics }) {
   return (
     <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${metrics.length}, 1fr)` }}>
@@ -264,7 +312,17 @@ export function MetricsRow({ metrics }) {
         <Card key={m.label} className="p-4">
           <div className="text-xs text-slate-400 mb-1">{m.label}</div>
           <div className="text-xl font-bold" style={{ fontFamily: "'Outfit', sans-serif", color: m.color ?? '#0F1929' }}>{m.value}</div>
-          {m.sub && <div className="text-xs text-slate-400 mt-0.5">{m.sub}</div>}
+          {m.cta ? (
+            <button
+              onClick={m.cta.onClick}
+              className="text-xs font-medium mt-1 hover:underline transition-colors"
+              style={{ color: m.color ?? '#3B6EF0' }}
+            >
+              {m.cta.label}
+            </button>
+          ) : (
+            m.sub && <div className="text-xs text-slate-400 mt-0.5">{m.sub}</div>
+          )}
         </Card>
       ))}
     </div>

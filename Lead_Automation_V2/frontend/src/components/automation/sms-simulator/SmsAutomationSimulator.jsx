@@ -193,7 +193,7 @@ export default function SmsAutomationSimulator() {
       <div className="flex items-center gap-1 px-1 pt-1 border-b border-slate-200 bg-white shrink-0">
         <TabButton active={tab === 'builder'} onClick={() => setTab('builder')}>Builder</TabButton>
         <TabButton active={tab === 'simulate'} onClick={() => setTab('simulate')}>Simulate</TabButton>
-        <TabButton active={tab === 'bulk'} onClick={() => setTab('bulk')}>Bulk Campaign</TabButton>
+        <TabButton active={tab === 'bulk'} onClick={() => setTab('bulk')}>Broadcast</TabButton>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto bg-slate-50">

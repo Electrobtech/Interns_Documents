@@ -484,6 +484,53 @@ router.get('/super-admin/analytics/automation', async (req, res) => {
   }
 });
 
+// Sales AI / Marketing AI / Support AI / Finance & Billing sub-tabs.
+// platformAnalyticsModel already implemented and exported these four
+// functions, but no route ever called them — the frontend hooks
+// (useAnalyticsSales/Marketing/Support/Finance) had nothing to hit,
+// which is what surfaced as "useAnalyticsSales is not a function" on
+// the client (the hooks didn't exist yet either; see
+// frontend/src/lib/queries/superAdmin.js).
+router.get('/super-admin/analytics/sales', async (req, res) => {
+  try {
+    const bounds = platformAnalyticsModel.resolveRange(req.query);
+    const sales = await platformAnalyticsModel.salesPerformance(bounds);
+    res.json({ range: bounds.label, ...sales });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.get('/super-admin/analytics/marketing', async (req, res) => {
+  try {
+    const bounds = platformAnalyticsModel.resolveRange(req.query);
+    const marketing = await platformAnalyticsModel.marketingPerformance(bounds);
+    res.json({ range: bounds.label, ...marketing });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.get('/super-admin/analytics/support', async (req, res) => {
+  try {
+    const bounds = platformAnalyticsModel.resolveRange(req.query);
+    const support = await platformAnalyticsModel.supportPerformance(bounds);
+    res.json({ range: bounds.label, ...support });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.get('/super-admin/analytics/finance', async (req, res) => {
+  try {
+    const bounds = platformAnalyticsModel.resolveRange(req.query);
+    const finance = await platformAnalyticsModel.financePerformance(bounds);
+    res.json({ range: bounds.label, ...finance });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // team-service's GET /audit-logs is tenant-scoped (req.user.organizationId);
 // this is the cross-tenant equivalent for Super Admin oversight, with an
 // optional organizationId filter for "show me this one tenant's history".

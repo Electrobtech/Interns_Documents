@@ -112,6 +112,13 @@ const routes = [
   // Message Templates (Template Creation module) — owned by campaign-service
   // (src/templates.js + src/templateMedia.js), not yet in this route table.
   { path: '/templates',           target: CAMPAIGN },
+  // Static header images/videos/documents templateMedia.js writes under
+  // campaign-service's public/uploads/templates (see src/index.js there).
+  // The upload response hands back a GATEWAY_PUBLIC_URL-rooted URL for the
+  // Live Preview's <img> tag to load directly — this route is what makes
+  // that URL actually resolve, since the browser only ever talks to this
+  // gateway, never to campaign-service's own port.
+  { path: '/uploads',             target: CAMPAIGN },
   { path: '/ai-agents',           target: AI },
   { path: '/orders',              target: ECOMMERCE },
   { path: '/carts',               target: ECOMMERCE },

@@ -96,11 +96,22 @@ export default function TemplateEditor({ initial, onSubmit, submitting, submitLa
 
   const handleFile = async (file) => {
     if (!file) return;
+    // Instant local preview while the upload is in flight, so the Live
+    // Preview isn't stuck on the empty-image placeholder for however long
+    // the round trip to campaign-service takes. Revoked as soon as we
+    // swap in the real hosted URL (success) or bail out (failure) — an
+    // object URL left un-revoked leaks the underlying blob for the tab's
+    // lifetime.
+    const localUrl = URL.createObjectURL(file);
+    set('header_media_url', localUrl);
     try {
       const result = await uploadMedia.mutateAsync(file);
       set('header_media_url', result.url);
     } catch (ex) {
       setErr(ex.message || 'Upload failed');
+      set('header_media_url', '');
+    } finally {
+      URL.revokeObjectURL(localUrl);
     }
   };
 

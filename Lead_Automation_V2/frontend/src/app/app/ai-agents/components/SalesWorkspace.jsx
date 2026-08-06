@@ -1,14 +1,28 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   WorkspaceHeader, TabNav, Card, Badge, SectionTitle, Label, Value,
   KnowledgePanel, BrainLog, TaskQueue, ApprovalQueue, ConfidenceMeter,
   MetricsRow, MiniBarChart, Divider, TimelineItem, Mono,
 } from './SharedUI';
 import { ArrowRight, Mail, MessageSquare, Phone, RefreshCw } from 'lucide-react';
+import FitScorerPanel from '@/components/ai-agents/sales/FitScorerPanel';
+import DealValueFieldModal from '@/components/ai-agents/sales/DealValueFieldModal';
+import ConfidenceSignalModal from '@/components/ai-agents/sales/ConfidenceSignalModal';
+import SalesQueueDrawer from '@/components/ai-agents/sales/SalesQueueDrawer';
+import SalesExportModal from '@/components/ai-agents/sales/SalesExportModal';
+import { useLeads } from '@/lib/queries/crm';
+import { useFollowUps, useFollowUpCounts } from '@/lib/queries/followUps';
+import {
+  useHandoffs, useUpdateHandoff, useSalesAgentRuns,
+  useSalesAgentConfig, useSalesAgentQueue,
+} from '@/lib/queries/aiAgents';
 
 const TABS = ['Overview', 'Pipeline', 'Lead Intelligence', 'Follow-ups', 'Forecasting', 'Knowledge', 'Analytics', 'Settings'];
 
+// Still used by the Knowledge tab's illustrative RAG demo and the Follow-ups
+// tab's draft-message queue below — those stay mock for now. Overview pulls
+// real leads/follow-ups/handoffs/runs instead (see SalesOverview()).
 const BRAIN_LOG = [
   { time: '09:40', type: 'retrieve', text: 'Loaded 23 new leads from LinkedIn Campaign #4812 into scoring queue' },
   { time: '09:41', type: 'thinking', text: 'Analyzing firmographic signals: company size, tech stack, funding stage' },
@@ -26,77 +40,177 @@ const TASKS = [
   { title: 'Sales handoff: Acme Corp — ready for AE', status: 'queued', priority: 'high' },
 ];
 
-const APPROVALS = [
-  { title: 'Follow-up sequence: 8 hot leads (email + WA)', agent: 'Sales Agent', confidence: 87 },
-  { title: 'Cold Lead Revival Campaign — 34 contacts', agent: 'Sales Agent', confidence: 79 },
-];
+function timeLabel(iso) {
+  if (!iso) return '--:--';
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
-function SalesOverview() {
-  const leads = [
-    { label: 'Hot', count: 28, color: '#EF4444', pct: 18 },
-    { label: 'Warm', count: 71, color: '#F59E0B', pct: 45 },
-    { label: 'Cold', count: 57, color: '#94A3B8', pct: 37 },
-  ];
+const STAGE_ORDER = ['new', 'qualified', 'active', 'won', 'lost'];
+const STAGE_LABEL = { new: 'New Leads', qualified: 'Qualified', active: 'Active', won: 'Won', lost: 'Lost' };
+const STAGE_COLOR = { new: '#94A3B8', qualified: '#3B6EF0', active: '#F59E0B', won: '#10B981', lost: '#EF4444' };
+
+function SalesOverview({ onOpenDealValueModal, onOpenConfidenceModal }) {
+  const { data: leadsData, isLoading: leadsLoading } = useLeads();
+  const { data: followUpCounts } = useFollowUpCounts();
+  const { data: overdueFollowUps = [] } = useFollowUps('overdue');
+  const { data: todayFollowUps = [] } = useFollowUps('today');
+  const { data: handoffs = [] } = useHandoffs('pending');
+  const { data: recentRuns = [] } = useSalesAgentRuns();
+  const { data: salesConfig } = useSalesAgentConfig();
+  const updateHandoff = useUpdateHandoff();
+
+  const leads = leadsData || [];
+
+  const { hot, warm, cold, stages, wonCount, lostCount } = useMemo(() => {
+    const hot = leads.filter((l) => Number(l.score) >= 75);
+    const warm = leads.filter((l) => Number(l.score) >= 45 && Number(l.score) < 75);
+    const cold = leads.filter((l) => Number(l.score) < 45);
+    const byStage = {};
+    STAGE_ORDER.forEach((s) => { byStage[s] = 0; });
+    leads.forEach((l) => { if (byStage[l.stage] !== undefined) byStage[l.stage] += 1; });
+    return {
+      hot, warm, cold, stages: byStage,
+      wonCount: byStage.won || 0, lostCount: byStage.lost || 0,
+    };
+  }, [leads]);
+
+  const totalLeads = leads.length;
+  const closedCount = wonCount + lostCount;
+  const winRate = closedCount > 0 ? Math.round((wonCount / closedCount) * 100) : null;
+  const maxStageCount = Math.max(1, ...STAGE_ORDER.map((s) => stages[s]));
+
+  const salesHandoffs = (handoffs || []).filter((h) => h.agent_type === 'sales');
+
+  const tasks = [
+    ...overdueFollowUps.map((f) => ({
+      title: `Follow up: ${f.contact_name || 'Unnamed contact'}`,
+      sub: f.notes || 'Overdue', status: 'queued', priority: 'high',
+    })),
+    ...todayFollowUps.map((f) => ({
+      title: `Follow up: ${f.contact_name || 'Unnamed contact'}`,
+      sub: f.notes || 'Due today', status: 'queued',
+    })),
+  ].slice(0, 6);
+
+  const approvals = salesHandoffs.map((h) => ({
+    id: h.id,
+    title: `${h.customer_name || 'Unnamed lead'} — human handoff requested`,
+    agent: 'Sales Agent',
+  }));
+
+  const brainLogEntries = (recentRuns || []).slice(0, 4).map((r) => ({
+    time: timeLabel(r.created_at),
+    type: 'output',
+    text: r.output?.lead_qualification_reason || r.output?.recommended_sales_action || r.brief,
+  }));
+
+  const computed = salesConfig?.computed;
+  const pipelineValueMetric = computed?.pipeline_value != null
+    ? {
+        label: 'Pipeline Value',
+        value: `$${computed.pipeline_value.toLocaleString()}`,
+        sub: computed.pipeline_value_note,
+        color: '#059669',
+      }
+    : {
+        label: 'Pipeline Value', value: '—',
+        color: '#059669',
+        cta: { label: '+ Set Up Deal Values', onClick: onOpenDealValueModal },
+      };
+
+  const aiConfidenceMetric = computed?.ai_confidence != null
+    ? {
+        label: 'AI Confidence',
+        value: `${computed.ai_confidence}%`,
+        sub: computed.ai_confidence_note,
+        color: '#0284C7',
+      }
+    : {
+        label: 'AI Confidence', value: '—',
+        color: '#0284C7',
+        cta: { label: '⚡ Wire Confidence Signal', onClick: onOpenConfidenceModal },
+      };
+
   return (
     <div className="space-y-6">
       <MetricsRow metrics={[
-        { label: "Today's Follow-ups", value: '12', sub: '4 overdue', color: '#EF4444' },
-        { label: 'Hot Leads', value: '28', sub: '+6 from AI scoring', color: '#EF4444' },
-        { label: 'Pipeline Value', value: '$1.24M', sub: 'Q4 active', color: '#059669' },
-        { label: 'AI Confidence', value: '87%', color: '#0284C7' },
-        { label: 'Win Rate', value: '34%', sub: '+4% vs last Q', color: '#10B981' },
+        {
+          label: "Today's Follow-ups",
+          value: followUpCounts ? String(followUpCounts.today) : '—',
+          sub: followUpCounts ? `${followUpCounts.overdue} overdue` : undefined,
+          color: '#EF4444',
+        },
+        {
+          label: 'Hot Leads', value: leadsLoading ? '—' : String(hot.length),
+          sub: leadsLoading ? undefined : `of ${totalLeads} total, RF-scored`, color: '#EF4444',
+        },
+        pipelineValueMetric,
+        aiConfidenceMetric,
+        {
+          label: 'Win Rate', value: winRate != null ? `${winRate}%` : '—',
+          sub: winRate != null ? `${wonCount} won / ${lostCount} lost` : 'no closed deals yet', color: '#10B981',
+        },
       ]} />
 
       <div className="grid grid-cols-3 gap-6">
         <Card className="p-5">
           <SectionTitle className="mb-4">Lead Distribution</SectionTitle>
-          {leads.map(l => (
+          {[
+            { label: 'Hot', count: hot.length, color: '#EF4444' },
+            { label: 'Warm', count: warm.length, color: '#F59E0B' },
+            { label: 'Cold', count: cold.length, color: '#94A3B8' },
+          ].map((l) => (
             <div key={l.label} className="mb-4">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs text-slate-600">{l.label} Leads</span>
                 <Mono color={l.color}>{l.count}</Mono>
               </div>
-              <ConfidenceMeter value={l.pct * 2} color={l.color} />
+              <ConfidenceMeter value={totalLeads ? (l.count / totalLeads) * 100 : 0} color={l.color} />
             </div>
           ))}
           <Divider className="my-3" />
-          <div className="text-xs text-slate-400">Total: 156 leads · AI scored today</div>
+          <div className="text-xs text-slate-400">
+            {leadsLoading ? 'Loading leads…' : `Total: ${totalLeads} leads · scored by the random forest model`}
+          </div>
         </Card>
 
         <Card className="p-5 col-span-2">
           <div className="flex items-center justify-between mb-4">
             <SectionTitle>Pipeline Health</SectionTitle>
-            <Badge variant="info">6 stages</Badge>
+            <Badge variant="info">{STAGE_ORDER.length} stages</Badge>
           </div>
           <div className="space-y-3">
-            {[
-              { stage: 'New Leads', count: 52, value: '$0', color: '#94A3B8' },
-              { stage: 'Qualified', count: 28, value: '$340K', color: '#3B6EF0' },
-              { stage: 'Proposal Sent', count: 14, value: '$480K', color: '#7C3AED' },
-              { stage: 'Negotiation', count: 8, value: '$290K', color: '#F59E0B' },
-              { stage: 'Won', count: 12, value: '$130K', color: '#10B981' },
-              { stage: 'Lost', count: 9, value: '—', color: '#EF4444' },
-            ].map(s => (
-              <div key={s.stage} className="flex items-center gap-4">
-                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                <span className="text-xs text-slate-600 w-28 flex-shrink-0">{s.stage}</span>
+            {STAGE_ORDER.map((s) => (
+              <div key={s} className="flex items-center gap-4">
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: STAGE_COLOR[s] }} />
+                <span className="text-xs text-slate-600 w-24 flex-shrink-0">{STAGE_LABEL[s]}</span>
                 <div className="flex-1">
                   <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${(s.count / 52) * 100}%`, background: s.color }} />
+                    <div className="h-full rounded-full" style={{ width: `${(stages[s] / maxStageCount) * 100}%`, background: STAGE_COLOR[s] }} />
                   </div>
                 </div>
-                <Mono color="#0F1929">{s.count}</Mono>
-                <span className="text-xs text-slate-400 w-16 text-right">{s.value}</span>
+                <Mono color="#0F1929">{stages[s]}</Mono>
               </div>
             ))}
+          </div>
+          <div className="text-xs text-slate-400 mt-3">
+            {computed?.pipeline_value != null
+              ? `Dollar totals reflect ${computed.leads_with_deal_value} lead(s) with a mapped deal value.`
+              : 'No deal-value field mapped yet — stage counts are real, dollar totals aren\'t shown rather than invented.'}
           </div>
         </Card>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        <TaskQueue tasks={TASKS} />
-        <ApprovalQueue items={APPROVALS} />
-        <BrainLog entries={BRAIN_LOG.slice(0, 4)} />
+        <TaskQueue tasks={tasks} emptyLabel="No follow-ups due today or overdue." />
+        <ApprovalQueue
+          items={approvals}
+          emptyLabel="No pending sales handoffs."
+          busyId={updateHandoff.isPending ? updateHandoff.variables?.id : null}
+          onApprove={(item) => updateHandoff.mutate({ id: item.id, status: 'resolved' })}
+          onReject={(item) => updateHandoff.mutate({ id: item.id, status: 'rejected' })}
+        />
+        <BrainLog entries={brainLogEntries} />
       </div>
     </div>
   );
@@ -142,6 +256,11 @@ function LeadIntelligence() {
   return (
     <div className="grid grid-cols-3 gap-6">
       <div className="col-span-2 space-y-5">
+        <div>
+          <SectionTitle className="mb-3">Live Fit Scorer · Random Forest</SectionTitle>
+          <FitScorerPanel />
+        </div>
+
         <Card className="p-6">
           <div className="flex items-start justify-between mb-5">
             <div>
@@ -394,15 +513,36 @@ function SalesSettings() {
 
 export default function SalesWorkspace() {
   const [tab, setTab] = useState('Overview');
+  const [showDealValueModal, setShowDealValueModal] = useState(false);
+  const [showConfidenceModal, setShowConfidenceModal] = useState(false);
+  const [showQueueDrawer, setShowQueueDrawer] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+
+  const { data: salesConfig } = useSalesAgentConfig();
+  const { data: queue } = useSalesAgentQueue();
+
+  const badge = queue
+    ? `Running · ${queue.total} task${queue.total === 1 ? '' : 's'} queued`
+    : 'Running · tasks queued';
+
   return (
     <div className="min-h-screen">
-      <WorkspaceHeader name="Sales Agent" icon="📈" badge="Running · 12 tasks queued" confidence={87}
-        color="#0284C7" bgColor="#F0F9FF" description="Lead scoring, pipeline intelligence, follow-up automation, and revenue forecasting" />
+      <WorkspaceHeader name="Sales Agent" icon="📈" badge={badge} confidence={87}
+        color="#0284C7" bgColor="#F0F9FF" description="Lead scoring, pipeline intelligence, follow-up automation, and revenue forecasting"
+        onExport={() => setShowExportModal(true)}
+        onBadgeClick={() => setShowQueueDrawer(true)}
+        onSettingsClick={() => setTab('Settings')}
+      />
       <div className="px-8">
         <TabNav tabs={TABS} active={tab} onChange={setTab} />
       </div>
       <div className="px-8 pb-8 mt-6">
-        {tab === 'Overview' && <SalesOverview />}
+        {tab === 'Overview' && (
+          <SalesOverview
+            onOpenDealValueModal={() => setShowDealValueModal(true)}
+            onOpenConfidenceModal={() => setShowConfidenceModal(true)}
+          />
+        )}
         {tab === 'Pipeline' && <Pipeline />}
         {tab === 'Lead Intelligence' && <LeadIntelligence />}
         {tab === 'Follow-ups' && <Followups />}
@@ -416,6 +556,15 @@ export default function SalesWorkspace() {
         {tab === 'Analytics' && <SalesAnalytics />}
         {tab === 'Settings' && <SalesSettings />}
       </div>
+
+      {showDealValueModal && (
+        <DealValueFieldModal config={salesConfig} onClose={() => setShowDealValueModal(false)} />
+      )}
+      {showConfidenceModal && (
+        <ConfidenceSignalModal config={salesConfig} onClose={() => setShowConfidenceModal(false)} />
+      )}
+      {showQueueDrawer && <SalesQueueDrawer onClose={() => setShowQueueDrawer(false)} />}
+      {showExportModal && <SalesExportModal onClose={() => setShowExportModal(false)} />}
     </div>
   );
 }
