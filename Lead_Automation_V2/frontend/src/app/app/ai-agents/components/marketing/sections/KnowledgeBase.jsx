@@ -5,6 +5,7 @@ import { useRef } from 'react';
 import { BookOpen, Upload, Trash2, Loader2 } from 'lucide-react';
 import { useKnowledgeSources, useUploadKnowledge, useDeleteKnowledge } from '@/lib/queries/aiAgents';
 import { Card, SectionTitle, Badge, Button, DataTable, EmptyState } from '../MarketingUI';
+import { PageHeader, Toolbar, ToolButton, ToolSearch } from '../HubUI';
 
 const STATUS_TONE = { ready: 'green', processing: 'amber', pending: 'amber', failed: 'red' };
 
@@ -15,7 +16,21 @@ export default function KnowledgeBase() {
   const del = useDeleteKnowledge('marketing');
 
   return (
-    <Card className="p-5">
+    <div className="space-y-4">
+      <PageHeader
+        title="Knowledge Base"
+        subtitle="Sources the Marketing Agent retrieves from. A source stays cited in past traces even after deletion."
+      />
+
+      <Toolbar
+        right={<span className="text-[11px] text-slate-400">Sources are soft-deleted so past traces stay readable</span>}
+      >
+        <span className="text-[12px] text-slate-500 px-1">
+          Marketing-scoped documents the agent retrieves from
+        </span>
+      </Toolbar>
+
+      <Card className="p-5">
       <SectionTitle
         title="Documents"
         subtitle="Everything the Marketing Agent can cite \u2014 and nothing else"
@@ -81,6 +96,7 @@ export default function KnowledgeBase() {
           />
         }
       />
-    </Card>
+      </Card>
+    </div>
   );
 }

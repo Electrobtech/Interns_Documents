@@ -51,9 +51,43 @@ export function Modal({ open, onClose, title, subtitle, children, footer, wide =
   );
 }
 
+/** Right-side detail panel — white theme port of the reference drawer. */
+export function Drawer({ open, onClose, title, subtitle, children, width = 480 }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => e.key === 'Escape' && onClose?.();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/25 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="h-full bg-white border-l border-[#E4E8F0] shadow-2xl flex flex-col"
+        style={{ width, maxWidth: '95vw' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-[#EEF1F6] shrink-0">
+          <div className="min-w-0">
+            <h3 className="text-[15px] font-bold text-[#0F1929] truncate" style={{ fontFamily: "'Outfit', sans-serif" }}>
+              {title}
+            </h3>
+            {subtitle && <p className="text-[11px] text-slate-400 mt-0.5">{subtitle}</p>}
+          </div>
+          <button onClick={onClose} className="text-slate-300 hover:text-slate-600 transition-colors shrink-0">
+            <X size={17} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 const inputCls =
   'w-full text-sm rounded-xl border border-[#E4E8F0] px-3.5 py-2.5 outline-none text-slate-700 ' +
-  'focus:border-violet-300 focus:ring-2 focus:ring-violet-100 transition-all placeholder:text-slate-300';
+  'focus:border-rose-300 focus:ring-2 focus:ring-rose-100 transition-all placeholder:text-slate-300';
 
 export function Field({ label, hint, required, children }) {
   return (
@@ -346,7 +380,7 @@ export function AIPanel({
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2 mb-3">
-        <Sparkles size={14} style={{ color: '#7C3AED' }} />
+        <Sparkles size={14} style={{ color: '#E11D48' }} />
         <h3 className="text-sm font-bold text-[#0F1929]" style={{ fontFamily: "'Outfit', sans-serif" }}>
           {title}
         </h3>

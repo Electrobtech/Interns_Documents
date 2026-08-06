@@ -6,14 +6,14 @@
  * is re-expressed in the existing AI-agents white theme so the hub reads as
  * part of the product rather than a bolted-on module:
  *   page  #F4F6FA · card white/rounded-2xl · border #E4E8F0 · text #0F1929
- *   headings Outfit · numerics JetBrains Mono · marketing accent #7C3AED
+ *   headings Outfit · numerics JetBrains Mono · marketing accent #E11D48 (brand rose)
  */
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
-export const ACCENT = '#7C3AED';
+export const ACCENT = '#E11D48';
 
 export const TONE = {
-  violet: { fg: '#7C3AED', bg: '#F5F3FF' },
+  violet: { fg: '#E11D48', bg: '#FFF1F2' },
   blue: { fg: '#3B6EF0', bg: '#EFF4FF' },
   green: { fg: '#059669', bg: '#ECFDF5' },
   amber: { fg: '#D97706', bg: '#FFFBEB' },
@@ -147,7 +147,7 @@ export function Button({ children, variant = 'ghost', icon: Icon, className = ''
     danger: 'text-red-600 border border-red-200 bg-red-50 hover:bg-red-100',
     success: 'text-emerald-700 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100',
   };
-  const style = variant === 'primary' ? { background: `linear-gradient(135deg, ${ACCENT} 0%, #5B3AED 100%)` } : undefined;
+  const style = variant === 'primary' ? { background: `linear-gradient(135deg, ${ACCENT} 0%, #FB923C 100%)` } : undefined;
   return (
     <button className={`${base} ${variants[variant] || variants.ghost} ${className}`} style={style} {...rest}>
       {Icon && <Icon size={14} />}

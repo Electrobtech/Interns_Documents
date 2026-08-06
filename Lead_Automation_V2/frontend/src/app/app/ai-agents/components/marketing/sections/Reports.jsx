@@ -7,10 +7,13 @@
  * explicit note rather than a zero, which would read as "measured and zero".
  */
 import { useState } from 'react';
-import { FileBarChart, Plus, Trash2, Loader2, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { FileBarChart, Plus, Trash2, Loader2, ChevronDown, ChevronUp, Info, Download, Clock} from 'lucide-react';
 
 import { useReports, useGenerateReport, useDeleteReport, REPORT_TYPES } from '@/lib/queries/marketing';
 import { Card, Badge, Button, EmptyState, SectionTitle } from '../MarketingUI';
+import {
+  PageHeader, Toolbar, ToolButton, ToolSearch, StatsStrip,
+} from '../HubUI';
 import { Modal, Field, Input, Select, ErrorNote, fmtDate, timeAgo } from './Shared';
 
 const TYPE_LABEL = Object.fromEntries(REPORT_TYPES.map((t) => [t.value, t.label]));
@@ -25,6 +28,32 @@ export default function Reports() {
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title="Reports"
+        subtitle="Point-in-time snapshots computed from your own tables. CRM-owned fields stay null."
+        count={rows.length}
+      />
+
+      <Toolbar
+        right={<span className="text-[11px] text-slate-400">CRM-owned fields stay null</span>}
+      >
+        <Button variant="primary" icon={Plus} onClick={() => setGenOpen(true)} className="!py-1.5 !px-3 !text-[12px]">
+          Generate report
+        </Button>
+        <ToolButton icon={Download} disabled title="PDF/CSV export isn't built yet">Export</ToolButton>
+        <ToolButton icon={Clock} disabled title="No scheduler exists yet">Schedule</ToolButton>
+      </Toolbar>
+
+      <StatsStrip
+        items={[
+          { label: 'Reports', value: rows.length, tone: 'violet' },
+          { label: 'Completed', value: rows.filter((r) => r.status === 'completed').length, tone: 'green' },
+          { label: 'This month', value: rows.filter((r) => new Date(r.created_at).getMonth() === new Date().getMonth()).length, tone: 'blue' },
+          { label: 'Scheduled', value: null, tone: 'slate', note: 'no scheduler yet' },
+          { label: 'Exports', value: null, tone: 'slate', note: 'PDF/CSV not built' },
+        ]}
+      />
+
       <Card className="p-4">
         <SectionTitle
           title="Reports"
