@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard, Inbox, Users, Bot, Megaphone, ShoppingCart,
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
@@ -202,6 +202,8 @@ function UnreadBadge({ count }) {
 // for channels that have a Playbook Studio flow builder.
 function ExpandableNavItem({ item, pathname, isActive, unread = 0, collapsed = false }) {
   const { label, icon: Icon, href, sub } = item;
+  const searchParams = useSearchParams();
+  const agentParam = searchParams.get('agent');
   const subItems = sub || [['Conversations', href]];
   const open = (pathname.startsWith(href) && !pathname.startsWith(href + '/automation'))
     || subItems.some(([, h]) => {
