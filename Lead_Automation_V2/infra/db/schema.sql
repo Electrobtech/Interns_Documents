@@ -182,6 +182,13 @@ CREATE TABLE IF NOT EXISTS leads (
   -- Nullable with no default: unset must stay unset, not silently 0, so
   -- Pipeline Value aggregation can tell "unknown" apart from "zero".
   deal_value      NUMERIC(14, 2),
+  -- Leads/CRM page fields (see migrations/032_lead_crm_fields.sql).
+  -- `temperature`/`category` are intentionally separate from `stage` so
+  -- existing stage-based Pipeline/Dashboard/Analytics queries are untouched.
+  course          TEXT,
+  temperature     TEXT NOT NULL DEFAULT 'warm' CHECK (temperature IN ('hot', 'warm', 'cold')),
+  contact_status  TEXT NOT NULL DEFAULT 'no response',
+  category        TEXT NOT NULL DEFAULT 'active' CHECK (category IN ('active', 'onboarded', 'inactive')),
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   -- Last time score/stage/deal_value was written (see
   -- migrations/031_lead_updated_at.sql). Bumped at the application layer
