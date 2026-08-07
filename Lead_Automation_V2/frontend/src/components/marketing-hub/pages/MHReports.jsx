@@ -12,6 +12,11 @@ const INITIAL_REPORTS = [
   { id: 4, title: 'WhatsApp Broadcast Analytics', type: 'Broadcast', date: '2025-07-22', size: '1.6 MB', status: 'Ready' },
   { id: 5, title: 'Audience Growth Insights', type: 'Audience', date: '2025-07-15', size: '940 KB', status: 'Ready' },
   { id: 6, title: 'Revenue Attribution Report', type: 'Revenue', date: '2025-08-01', size: '5.2 MB', status: 'Generating' },
+  { id: 7, title: 'Email Campaign Analysis', type: 'Campaign', date: '2025-07-30', size: '2.8 MB', status: 'Ready' },
+  { id: 8, title: 'LinkedIn Engagement Report', type: 'Campaign', date: '2025-08-05', size: '1.9 MB', status: 'Ready' },
+  { id: 9, title: 'Lead Source Analysis', type: 'Audience', date: '2025-08-02', size: '3.1 MB', status: 'Ready' },
+  { id: 10, title: 'Social Media Performance', type: 'Campaign', date: '2025-08-07', size: '2.4 MB', status: 'Ready' },
+  { id: 11, title: 'Conversion Funnel Report', type: 'Revenue', date: '2025-08-03', size: '4.1 MB', status: 'Ready' },
 ];
 
 const SCHEDULED = [
