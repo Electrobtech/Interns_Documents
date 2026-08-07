@@ -23,6 +23,22 @@ function qs(params) {
   return s ? `?${s}` : '';
 }
 
+/* ─── Dashboard ───────────────────────────────────────────────────────────── */
+
+/** One request for the whole Marketing Hub dashboard.
+ *
+ *  Replaces the previous client-side composition (useBroadcasts + useContent +
+ *  useReports), which meant three round trips before the first KPI rendered
+ *  and made the dashboard's numbers depend on which other tabs had been
+ *  visited and cached. */
+export function useMarketingDashboard() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing', 'dashboard'],
+    queryFn: () => call(`${BASE}/dashboard`),
+  });
+}
+
 /* ─── Broadcasts ──────────────────────────────────────────────────────────── */
 
 export function useBroadcasts(filters = {}) {
@@ -64,6 +80,19 @@ export function useDeleteBroadcast() {
 
 /** Persists the anti_ban verdict. The server refuses to move a broadcast to
  *  `sending` until this has been posted and is not high/critical. */
+/** Per-destination send trail. Same response shape as the Campaigns
+ *  equivalent, so both render with one component. */
+export function useBroadcastRecipients(id, filters = {}) {
+  const { call } = useApi();
+  const { status, search, page = 1, limit = 50 } = filters;
+  return useQuery({
+    queryKey: ['marketing', 'broadcasts', id, 'recipients', filters],
+    queryFn: () => call(`${BASE}/broadcasts/${id}/recipients${qs({ status, search, page, limit })}`),
+    enabled: !!id,
+    placeholderData: (prev) => prev,
+  });
+}
+
 export function useBroadcastPolicyCheck() {
   const { call } = useApi();
   const qc = useQueryClient();
@@ -127,6 +156,51 @@ export function useDeleteContent() {
 }
 
 /* ─── Templates ───────────────────────────────────────────────────────────── */
+
+/** Read-only snapshots of prior versions. `version` on the document was being
+ *  incremented with nowhere to look up what a prior version said. */
+export function useContentVersions(id) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing', 'content', id, 'versions'],
+    queryFn: () => call(`${BASE}/content/${id}/versions`),
+    enabled: !!id,
+  });
+}
+
+/** Routes publication through the governance engine. `content.publish` is on
+ *  the auto-approval denylist, so this always lands in a human's queue. */
+export function useSubmitContent() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, summary }) =>
+      call(`${BASE}/content/${id}/submit`, { method: 'POST', body: { summary } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['marketing', 'content'] });
+      qc.invalidateQueries({ queryKey: ['aiAgents', 'approvals'] });
+      qc.invalidateQueries({ queryKey: ['marketing', 'dashboard'] });
+    },
+  });
+}
+
+export function useTemplate(id) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing', 'templates', id],
+    queryFn: () => call(`${BASE}/templates/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateTemplate() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }) => call(`${BASE}/templates/${id}`, { method: 'PUT', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing', 'templates'] }),
+  });
+}
 
 export function useTemplates(filters = {}) {
   const { call } = useApi();
@@ -194,6 +268,54 @@ export function useAddSeoKeyword() {
   });
 }
 
+/** Project plus its keywords in one request — backs the detail view. */
+export function useSeoProject(id) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing', 'seo', 'projects', id],
+    queryFn: () => call(`${BASE}/seo/projects/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateSeoProject() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }) => call(`${BASE}/seo/projects/${id}`, { method: 'PUT', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing', 'seo'] }),
+  });
+}
+
+export function useUpdateSeoKeyword() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, keywordId, ...body }) =>
+      call(`${BASE}/seo/projects/${projectId}/keywords/${keywordId}`, { method: 'PUT', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing', 'seo'] }),
+  });
+}
+
+export function useDeleteSeoKeyword() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, keywordId }) =>
+      call(`${BASE}/seo/projects/${projectId}/keywords/${keywordId}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing', 'seo'] }),
+  });
+}
+
+/** Where a number came from. `ai_inferred` is a model guess, `manual` a human
+ *  reading, `search_console` a measurement — the badge has to distinguish
+ *  them or the columns full of nulls become meaningless. */
+export const DATA_SOURCES = {
+  ai_inferred: { label: 'AI inferred', tone: 'violet' },
+  manual: { label: 'Manual', tone: 'blue' },
+  search_console: { label: 'Measured', tone: 'green' },
+};
+
 /* ─── AEO ─────────────────────────────────────────────────────────────────── */
 
 export function useAeoProjects() {
@@ -223,6 +345,24 @@ export function useDeleteAeoProject() {
 }
 
 /* ─── Competitors ─────────────────────────────────────────────────────────── */
+
+export function useAeoProject(id) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing', 'aeo', 'projects', id],
+    queryFn: () => call(`${BASE}/aeo/projects/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateAeoProject() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }) => call(`${BASE}/aeo/projects/${id}`, { method: 'PUT', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing', 'aeo'] }),
+  });
+}
 
 export function useCompetitors() {
   const { call } = useApi();
@@ -256,6 +396,45 @@ export function useAddCompetitorSnapshot() {
   return useMutation({
     mutationFn: ({ competitorId, ...body }) =>
       call(`${BASE}/competitors/${competitorId}/snapshots`, { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing', 'competitors'] }),
+  });
+}
+
+/** Competitor plus its most recent snapshot — backs the detail view and the
+ *  side-by-side comparison, which composes several of these client-side. */
+export function useCompetitor(id) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing', 'competitors', id],
+    queryFn: () => call(`${BASE}/competitors/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateCompetitor() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }) => call(`${BASE}/competitors/${id}`, { method: 'PUT', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing', 'competitors'] }),
+  });
+}
+
+export function useDeleteCompetitor() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => call(`${BASE}/competitors/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing', 'competitors'] }),
+  });
+}
+
+export function useDeleteSnapshot() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ competitorId, snapshotId }) =>
+      call(`${BASE}/competitors/${competitorId}/snapshots/${snapshotId}`, { method: 'DELETE' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing', 'competitors'] }),
   });
 }

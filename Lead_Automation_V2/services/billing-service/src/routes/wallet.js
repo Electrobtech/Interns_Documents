@@ -6,7 +6,7 @@
 // a real payment instead of platform staff.
 const express = require('express');
 const { requireRole, walletModel, paymentModel } = require('@lead/shared');
-const { razorpay, toPaise, verifyCheckoutSignature, KEY_ID } = require('../lib/razorpay');
+const { razorpay, createOrder, toPaise, verifyCheckoutSignature, KEY_ID } = require('../lib/razorpay');
 
 const router = express.Router();
 
@@ -38,7 +38,7 @@ router.post('/recharge-order', requireRole('admin', 'manager'), async (req, res)
   if (amount < 1) return res.status(400).json({ error: 'Minimum recharge amount is ₹1' });
 
   try {
-    const order = await razorpay.orders.create({
+    const order = await createOrder({
       amount: toPaise(amount),
       currency: 'INR',
       notes: { organization_id: req.user.organizationId, purpose: 'WALLET_RECHARGE' },

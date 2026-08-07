@@ -61,3 +61,7 @@ test-results/
 # Local npm cache produced by Docker builds — never source.
 .npm-cache/
 **/.npm-cache/
+
+# Marketing agent zip and extracted files
+"marketing_agent FRONTEND.zip"
+marketing_agent_frontend_extracted/
