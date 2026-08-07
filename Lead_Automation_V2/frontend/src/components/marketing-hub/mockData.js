@@ -15,6 +15,17 @@ export const broadcasts = [
   { id:'4', name:'Monthly Newsletter - Aug', channel:'Email', audience:'Newsletter List (5.6k)', status:'Draft', sent:0, delivered:0, opened:0, clicked:0, responses:0, conversion:0, aiScore:65 },
   { id:'5', name:'Re-engagement - Cold Leads', channel:'WhatsApp', audience:'Inactive 60d (3.1k)', status:'Active', sent:3100, delivered:2945, opened:1770, clicked:531, responses:248, conversion:8.0, aiScore:73 },
 ];
+// `platformKey`/`channelKey` match the `platform` field on `campaigns` rows and
+// the `channel` field on `broadcasts` rows above — counts on the Channels page
+// are derived by filtering those arrays, not hardcoded here.
+export const channels = [
+  { id:'whatsapp',   name:'WhatsApp Business',   platformKey:'WhatsApp',   color:'#25D366', bg:'#e8f9ef', status:'connected', broadcastsSupported:true,     description:'Send campaigns and broadcasts via WhatsApp Business API.' },
+  { id:'email',      name:'Email',               platformKey:'Email',     color:'#3b82f6', bg:'#eff6ff', status:'connected', broadcastsSupported:true,     description:'Create email campaigns and send broadcast emails.' },
+  { id:'sms',        name:'SMS',                 platformKey:'SMS',       color:'#f59e0b', bg:'#fffbeb', status:'connected', broadcastsSupported:true,     description:'Send SMS campaigns and bulk messages instantly.' },
+  { id:'messenger',  name:'Facebook Messenger',  platformKey:'Messenger', color:'#0084ff', bg:'#eff6ff', status:'connected', broadcastsSupported:true,     description:'Engage your audience with Messenger campaigns and broadcasts.' },
+  { id:'instagram',  name:'Instagram',           platformKey:'Instagram', color:'#e1306c', bg:'#fdf2f8', status:'limited',   broadcastsSupported:'limited', description:'Run campaigns and limited broadcasts via Instagram (DM automation).' },
+  { id:'linkedin',   name:'LinkedIn',            platformKey:'LinkedIn',  color:'#0a66c2', bg:'#eff6ff', status:'connected', broadcastsSupported:false,    description:'Run LinkedIn campaigns to engage professionals and leads.' },
+];
 export const audiences = [
   { id:'1', name:'High-Intent Leads Q3', size:4820, source:'Custom', score:92, lastUpdated:'2025-07-30', status:'Active' },
   { id:'2', name:'Website Visitors 30d', size:18400, source:'Pixel', score:74, lastUpdated:'2025-07-31', status:'Active' },

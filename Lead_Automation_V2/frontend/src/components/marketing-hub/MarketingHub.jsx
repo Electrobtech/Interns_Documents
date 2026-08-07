@@ -3,12 +3,13 @@ import './marketing-hub.css';
 import { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard, Megaphone, Radio, Users, Pen, Search as SearchIcon, Zap,
-  BarChart2, Calendar, PieChart, FileBarChart, Layers, FolderOpen,
+  BarChart2, Calendar, PieChart, FileBarChart, Layers, FolderOpen, Share2,
   BookOpen, Settings as SettingsIcon, ChevronLeft, AlignLeft, Sparkles,
   Send, X, ArrowRight, Bot, TrendingUp, Bell, Command, ChevronRight
 } from 'lucide-react';
 import { MHToastProvider, useMHToast } from './ui/MHToast';
 import MHDashboard from './pages/MHDashboard';
+import MHChannels from './pages/MHChannels';
 import MHCampaigns from './pages/MHCampaigns';
 import MHBroadcasts from './pages/MHBroadcasts';
 import MHAudience from './pages/MHAudience';
@@ -26,6 +27,7 @@ import MHSettings from './pages/MHSettings';
 const NAV_GROUPS = [
   { label: 'Core', items: [
     { id:'dashboard',  label:'Dashboard',        icon: LayoutDashboard },
+    { id:'channels',   label:'Channels',           icon: Share2 },
     { id:'campaigns',  label:'Campaigns',         icon: Megaphone },
     { id:'broadcasts', label:'Broadcasts',         icon: Radio },
     { id:'audience',   label:'Audience',           icon: Users },
@@ -52,7 +54,7 @@ const NAV_GROUPS = [
 ];
 
 const PAGE_LABELS = {
-  dashboard:'Dashboard', campaigns:'Campaigns', broadcasts:'Broadcasts',
+  dashboard:'Dashboard', channels:'Channels', campaigns:'Campaigns', broadcasts:'Broadcasts',
   audience:'Audience', content:'Content Studio', templates:'Templates',
   assets:'Assets Library', seo:'SEO', aeo:'AEO', competitor:'Competitor Analysis',
   calendar:'Marketing Calendar', analytics:'Analytics', reports:'Reports',
@@ -78,8 +80,9 @@ function renderPage(page, setPage, setPageKey, pageKey) {
   const nav = (p) => { setPage(p); setPageKey(k => k + 1); };
   switch (page) {
     case 'dashboard':  return <MHDashboard key={pageKey} onNavigate={nav} />;
-    case 'campaigns':  return <MHCampaigns key={pageKey} />;
-    case 'broadcasts': return <MHBroadcasts key={pageKey} />;
+    case 'channels':   return <MHChannels key={pageKey} onNavigate={nav} />;
+    case 'campaigns':  return <MHCampaigns key={pageKey} onNavigate={nav} />;
+    case 'broadcasts': return <MHBroadcasts key={pageKey} onNavigate={nav} />;
     case 'audience':   return <MHAudience key={pageKey} />;
     case 'content':    return <MHContentStudio key={pageKey} />;
     case 'templates':  return (
