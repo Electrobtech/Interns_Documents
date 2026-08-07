@@ -175,6 +175,24 @@ async function upsertFromSeed(doc) {
   return upsert(doc);
 }
 
+/**
+ * Inserts a playbook only if no row with this id exists yet — never touches
+ * an existing row. Used for "whatsapp-default" (see
+ * seeds/whatsapp-default-flow.json): that id is also what the live Builder
+ * autosaves/deploys to (playbookController.js), so it stops being a static
+ * fixture the moment someone edits it in the UI. Re-running `npm run seed`
+ * after that point must be a no-op for it, or every restart would silently
+ * clobber whatever the user actually built and deployed back to this
+ * bundled default. Genuine reset-on-reseed fixtures (project-details-flow,
+ * throttle-example, instagram-keyword-auto-reply) keep using upsertFromSeed
+ * — only the one-time bootstrap default needs this softer insert.
+ */
+async function insertIfMissing(doc) {
+  const existing = await findById(doc.id);
+  if (existing) return existing;
+  return upsert(doc);
+}
+
 module.exports = {
   toPlaybook,
   getNodeMap,
@@ -185,4 +203,5 @@ module.exports = {
   findAllByOrg,
   upsert,
   upsertFromSeed,
+  insertIfMissing,
 };

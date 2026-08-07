@@ -175,6 +175,23 @@ export function useSessionExecutions(sessionId) {
   });
 }
 
+/**
+ * GET /ai-agents/support/coverage-audit — RAG Auditor: ticket categories the
+ * knowledge base couldn't ground (coverage gaps) plus per-source citation
+ * counts and staleness. Pure aggregation over recent support runs + the
+ * knowledge base, no LLM call, so a short poll is cheap. Backs
+ * RAGAuditorPanel.jsx.
+ */
+export function useSupportCoverageAudit() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['ai-agents', 'support', 'coverage-audit'],
+    queryFn: () => call(`${AI}/support/coverage-audit`),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
 /* ─── Knowledge base ─────────────────────────────────────────────────────── */
 
 export function useKnowledgeSources(workspace) {
