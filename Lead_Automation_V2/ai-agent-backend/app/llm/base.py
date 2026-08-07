@@ -36,3 +36,11 @@ class LLMProvider(ABC):
 
     async def health_check(self) -> bool:
         return True
+
+
+class LLMProviderUnavailable(Exception):
+    """Raised when neither the primary nor the fallback LLM provider could
+    complete a request. Distinct from a malformed/unexpected response (which
+    callers already handle per-agent, e.g. wrapping raw text when JSON
+    parsing fails) — this means no content came back at all. Routes should
+    map this to a 503, not let it surface as an unhandled 500."""

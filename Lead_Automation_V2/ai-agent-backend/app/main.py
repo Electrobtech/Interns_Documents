@@ -8,10 +8,12 @@ try:
 except ImportError:
     pass
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1.router import router as api_router
+from app.llm.base import LLMProviderUnavailable
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("app.main")
@@ -37,6 +39,17 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+
+@app.exception_handler(LLMProviderUnavailable)
+async def llm_provider_unavailable_handler(request: Request, exc: LLMProviderUnavailable) -> JSONResponse:
+    logger.error("llm_provider_unavailable path=%s error=%s", request.url.path, exc)
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "AI provider is temporarily unavailable. Please try again shortly.",
+        },
+    )
 
 
 @app.on_event("startup")

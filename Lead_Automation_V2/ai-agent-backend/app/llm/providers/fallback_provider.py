@@ -16,7 +16,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.llm.base import ChatMessage, LLMProvider, LLMResponse
+from app.llm.base import ChatMessage, LLMProvider, LLMProviderUnavailable, LLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +118,34 @@ class FallbackLLMProvider(LLMProvider):
                 status="error",
                 error_message=str(exc)[:256],
             )
-            result = await self._fallback.agenerate(
-                messages, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode
-            )
+            try:
+                result = await self._fallback.agenerate(
+                    messages, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode
+                )
+            except Exception as fallback_exc:
+                fallback_latency = int((time.monotonic() - t0) * 1000) - primary_latency
+                logger.error(
+                    "fallback_llm_also_failed provider=%s, primary=%s already failed too",
+                    self._fallback.name, self._primary.name, exc_info=True,
+                )
+                await self._log(
+                    _session,
+                    provider=self._fallback.name,
+                    model=getattr(self._fallback, "_model", "unknown"),
+                    operation="generate",
+                    agent_type=_agent_type,
+                    organization_id=_organization_id,
+                    fallback_used=True,
+                    latency_ms=max(fallback_latency, 0),
+                    prompt_tokens=None,
+                    completion_tokens=None,
+                    status="error",
+                    error_message=str(fallback_exc)[:256],
+                )
+                raise LLMProviderUnavailable(
+                    f"Both {self._primary.name} and {self._fallback.name} LLM providers "
+                    f"failed — primary: {exc}; fallback: {fallback_exc}"
+                ) from fallback_exc
             await self._log(
                 _session,
                 provider=self._fallback.name,

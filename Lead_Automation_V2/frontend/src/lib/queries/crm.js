@@ -5,7 +5,11 @@ import { useApi } from '@/lib/useApi';
 // Real platform CRM data, reused by the agent dashboards — one source of
 // truth, no mocked metrics.
 
-// GET /leads — { id, contact_id, name, stage, priority, score, created_at }
+// GET /leads — { id, contact_id, name, source, stage, priority, score,
+// deal_value, created_at, updated_at }. `name` and `source` are joined in
+// from the backing contact; `updated_at` is bumped by contact-service on
+// every PUT /leads/:id or PUT /leads/:id/stage (see
+// infra/db/migrations/031_lead_updated_at.sql).
 export function useLeads() {
   const { call } = useApi();
   return useQuery({ queryKey: ['leads', 'list'], queryFn: () => call('/leads') });
