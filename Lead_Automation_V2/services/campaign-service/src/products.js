@@ -71,19 +71,27 @@ router.post('/products', canWrite, async (req, res) => {
   if (!b.name || !String(b.name).trim()) {
     return res.status(400).json({ error: 'name is required.' });
   }
-  const client = await pool.connect();
+  // NOTE: deliberately NOT pool.connect() for this transaction — that
+  // checks out a fresh, unscoped connection that bypasses the single
+  // tenant-scoped connection shared/src/auth.js's `authenticate` already
+  // pinned to this request (see shared/src/db.js's AsyncLocalStorage
+  // comment). Confirmed live: with that pattern, RLS's WITH CHECK rejects
+  // this INSERT with "new row violates row-level security policy" every
+  // time, since the fresh connection never had app.current_org set.
+  // pool.query() is already routed onto the pinned connection, so BEGIN/
+  // COMMIT/ROLLBACK on it just extends the request's existing scope.
   try {
-    await client.query('BEGIN');
+    await pool.query('BEGIN');
     // Only one primary offer per org — clear the old one first so the partial
     // unique index can never reject the insert.
     if (b.is_primary) {
-      await client.query(
+      await pool.query(
         `UPDATE products SET is_primary = false, updated_at = now()
           WHERE organization_id = $1 AND is_primary`,
         [req.user.organizationId]
       );
     }
-    const { rows } = await client.query(
+    const { rows } = await pool.query(
       `INSERT INTO products (
          organization_id, name, category, status, tagline, description,
          price_display, price_amount, currency, billing_period,
@@ -102,26 +110,25 @@ router.post('/products', canWrite, async (req, res) => {
         !!b.is_primary, req.user.userId || null,
       ]
     );
-    await client.query('COMMIT');
+    await pool.query('COMMIT');
     logAudit(req, 'product.create', { id: rows[0].id, name: rows[0].name });
     res.status(201).json(rows[0]);
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    await pool.query('ROLLBACK').catch(() => {});
     console.error('[products] create failed', err.message);
     res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
   }
 });
 
 /** PATCH /products/:id — every field optional */
 router.patch('/products/:id', canWrite, async (req, res) => {
   const b = req.body || {};
-  const client = await pool.connect();
+  // See POST /products above for why this is pool.query('BEGIN') rather
+  // than a pool.connect()'d client — same live-confirmed RLS bug.
   try {
-    await client.query('BEGIN');
+    await pool.query('BEGIN');
     if (b.is_primary) {
-      await client.query(
+      await pool.query(
         `UPDATE products SET is_primary = false, updated_at = now()
           WHERE organization_id = $1 AND is_primary AND id <> $2`,
         [req.user.organizationId, req.params.id]
@@ -130,7 +137,7 @@ router.patch('/products/:id', canWrite, async (req, res) => {
     // COALESCE on scalars so an omitted field keeps its stored value; arrays
     // are replaced only when the caller actually sent the key, since an empty
     // array is a legitimate "clear this" instruction.
-    const { rows } = await client.query(
+    const { rows } = await pool.query(
       `UPDATE products SET
          name            = COALESCE($3, name),
          category        = COALESCE($4, category),
@@ -168,16 +175,14 @@ router.patch('/products/:id', canWrite, async (req, res) => {
         'is_primary' in b ? !!b.is_primary : null,
       ]
     );
-    await client.query('COMMIT');
+    await pool.query('COMMIT');
     if (!rows.length) return res.status(404).json({ error: 'Product not found.' });
     logAudit(req, 'product.update', { id: req.params.id });
     res.json(rows[0]);
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    await pool.query('ROLLBACK').catch(() => {});
     console.error('[products] update failed', err.message);
     res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
   }
 });
 

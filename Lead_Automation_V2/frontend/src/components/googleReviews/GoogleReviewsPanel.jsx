@@ -38,11 +38,13 @@ export default function GoogleReviewsPanel() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (g.status?.connected) {
+    // Mock mode has no real Google account/OAuth token to load accounts
+    // from — the mock location is already selected by the seed data.
+    if (g.status?.connected && !g.status?.mock) {
       g.loadAccounts();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [g.status?.connected]);
+  }, [g.status?.connected, g.status?.mock]);
 
   useEffect(() => {
     if (g.status?.selectedLocationId) {
@@ -132,7 +134,7 @@ export default function GoogleReviewsPanel() {
         onLoadAccounts={g.loadAccounts}
         onLoadLocations={g.loadLocations}
         onSelectLocation={(id) => g.selectLocation(id)}
-        onSync={() => handleSync(filters.locationId)}
+        onSync={g.status?.mock ? undefined : () => handleSync(filters.locationId)}
       />
 
       {g.status?.connected && g.status?.selectedLocationId && (

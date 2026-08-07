@@ -44,7 +44,14 @@ async function main() {
     doc.id = _id;
     doc.clientId = clientIdOverride;
 
-    const saved = await playbookRepository.upsertFromSeed(doc);
+    // whatsapp-default is a one-time bootstrap default, not a resettable
+    // demo fixture — the live Builder reads/writes that same id, so once a
+    // real edit exists it must never be overwritten by re-running this
+    // script. Every other bundled fixture keeps the old reset-on-reseed
+    // behavior.
+    const saved = doc.id === 'whatsapp-default'
+      ? await playbookRepository.insertIfMissing(doc)
+      : await playbookRepository.upsertFromSeed(doc);
     console.log(`Seeded playbook "${saved.name}" (id ${saved.id}, clientId ${saved.clientId})`);
   }
 

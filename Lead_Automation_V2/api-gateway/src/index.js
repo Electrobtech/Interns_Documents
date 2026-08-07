@@ -115,6 +115,13 @@ const routes = [
   // Message Templates (Template Creation module) — owned by campaign-service
   // (src/templates.js + src/templateMedia.js), not yet in this route table.
   { path: '/templates',           target: CAMPAIGN },
+  // Products/Offers (src/products.js) — router existed and is mounted in
+  // campaign-service/src/index.js, but had no gateway route at all, so
+  // every /products call from frontend/src/lib/queries/products.js 404'd
+  // before even reaching the service.
+  { path: '/products',            target: CAMPAIGN },
+  // Static header images/videos/documents templateMedia.js writes under
+  // campaign-service's public/uploads/templates (see src/index.js there).
 // Static header images/videos/documents templateMedia.js writes under
   // campaign service's public/uploads/templates (see src/index.js there).
   // The upload response hands back a GATEWAY_PUBLIC_URL-rooted URL for the

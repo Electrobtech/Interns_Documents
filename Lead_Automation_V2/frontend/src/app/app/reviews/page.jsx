@@ -41,7 +41,6 @@ export default function ReviewsPage() {
           </Suspense>
         ),
       },
-      { label: 'Reviews',         render: () => <CrudPage {...reviews} header={false} /> },
       { label: 'Social Comments', icon: MessageSquareReply, render: () => <CrudPage {...social} header={false} /> },
     ]} />
   );

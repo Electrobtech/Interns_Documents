@@ -5,22 +5,14 @@ import { useApi } from '@/lib/useApi';
 // Real platform CRM data, reused by the agent dashboards — one source of
 // truth, no mocked metrics.
 
-// GET /leads — { id, contact_id, name, source, phone, stage, priority,
-// score, deal_value, course, temperature, contact_status, category,
-// created_at, updated_at }. `name`, `source` and `phone` are joined in from
-// the backing contact; `updated_at` is bumped by contact-service on every
-// PUT /leads/:id or PUT /leads/:id/stage (see
+// GET /leads — { id, contact_id, name, source, stage, priority, score,
+// deal_value, created_at, updated_at }. `name` and `source` are joined in
+// from the backing contact; `updated_at` is bumped by contact-service on
+// every PUT /leads/:id or PUT /leads/:id/stage (see
 // infra/db/migrations/031_lead_updated_at.sql).
-//
-// `category` is one of 'hot'|'warm'|'cold' (filters on leads.temperature)
-// or 'active'|'onboarded'|'inactive' (filters on leads.category) — powers
-// the Leads/CRM page's filter tabs server-side. Omit for the unfiltered list.
-export function useLeads(category) {
+export function useLeads() {
   const { call } = useApi();
-  return useQuery({
-    queryKey: ['leads', 'list', category || 'all'],
-    queryFn: () => call(category ? `/leads?category=${encodeURIComponent(category)}` : '/leads'),
-  });
+  return useQuery({ queryKey: ['leads', 'list'], queryFn: () => call('/leads') });
 }
 
 // GET /leads/fields — real numeric leads.* columns a dashboard could
@@ -107,8 +99,18 @@ export function useCampaignDecision() {
   });
 }
 
-// POST /leads — { name, company?, email?, mobile? (or phone?), score?,
-// priority?, stage?, source?, course?, temperature?, contact_status?, category? }
+// GET /campaigns/:id/recipients — per-recipient send status, powers the
+// Campaigns page's DetailsModal (frontend/src/app/app/campaigns/page.jsx).
+export function useCampaignRecipients(id) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['campaigns', id, 'recipients'],
+    queryFn: () => call(`/campaigns/${id}/recipients`),
+    enabled: !!id,
+  });
+}
+
+// POST /leads — { name, company?, email?, phone?, score?, priority?, stage?, source? }
 export function useCreateLead() {
   const { call } = useApi();
   const qc = useQueryClient();
