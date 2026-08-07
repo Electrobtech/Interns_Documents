@@ -6,9 +6,19 @@ import { useApi } from '@/lib/useApi';
 // truth, no mocked metrics.
 
 // GET /leads — { id, contact_id, name, stage, priority, score, created_at }
-export function useLeads() {
+// GET /leads?created_after=ISO&created_before=ISO — day/week-scoped, used
+// by the Support Agent's Daily Report tab. Omitting `range` keeps the
+// original unfiltered call (and its query key) exactly as before.
+export function useLeads(range) {
   const { call } = useApi();
-  return useQuery({ queryKey: ['leads', 'list'], queryFn: () => call('/leads') });
+  const qs = new URLSearchParams();
+  if (range?.created_after) qs.set('created_after', range.created_after);
+  if (range?.created_before) qs.set('created_before', range.created_before);
+  const query = qs.toString();
+  return useQuery({
+    queryKey: ['leads', 'list', range?.created_after || null, range?.created_before || null],
+    queryFn: () => call(`/leads${query ? `?${query}` : ''}`),
+  });
 }
 
 // GET /leads/fields — real numeric leads.* columns a dashboard could

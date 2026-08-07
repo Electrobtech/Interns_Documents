@@ -1,20 +1,3 @@
-export const campaigns = [
-  { id:'1', name:'AI Bootcamp Lead Gen Q3', platform:'Facebook', objective:'Lead Generation', status:'Active', budget:5000, spend:3240, ctr:4.2, cpm:8.4, cpc:2.1, reach:142000, impressions:385000, leads:1540, conversions:312, revenue:93600, roas:28.9, createdBy:'Priya Sharma', startDate:'2025-06-01', endDate:'2025-08-31', aiScore:94 },
-  { id:'2', name:'SaaS Growth Campaign', platform:'LinkedIn', objective:'Website Traffic', status:'Active', budget:8000, spend:6120, ctr:3.1, cpm:12.6, cpc:4.1, reach:89000, impressions:486000, leads:890, conversions:198, revenue:59400, roas:9.7, createdBy:'Rahul Verma', startDate:'2025-05-15', endDate:'2025-09-30', aiScore:81 },
-  { id:'3', name:'Webinar Registration Drive', platform:'Google Ads', objective:'Event Registration', status:'Scheduled', budget:3000, spend:0, ctr:0, cpm:0, cpc:0, reach:0, impressions:0, leads:0, conversions:0, revenue:0, roas:0, createdBy:'Ananya Iyer', startDate:'2025-08-10', endDate:'2025-08-20', aiScore:72 },
-  { id:'4', name:'Brand Awareness Wave', platform:'Instagram', objective:'Brand Awareness', status:'Paused', budget:4500, spend:2100, ctr:1.8, cpm:6.2, cpc:3.4, reach:320000, impressions:338000, leads:0, conversions:45, revenue:0, roas:0, createdBy:'Vikram Singh', startDate:'2025-04-20', endDate:'2025-06-30', aiScore:56 },
-  { id:'5', name:'WhatsApp Retargeting', platform:'WhatsApp', objective:'Remarketing', status:'Active', budget:1200, spend:940, ctr:6.7, cpm:4.1, cpc:0.6, reach:22000, impressions:229000, leads:1100, conversions:540, revenue:162000, roas:172.3, createdBy:'Priya Sharma', startDate:'2025-07-01', endDate:'2025-08-31', aiScore:97 },
-  { id:'6', name:'Enterprise Sales Push', platform:'Email', objective:'Sales', status:'Draft', budget:500, spend:0, ctr:0, cpm:0, cpc:0, reach:0, impressions:0, leads:0, conversions:0, revenue:0, roas:0, createdBy:'Ananya Iyer', startDate:'2025-07-25', endDate:'2025-09-01', aiScore:68 },
-  { id:'7', name:'Course Enrollment - Python', platform:'Facebook', objective:'Course Registration', status:'Active', budget:2500, spend:2100, ctr:5.4, cpm:7.8, cpc:1.4, reach:68000, impressions:269000, leads:1870, conversions:420, revenue:126000, roas:60.0, createdBy:'Rahul Verma', startDate:'2025-06-15', endDate:'2025-08-15', aiScore:91 },
-  { id:'8', name:'Google Search - B2B', platform:'Google Ads', objective:'Lead Generation', status:'Active', budget:6000, spend:5400, ctr:8.2, cpm:22.1, cpc:2.7, reach:45000, impressions:244000, leads:2000, conversions:650, revenue:195000, roas:36.1, createdBy:'Vikram Singh', startDate:'2025-05-01', endDate:'2025-09-30', aiScore:88 },
-];
-export const broadcasts = [
-  { id:'1', name:'Welcome Series - New Leads', channel:'WhatsApp', audience:'New Leads (2.4k)', status:'Sent', sent:2400, delivered:2280, opened:1920, clicked:864, responses:312, conversion:13.0, aiScore:91 },
-  { id:'2', name:'Webinar Reminder - Tomorrow', channel:'Email', audience:'Registered Users (1.8k)', status:'Scheduled', sent:0, delivered:0, opened:0, clicked:0, responses:0, conversion:0, aiScore:78 },
-  { id:'3', name:'Flash Sale - 48hrs', channel:'SMS', audience:'All Subscribers (12k)', status:'Sent', sent:12000, delivered:11640, opened:8400, clicked:2940, responses:0, conversion:24.5, aiScore:85 },
-  { id:'4', name:'Monthly Newsletter - Aug', channel:'Email', audience:'Newsletter List (5.6k)', status:'Draft', sent:0, delivered:0, opened:0, clicked:0, responses:0, conversion:0, aiScore:65 },
-  { id:'5', name:'Re-engagement - Cold Leads', channel:'WhatsApp', audience:'Inactive 60d (3.1k)', status:'Active', sent:3100, delivered:2945, opened:1770, clicked:531, responses:248, conversion:8.0, aiScore:73 },
-];
 export const audiences = [
   { id:'1', name:'High-Intent Leads Q3', size:4820, source:'Custom', score:92, lastUpdated:'2025-07-30', status:'Active' },
   { id:'2', name:'Website Visitors 30d', size:18400, source:'Pixel', score:74, lastUpdated:'2025-07-31', status:'Active' },
@@ -74,18 +57,6 @@ export const competitors = [
   { id:'3', name:'Salesforce',    domain:'salesforce.com',      da:95, traffic:'42.6M', backlinks:'28.4M', opportunity:54, threat:91, engagement:3.1 },
   { id:'4', name:'ActiveCampaign',domain:'activecampaign.com',  da:79, traffic:'4.8M',  backlinks:'2.2M',  opportunity:88, threat:62, engagement:5.1 },
 ];
-export const calendarEvents = [
-  { id:'1',  title:'AI Bootcamp Campaign Launch',  type:'campaign',  date:'2025-08-05', color:'#6366f1' },
-  { id:'2',  title:'Webinar - AI in Marketing',    type:'webinar',   date:'2025-08-07', color:'#f59e0b' },
-  { id:'3',  title:'Flash Sale Broadcast',         type:'broadcast', date:'2025-08-10', color:'#10b981' },
-  { id:'4',  title:'Monthly Report Review',        type:'meeting',   date:'2025-08-12', color:'#3b82f6' },
-  { id:'5',  title:'LinkedIn Campaign Pause',      type:'campaign',  date:'2025-08-15', color:'#6366f1' },
-  { id:'6',  title:'Independence Day Campaign',    type:'campaign',  date:'2025-08-15', color:'#ef4444' },
-  { id:'7',  title:'Q3 Strategy Meeting',          type:'meeting',   date:'2025-08-18', color:'#3b82f6' },
-  { id:'8',  title:'SEO Audit Deadline',           type:'reminder',  date:'2025-08-20', color:'#8b5cf6' },
-  { id:'9',  title:'Back to School Campaign',      type:'campaign',  date:'2025-08-22', color:'#6366f1' },
-  { id:'10', title:'Newsletter - August',          type:'broadcast', date:'2025-08-28', color:'#10b981' },
-];
 export const seoKeywords = [
   { keyword:'AI marketing automation',    volume:14400, difficulty:68, position:8,  change:3  },
   { keyword:'lead generation software',   volume:22000, difficulty:74, position:14, change:-2 },
@@ -110,13 +81,6 @@ export const knowledgeDocs = [
   { id:'4', title:'Buyer Persona - SMB India',   category:'Marketing Docs',   tags:['persona','SMB','India'],       updatedAt:'2025-05-14', size:'640 KB' },
   { id:'5', title:'Email Sequence Templates',    category:'Templates',        tags:['email','sequences','nurture'], updatedAt:'2025-07-22', size:'320 KB' },
   { id:'6', title:'Competitor Analysis Archive', category:'Reports',          tags:['competitors','SEO','ads'],     updatedAt:'2025-07-18', size:'2.4 MB' },
-];
-export const teamMembers = [
-  { id:'1', name:'Priya Sharma',  email:'priya@acme.io',  role:'Marketing Manager',   status:'Active',  avatar:'PS' },
-  { id:'2', name:'Rahul Verma',   email:'rahul@acme.io',  role:'Campaign Specialist', status:'Active',  avatar:'RV' },
-  { id:'3', name:'Ananya Iyer',   email:'ananya@acme.io', role:'Content Strategist',  status:'Active',  avatar:'AI' },
-  { id:'4', name:'Vikram Singh',  email:'vikram@acme.io', role:'SEO Analyst',         status:'Active',  avatar:'VS' },
-  { id:'5', name:'Meera Nair',    email:'meera@acme.io',  role:'Designer',            status:'Invited', avatar:'MN' },
 ];
 export const revenueData = [
   { month:'Jan', revenue:258000, target:300000 },

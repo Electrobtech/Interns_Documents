@@ -3,6 +3,7 @@ const cors = require('cors');
 const { pool, authenticate, requirePermission, logAudit } = require('@lead/shared');
 const importRoutes = require('./importRoutes');
 const followUpRoutes = require('./followUpRoutes');
+const sheetsRoutes = require('./sheetsRoutes');
 
 const app = express();
 app.use(cors());
@@ -25,6 +26,10 @@ app.use(importRoutes);
 // follow_ups table — see followUpRepository.js — so nothing here needs to
 // call out to automation-service).
 app.use(followUpRoutes);
+
+// Google Sheets import preview (Support Agent "Import" tab) — public-CSV-
+// export only, display-only, no CRM writes. See sheetsRoutes.js.
+app.use(sheetsRoutes);
 
 app.get('/contacts', async (req, res) => {
   // ?tag=vip lets the Bulk Campaign tab's "Contact Segment" dropdown
@@ -115,11 +120,49 @@ app.post('/contacts/bulk-tag', canWrite, async (req, res) => {
 });
 
 // Leads
+//
+// ?created_after / ?created_before (ISO datetimes) — added for the Support
+// Agent's Daily Report tab, which scopes "all leads" to a single day/week.
+// Optional and additive: existing callers with no date params get exactly
+// the same rows/order as before.
+//
+// Also left-joins in `source` (from contacts — leads itself has no source
+// column) and a best-effort `assigned_to`/`last_activity` derived from the
+// most recent conversation for that contact, since the leads table itself
+// has neither column. Per this codebase's convention (see
+// frontend/src/lib/queries/aiAgents.js's fmt() helper), a lead whose
+// contact has no conversation yet gets NULL for these — the frontend
+// renders that as "—" rather than fabricating a value.
 app.get('/leads', async (req, res) => {
+  const { created_after, created_before } = req.query;
+  const where = ['l.organization_id = $1'];
+  const params = [req.user.organizationId];
+
+  if (created_after) {
+    params.push(created_after);
+    where.push(`l.created_at >= $${params.length}`);
+  }
+  if (created_before) {
+    params.push(created_before);
+    where.push(`l.created_at <= $${params.length}`);
+  }
+
   const { rows } = await pool.query(
-    `SELECT l.*, c.name FROM leads l JOIN contacts c ON c.id=l.contact_id
-      WHERE l.organization_id=$1 ORDER BY l.created_at DESC`,
-    [req.user.organizationId]
+    `SELECT l.*, c.name, c.source,
+            conv.assigned_to_name, conv.last_activity
+       FROM leads l
+       JOIN contacts c ON c.id = l.contact_id
+       LEFT JOIN LATERAL (
+         SELECT u.name AS assigned_to_name, co.last_message_at AS last_activity
+           FROM conversations co
+           LEFT JOIN users u ON u.id = co.assigned_to
+          WHERE co.contact_id = l.contact_id
+          ORDER BY co.last_message_at DESC
+          LIMIT 1
+       ) conv ON true
+      WHERE ${where.join(' AND ')}
+      ORDER BY l.created_at DESC`,
+    params
   );
   res.json(rows);
 });

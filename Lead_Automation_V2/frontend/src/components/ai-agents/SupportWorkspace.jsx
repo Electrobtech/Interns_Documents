@@ -4,6 +4,7 @@ import {
   Headphones, Sparkles, AlertTriangle, MessageSquare, Inbox,
   Database, ShieldAlert, ListChecks, HelpCircle, BookOpen,
   Clock, User, Hash, ChevronRight, Zap, UserCheck, Send,
+  LayoutGrid, Ticket, CalendarDays, FileBarChart2, Sheet,
 } from 'lucide-react';
 import {
   useRunSupportAgent, useSupportRuns, useAgentAnalytics, useKnowledgeSources,
@@ -13,6 +14,43 @@ import KpiCard from './KpiCard';
 import WorkspaceHeader from './shared/WorkspaceHeader';
 import RAGAuditorPanel from './support/RAGAuditorPanel';
 import KnowledgeUploadPanel from './KnowledgeUploadPanel';
+import NotificationBell from './support/NotificationBell';
+import OverviewSummary from './support/OverviewSummary';
+import CalendarTab from './support/CalendarTab';
+import DailyReportTab from './support/DailyReportTab';
+import ImportTab from './support/ImportTab';
+
+// Tab set shared across the 5-part series that added Overview / Calendar /
+// Reports / Import to this workspace (Tickets + Knowledge already existed
+// as the workspace's original content, just not under an explicit tab).
+const TABS = [
+  { key: 'overview',   label: 'Overview',   icon: LayoutGrid },
+  { key: 'tickets',    label: 'Tickets',    icon: Ticket },
+  { key: 'calendar',   label: 'Calendar',   icon: CalendarDays },
+  { key: 'reports',    label: 'Reports',    icon: FileBarChart2 },
+  { key: 'import',     label: 'Import',     icon: Sheet },
+  { key: 'knowledge',  label: 'Knowledge',  icon: BookOpen },
+];
+
+function TabNav({ active, onChange }) {
+  return (
+    <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-100 -mx-1 px-1">
+      {TABS.map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          onClick={() => onChange(key)}
+          className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold whitespace-nowrap rounded-t-lg border-b-2 -mb-px transition-colors
+            ${active === key
+              ? 'border-violet-500 text-violet-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-200'}`}
+        >
+          <Icon size={13} />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /* ── helpers ─────────────────────────────────────────────── */
 function timeAgo(iso) {
@@ -76,6 +114,7 @@ export default function SupportWorkspace() {
   const [customerName, setCName]       = useState('');
   const [selectedTicket, setSelected]  = useState(null); // conversation row, if the user clicked one
   const [sendState, setSendState]      = useState('idle'); // idle | sending | sent | not_found | error
+  const [tab, setTab]                  = useState('overview');
 
   const conversations = Array.isArray(convoData) ? convoData  : [];
   const runs          = Array.isArray(runsData)  ? runsData   : [];
@@ -109,6 +148,17 @@ export default function SupportWorkspace() {
     setSendState('idle');
   };
 
+  // Clicking a notification (follow-up due) should surface the relevant
+  // ticket. Notifications carry a contact_id, not a conversation id
+  // directly, so this best-effort matches by contact name against the
+  // already-loaded ticket queue and jumps to the Tickets tab either way.
+  const openNotificationTarget = (n) => {
+    const match = conversations.find((c) => c.contact_name && c.contact_name === n.contact_name);
+    if (match) selectTicket(match);
+    else setCName(n.contact_name || '');
+    setTab('tickets');
+  };
+
   const sendViaInbox = async () => {
     if (!out?.suggested_reply) return;
     setSendState('sending');
@@ -129,58 +179,103 @@ export default function SupportWorkspace() {
   return (
     <div className="space-y-6 animate-fade-in">
 
-      <WorkspaceHeader
-        agent="support"
-        icon={Headphones}
-        title="Support Agent"
-        subtitle="Resolve issues, retain customers, and escalate intelligently"
-      />
-
-      {/* ── KPI row ─────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          { icon: Inbox,      label: 'Open Tickets',      tone: 'brand',   value: openCount,                                loading: convoData === undefined },
-          { icon: ShieldAlert,label: 'Escalations (7d)',  tone: 'amber',   value: analytics?.totals?.supportEscalations,    loading: !analytics },
-          { icon: Sparkles,   label: 'AI Replies Drafted',tone: 'emerald', value: runs.length,                              loading: runsData === undefined },
-          { icon: Database,   label: 'Knowledge Chunks',  tone: 'violet',  value: chunkCount,                               loading: chunkCount === undefined },
-        ].map(({ icon, label, tone, value, loading }, i) => (
-          <div key={label} className="animate-slide-up" style={{ animationDelay: `${i * 60}ms` }}>
-            <KpiCard icon={icon} label={label} tone={tone} value={value} loading={loading} />
-          </div>
-        ))}
+      {/* Notification bell lives in the header area, visible on every tab
+          (rendered here, outside the tab switch below) — see NotificationBell. */}
+      <div className="flex items-start gap-3">
+        <div className="flex-1">
+          <WorkspaceHeader
+            agent="support"
+            icon={Headphones}
+            title="Support Agent"
+            subtitle="Resolve issues, retain customers, and escalate intelligently"
+          />
+        </div>
+        <div className="pt-1">
+          <NotificationBell onSelect={openNotificationTarget} />
+        </div>
       </div>
 
-      {/* Knowledge RAG Auditor — coverage gaps, citation counts, staleness */}
-      <RAGAuditorPanel />
+      <TabNav active={tab} onChange={setTab} />
 
-      {/* ── Escalation alerts ───────────────────────────── */}
-      {escalations.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-5 animate-slide-up">
-          <div className="flex items-center gap-2.5 mb-3">
-            <div className="p-2 rounded-xl bg-red-100 text-red-600">
-              <ShieldAlert size={15} />
-            </div>
-            <div>
-              <h4 className="font-bold text-red-800 text-sm">Escalation Alerts</h4>
-              <p className="text-[11px] text-red-400">{escalations.length} unreviewed escalation{escalations.length > 1 ? 's' : ''}</p>
-            </div>
-          </div>
-          <div className="space-y-2">
-            {escalations.slice(0, 4).map((r) => (
-              <div key={r.id} className="flex items-center justify-between gap-3 bg-white rounded-xl px-4 py-2.5 border border-red-100">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0 animate-pulse" />
-                  <span className="text-xs font-medium text-red-700 truncate">{r.brief}</span>
-                </div>
-                <span className="text-[10px] text-red-400 shrink-0">{timeAgo(r.created_at)}</span>
+      {/* ══════════════════════════════════════════════════
+          OVERVIEW TAB — KPI strip, overall/today/month summary
+          cards (with trend sparkline), and escalation alerts.
+         ══════════════════════════════════════════════════ */}
+      {tab === 'overview' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[
+              { icon: Inbox,      label: 'Open Tickets',      tone: 'brand',   value: openCount,                                loading: convoData === undefined },
+              { icon: ShieldAlert,label: 'Escalations (7d)',  tone: 'amber',   value: analytics?.totals?.supportEscalations,    loading: !analytics },
+              { icon: Sparkles,   label: 'AI Replies Drafted',tone: 'emerald', value: runs.length,                              loading: runsData === undefined },
+              { icon: Database,   label: 'Knowledge Chunks',  tone: 'violet',  value: chunkCount,                               loading: chunkCount === undefined },
+            ].map(({ icon, label, tone, value, loading }, i) => (
+              <div key={label} className="animate-slide-up" style={{ animationDelay: `${i * 60}ms` }}>
+                <KpiCard icon={icon} label={label} tone={tone} value={value} loading={loading} />
               </div>
             ))}
           </div>
+
+          <OverviewSummary />
+
+          {/* ── Escalation alerts ───────────────────────────── */}
+          {escalations.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-5 animate-slide-up">
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="p-2 rounded-xl bg-red-100 text-red-600">
+                  <ShieldAlert size={15} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-red-800 text-sm">Escalation Alerts</h4>
+                  <p className="text-[11px] text-red-400">{escalations.length} unreviewed escalation{escalations.length > 1 ? 's' : ''}</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {escalations.slice(0, 4).map((r) => (
+                  <div key={r.id} className="flex items-center justify-between gap-3 bg-white rounded-xl px-4 py-2.5 border border-red-100">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0 animate-pulse" />
+                      <span className="text-xs font-medium text-red-700 truncate">{r.brief}</span>
+                    </div>
+                    <span className="text-[10px] text-red-400 shrink-0">{timeAgo(r.created_at)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* ── Main grid ───────────────────────────────────── */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+      {/* ══════════════════════════════════════════════════
+          CALENDAR TAB
+         ══════════════════════════════════════════════════ */}
+      {tab === 'calendar' && <CalendarTab />}
+
+      {/* ══════════════════════════════════════════════════
+          REPORTS TAB (Daily Report — all leads)
+         ══════════════════════════════════════════════════ */}
+      {tab === 'reports' && <DailyReportTab />}
+
+      {/* ══════════════════════════════════════════════════
+          IMPORT TAB (Google Sheets)
+         ══════════════════════════════════════════════════ */}
+      {tab === 'import' && <ImportTab />}
+
+      {/* ══════════════════════════════════════════════════
+          KNOWLEDGE TAB — RAG coverage auditor + upload panel
+         ══════════════════════════════════════════════════ */}
+      {tab === 'knowledge' && (
+        <div className="space-y-6 animate-fade-in">
+          <RAGAuditorPanel />
+          <KnowledgeUploadPanel agentType="support" />
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════
+          TICKETS TAB — ticket queue + AI Support Assistant
+         ══════════════════════════════════════════════════ */}
+      {tab === 'tickets' && (
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start animate-fade-in">
 
         {/* LEFT COLUMN — ticket queue + AI assistant ──── */}
         <div className="xl:col-span-2 space-y-6">
@@ -525,10 +620,9 @@ export default function SupportWorkspace() {
               </div>
             )}
           </div>
-
-          <KnowledgeUploadPanel agentType="support" />
         </div>
       </div>
+      )}
     </div>
   );
 }

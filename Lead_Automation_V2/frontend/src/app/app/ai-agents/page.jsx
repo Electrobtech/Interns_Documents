@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import AIDashboard from './components/AIDashboard';
 import MarketingHub from './components/marketing/MarketingHub';
 import SalesWorkspace from './components/SalesWorkspace';
-import SupportWorkspace from './components/SupportWorkspace';
+import SupportWorkspace from '@/components/ai-agents/SupportWorkspace';
 
 export default function AIAgentsPage() {
   const searchParams = useSearchParams();

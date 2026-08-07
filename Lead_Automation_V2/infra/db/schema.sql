@@ -588,15 +588,31 @@ CREATE TABLE IF NOT EXISTS analytics_events (
 );
 
 -- ---------- Notifications ----------
+-- type: 'generic' | 'ui_click' | 'followup_due'. contact_id/follow_up_id
+-- are populated for 'followup_due' rows (see notification-service's poller,
+-- which turns a follow-up's due_at coming due into one of these) so the
+-- bell dropdown's click-through has something to navigate to.
 CREATE TABLE IF NOT EXISTS notifications (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID REFERENCES users(id),
+  type            TEXT NOT NULL DEFAULT 'generic',
   title           TEXT,
   body            TEXT,
+  contact_id      UUID REFERENCES contacts(id) ON DELETE CASCADE,
+  follow_up_id    UUID REFERENCES follow_ups(id) ON DELETE CASCADE,
   read            BOOLEAN DEFAULT false,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Stops the follow-up poller from inserting a duplicate notification for
+-- the same follow-up on every ~60s poll cycle.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_notifications_org_followup
+  ON notifications (organization_id, follow_up_id)
+  WHERE follow_up_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_notifications_org_created
+  ON notifications (organization_id, created_at DESC);
 
 -- ---------- API / Webhooks / Audit ----------
 CREATE TABLE IF NOT EXISTS api_keys (
@@ -1335,3 +1351,185 @@ DROP TRIGGER IF EXISTS trg_create_wallet_for_new_org ON organizations;
 CREATE TRIGGER trg_create_wallet_for_new_org
   AFTER INSERT ON organizations
   FOR EACH ROW EXECUTE FUNCTION create_wallet_for_new_org();
+
+-- ---------- Marketing Hub Assets Library ----------
+-- Owned by marketing-hub-service. File blobs on local disk under
+-- public/uploads/marketing-assets; this table holds metadata + tenant scope.
+CREATE TABLE IF NOT EXISTS marketing_assets (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  name              TEXT NOT NULL,
+  type              TEXT NOT NULL CHECK (type IN (
+                      'Logos', 'Images', 'Videos', 'PDFs', 'AI Generated Images'
+                    )),
+  size_bytes        BIGINT NOT NULL DEFAULT 0,
+  storage_url       TEXT NOT NULL,
+  mime_type         TEXT,
+
+  uploaded_by       UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_marketing_assets_org
+  ON marketing_assets (organization_id);
+CREATE INDEX IF NOT EXISTS ix_marketing_assets_org_type
+  ON marketing_assets (organization_id, type);
+CREATE INDEX IF NOT EXISTS ix_marketing_assets_org_created
+  ON marketing_assets (organization_id, created_at DESC);
+
+-- ---------- Marketing Hub Audiences ----------
+-- Owned by marketing-hub-service. Contact-service only has tag-based
+-- segments (GET /contacts/segments = DISTINCT tags + counts). That is too
+-- thin for the Audience Manager UI (source, score, status, filter rules,
+-- growth chart), so we keep a dedicated marketing_audiences table here
+-- rather than overloading contacts.tags.
+CREATE TABLE IF NOT EXISTS marketing_audiences (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name               TEXT NOT NULL,
+  source             TEXT NOT NULL DEFAULT 'Custom'
+                       CHECK (source IN ('Custom', 'Pixel', 'Lookalike', 'Import', 'CRM')),
+  size               BIGINT NOT NULL DEFAULT 0,
+  score              INTEGER,
+  status             TEXT NOT NULL DEFAULT 'Active'
+                       CHECK (status IN ('Active', 'Archived')),
+  filter_definition  JSONB NOT NULL DEFAULT '{}',
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_marketing_audiences_org
+  ON marketing_audiences (organization_id);
+CREATE INDEX IF NOT EXISTS ix_marketing_audiences_org_status
+  ON marketing_audiences (organization_id, status);
+CREATE INDEX IF NOT EXISTS ix_marketing_audiences_org_created
+  ON marketing_audiences (organization_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS marketing_audience_snapshots (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  audience_id   UUID NOT NULL REFERENCES marketing_audiences(id) ON DELETE CASCADE,
+  size          BIGINT NOT NULL DEFAULT 0,
+  captured_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_marketing_audience_snapshots_audience_captured
+  ON marketing_audience_snapshots (audience_id, captured_at DESC);
+CREATE INDEX IF NOT EXISTS ix_marketing_audience_snapshots_captured
+  ON marketing_audience_snapshots (captured_at);
+
+-- ---------- Marketing Hub Campaigns (ad-platform tracking) ----------
+-- DECISION: metrics are manually entered CRUD — no Meta/Google Ads OAuth
+-- or webhook sync. Kept separate from campaign-service's `campaigns` table
+-- (outbound WhatsApp/SMS/email broadcasts). See migrations/034_marketing_campaigns.sql.
+CREATE TABLE IF NOT EXISTS marketing_campaigns (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  name              TEXT NOT NULL,
+  platform          TEXT NOT NULL
+                      CHECK (platform IN (
+                        'Facebook', 'Google Ads', 'LinkedIn',
+                        'Instagram', 'WhatsApp', 'Email'
+                      )),
+  objective         TEXT,
+  status            TEXT NOT NULL DEFAULT 'Draft'
+                      CHECK (status IN ('Active', 'Scheduled', 'Paused', 'Draft')),
+
+  budget            NUMERIC NOT NULL DEFAULT 0,
+  spend             NUMERIC NOT NULL DEFAULT 0,
+  ctr               NUMERIC NOT NULL DEFAULT 0,
+  cpm               NUMERIC NOT NULL DEFAULT 0,
+  cpc               NUMERIC NOT NULL DEFAULT 0,
+  reach             BIGINT  NOT NULL DEFAULT 0,
+  impressions       BIGINT  NOT NULL DEFAULT 0,
+  leads             INTEGER NOT NULL DEFAULT 0,
+  conversions       INTEGER NOT NULL DEFAULT 0,
+  revenue           NUMERIC NOT NULL DEFAULT 0,
+  roas              NUMERIC NOT NULL DEFAULT 0,
+
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  start_date        DATE,
+  end_date          DATE,
+  ai_score          INTEGER CHECK (ai_score IS NULL OR (ai_score >= 0 AND ai_score <= 100)),
+
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org
+  ON marketing_campaigns (organization_id);
+CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org_status
+  ON marketing_campaigns (organization_id, status);
+CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org_platform
+  ON marketing_campaigns (organization_id, platform);
+CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org_created
+  ON marketing_campaigns (organization_id, created_at DESC);
+
+
+-- ---------- Marketing Hub Broadcasts (one-to-many sends) ----------
+-- DECISION: own table in marketing-hub-service; /send uses same simulation
+-- convention as campaign-service bulkCampaignWorker (no real carrier wired).
+-- See migrations/035_marketing_broadcasts.sql.
+CREATE TABLE IF NOT EXISTS marketing_broadcasts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  name              TEXT NOT NULL,
+  channel           TEXT NOT NULL
+                      CHECK (channel IN ('WhatsApp', 'Email', 'SMS')),
+  audience_id       UUID REFERENCES marketing_audiences(id) ON DELETE SET NULL,
+
+  status            TEXT NOT NULL DEFAULT 'Draft'
+                      CHECK (status IN ('Draft', 'Scheduled', 'Active', 'Sent')),
+
+  sent              INTEGER NOT NULL DEFAULT 0,
+  delivered         INTEGER NOT NULL DEFAULT 0,
+  opened            INTEGER NOT NULL DEFAULT 0,
+  clicked           INTEGER NOT NULL DEFAULT 0,
+  responses         INTEGER NOT NULL DEFAULT 0,
+  conversion        NUMERIC NOT NULL DEFAULT 0,
+  ai_score          INTEGER CHECK (ai_score IS NULL OR (ai_score >= 0 AND ai_score <= 100)),
+
+  message_body      TEXT,
+
+  scheduled_at      TIMESTAMPTZ,
+  sent_at           TIMESTAMPTZ,
+
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_marketing_broadcasts_org
+  ON marketing_broadcasts (organization_id);
+CREATE INDEX IF NOT EXISTS ix_marketing_broadcasts_org_status
+  ON marketing_broadcasts (organization_id, status);
+CREATE INDEX IF NOT EXISTS ix_marketing_broadcasts_org_channel
+  ON marketing_broadcasts (organization_id, channel);
+CREATE INDEX IF NOT EXISTS ix_marketing_broadcasts_org_created
+  ON marketing_broadcasts (organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_marketing_broadcasts_audience
+  ON marketing_broadcasts (audience_id);
+
+-- ---------- Marketing Hub Calendar (standalone meeting/reminder events) ----------
+-- Campaign/broadcast events are derived at read time from marketing_campaigns
+-- and marketing_broadcasts — not stored here. See migrations/036_marketing_calendar_events.sql.
+CREATE TABLE IF NOT EXISTS marketing_calendar_events (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  title             TEXT NOT NULL,
+  type              TEXT NOT NULL
+                      CHECK (type IN ('meeting', 'reminder')),
+  date              DATE NOT NULL,
+  color             TEXT NOT NULL DEFAULT '#3b82f6',
+
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_marketing_calendar_events_org
+  ON marketing_calendar_events (organization_id);
+CREATE INDEX IF NOT EXISTS ix_marketing_calendar_events_org_date
+  ON marketing_calendar_events (organization_id, date);

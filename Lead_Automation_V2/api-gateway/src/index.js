@@ -26,6 +26,7 @@ const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4
 const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4013';
 const CALENDAR    = process.env.CALENDAR_SERVICE_URL    || 'http://localhost:4014';
 const BILLING      = process.env.BILLING_SERVICE_URL     || 'http://localhost:4015';
+const MARKETING_HUB = process.env.MARKETING_HUB_SERVICE_URL || 'http://localhost:4016';
 
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
 
@@ -111,6 +112,7 @@ const routes = [
   { path: '/contacts',            target: CONTACT },
   { path: '/leads',               target: CONTACT },
   { path: '/follow-ups',          target: CONTACT }, // Follow-ups feature: services/contact-service/src/followUpRoutes.js
+  { path: '/sheets',              target: CONTACT }, // Google Sheets import preview: services/contact-service/src/sheetsRoutes.js
   { path: '/campaigns',           target: CAMPAIGN },
   // Message Templates (Template Creation module) — owned by campaign-service
   // (src/templates.js + src/templateMedia.js), not yet in this route table.
@@ -121,7 +123,12 @@ const routes = [
   // Live Preview's <img> tag to load directly - this route is what makes
   // that URL actually resolve, since the browser only ever talks to this
   // gateway, never to campaign-service's own port.
+  // marketing-hub-service owns /uploads/marketing-assets — more specific
+  // path MUST precede the generic /uploads -> CAMPAIGN entry or it is swallowed.
+  { path: '/uploads/marketing-assets', target: MARKETING_HUB },
   { path: '/uploads', target: CAMPAIGN },
+  // Marketing Hub Assets Library (list/upload/delete) — marketing-hub-service
+  { path: '/marketing-hub', target: MARKETING_HUB },
   { path: '/ai-agents/status', target: AI_OVERVIEW },
   { path: '/ai-agents/analytics', target: AI_OVERVIEW },
   { path: '/ai-agents/health', target: AI_OVERVIEW },

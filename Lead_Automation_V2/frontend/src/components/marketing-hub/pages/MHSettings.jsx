@@ -1,9 +1,10 @@
 'use client';
 import { useState } from 'react';
-import { Save, Plus, Check, Link2, Zap } from 'lucide-react';
+import { Save, Plus, Check, Link2, Zap, Users } from 'lucide-react';
 import MHBadge from '../ui/MHBadge';
 import { useMHToast } from '../ui/MHToast';
-import { teamMembers } from '../mockData';
+import { EmptyState } from './_shared';
+import { useMarketingTeam } from '@/lib/queries/marketingHub';
 
 const TABS = ['General', 'Team', 'Integrations', 'Notifications', 'AI Config'];
 
@@ -47,7 +48,22 @@ function GeneralTab({ toast }) {
   );
 }
 
+// team-service returns `availability` (online | away | offline), not the
+// mockData `status` (Active | Invited) this table used to show — there's no
+// pending-invite state exposed by /users. Map it to something sensible.
+const AVAILABILITY_DISPLAY = {
+  online:  { label: 'Online',  variant: 'active' },
+  away:    { label: 'Away',    variant: 'warning' },
+  offline: { label: 'Offline', variant: 'default' },
+};
+
+function initials(name = '') {
+  return name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('') || '?';
+}
+
 function TeamTab({ toast }) {
+  const { data: members, isLoading, isError } = useMarketingTeam();
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -55,39 +71,50 @@ function TeamTab({ toast }) {
         <button className="mh-btn mh-btn-primary" onClick={() => toast.show('Invite modal coming soon', 'info')}><Plus size={14} /> Invite Member</button>
       </div>
       <div style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-              {['MEMBER', 'EMAIL', 'ROLE', 'STATUS', ''].map(h => (
-                <th key={h} style={{ textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', padding: '10px 14px' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {teamMembers.map(m => (
-              <tr key={m.id} style={{ borderBottom: '1px solid #f3f4f6' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
-                onMouseLeave={e => e.currentTarget.style.background = ''}>
-                <td style={{ padding: '12px 14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#6366f1' }}>{m.avatar}</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{m.name}</div>
-                  </div>
-                </td>
-                <td style={{ padding: '12px 14px', fontSize: 13, color: '#6b7280' }}>{m.email}</td>
-                <td style={{ padding: '12px 14px' }}>
-                  <select style={{ fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 8px', background: '#fff', color: '#374151', cursor: 'pointer' }} defaultValue={m.role}>
-                    {ROLE_OPTIONS.map(r => <option key={r}>{r}</option>)}
-                  </select>
-                </td>
-                <td style={{ padding: '12px 14px' }}><MHBadge label={m.status} variant={m.status === 'Active' ? 'active' : 'warning'} dot /></td>
-                <td style={{ padding: '12px 14px' }}>
-                  <button className="mh-btn mh-btn-ghost" style={{ fontSize: 11, padding: '3px 10px', color: '#dc2626', borderColor: '#fee2e2' }} onClick={() => toast.show(`Removing ${m.name}`, 'error')}>Remove</button>
-                </td>
+        {isLoading && <div style={{ padding: 20, fontSize: 13, color: '#6b7280' }}>Loading…</div>}
+        {isError && <div style={{ padding: 20, fontSize: 13, color: '#dc2626' }}>Couldn't load team members.</div>}
+        {!isLoading && !isError && (!members || members.length === 0) && (
+          <EmptyState icon={Users} title="No team members yet" desc="Invite someone to your workspace to see them here." />
+        )}
+        {!isLoading && !isError && members && members.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+                {['MEMBER', 'EMAIL', 'ROLE', 'STATUS', ''].map(h => (
+                  <th key={h} style={{ textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', padding: '10px 14px' }}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {members.map(m => {
+                const availability = AVAILABILITY_DISPLAY[m.availability] || AVAILABILITY_DISPLAY.offline;
+                return (
+                  <tr key={m.id} style={{ borderBottom: '1px solid #f3f4f6' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
+                    onMouseLeave={e => e.currentTarget.style.background = ''}>
+                    <td style={{ padding: '12px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#6366f1' }}>{initials(m.name)}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{m.name}</div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px 14px', fontSize: 13, color: '#6b7280' }}>{m.email}</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <select style={{ fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 8px', background: '#fff', color: '#374151', cursor: 'pointer' }} defaultValue={m.role}>
+                        {ROLE_OPTIONS.map(r => <option key={r}>{r}</option>)}
+                        {!ROLE_OPTIONS.includes(m.role) && m.role && <option key={m.role}>{m.role}</option>}
+                      </select>
+                    </td>
+                    <td style={{ padding: '12px 14px' }}><MHBadge label={availability.label} variant={availability.variant} dot /></td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <button className="mh-btn mh-btn-ghost" style={{ fontSize: 11, padding: '3px 10px', color: '#dc2626', borderColor: '#fee2e2' }} onClick={() => toast.show(`Removing ${m.name}`, 'error')}>Remove</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

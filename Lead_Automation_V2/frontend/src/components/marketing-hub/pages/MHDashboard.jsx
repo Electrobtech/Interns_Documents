@@ -6,8 +6,9 @@ import { TrendingUp, TrendingDown, Megaphone, Users, Sparkles, BarChart3, Refres
 import { AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { kpiData, performanceData, platformData, funnelData, channelPerformance,
-  audienceGrowth, aiInsights, revenueData } from '../mockData';
+  aiInsights, revenueData } from '../mockData';
 import { useMHToast } from '../ui/MHToast';
+import { useAudienceGrowth } from '@/lib/queries/marketingHub';
 
 const QUICK_ACTIONS = [
   { icon: Megaphone, label: 'Launch Campaign', sub: 'AI-powered', color: '#6366f1', page: 'campaigns' },
@@ -41,6 +42,8 @@ function ChartHeader({ title, subtitle }) {
 }
 
 export default function MHDashboard({ onNavigate }) {
+  const { data: audienceGrowth = [] } = useAudienceGrowth(8);
+
   const { show } = useMHToast();
 
   return (

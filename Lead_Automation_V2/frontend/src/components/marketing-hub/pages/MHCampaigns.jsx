@@ -1,16 +1,55 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Plus, Copy, Archive, Pause, Play, Trash2,
   BarChart3, Wand2, Search, LayoutGrid, List, Columns,
   MoreHorizontal, TrendingUp, TrendingDown, Sparkles,
-  Filter, RefreshCw, Upload, Download
+  Filter, RefreshCw, Upload, Download, Loader2, AlertCircle
 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
-import { campaigns } from '../mockData';
 import MHBadge from '../ui/MHBadge';
 import MHDrawer from '../ui/MHDrawer';
 import { useMHToast } from '../ui/MHToast';
+import {
+  useMarketingCampaigns,
+  useCreateMarketingCampaign,
+  useUpdateMarketingCampaign,
+  useDeleteMarketingCampaign,
+} from '@/lib/queries/marketingHub';
+
+/** Map API row (snake_case / numeric strings from Postgres) → UI shape. */
+function normalizeCampaign(row) {
+  if (!row) return row;
+  const n = (v) => {
+    if (v === null || v === undefined || v === '') return 0;
+    const x = Number(v);
+    return Number.isFinite(x) ? x : 0;
+  };
+  return {
+    id: row.id,
+    name: row.name || '',
+    platform: row.platform || '',
+    objective: row.objective || '',
+    status: row.status || 'Draft',
+    budget: n(row.budget),
+    spend: n(row.spend),
+    ctr: n(row.ctr),
+    cpm: n(row.cpm),
+    cpc: n(row.cpc),
+    reach: n(row.reach),
+    impressions: n(row.impressions),
+    leads: n(row.leads),
+    conversions: n(row.conversions),
+    revenue: n(row.revenue),
+    roas: n(row.roas),
+    createdBy: row.created_by || row.createdBy || '',
+    startDate: row.start_date || row.startDate || '',
+    endDate: row.end_date || row.endDate || '',
+    aiScore: row.ai_score != null ? n(row.ai_score) : null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 const statusVariant = {
   Active: 'active',
@@ -40,7 +79,7 @@ function CampaignDrawer({ campaign: c }) {
     { label: 'Budget', value: 'Rs.' + c.budget.toLocaleString() },
   ];
   var spendPct = c.budget > 0 ? Math.min(100, Math.round((c.spend / c.budget) * 100)) : 0;
-  var data = sparkline(parseInt(c.id) * 7, 12);
+  var data = sparkline((String(c.id).replace(/\D/g, '').slice(-6) || '1') * 7, 12);
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
@@ -109,6 +148,26 @@ export default function MHCampaigns() {
   var _am = useState(null);
   var actionMenu = _am[0];
   var setActionMenu = _am[1];
+  var _showCreate = useState(false);
+  var showCreate = _showCreate[0];
+  var setShowCreate = _showCreate[1];
+  var _form = useState({ name: '', platform: 'Facebook', objective: 'Lead Generation', status: 'Draft', budget: '' });
+  var form = _form[0];
+  var setForm = _form[1];
+
+  var query = useMarketingCampaigns();
+  var rawCampaigns = query.data;
+  var isLoading = query.isLoading;
+  var isError = query.isError;
+  var refetch = query.refetch;
+  var isFetching = query.isFetching;
+  var createMut = useCreateMarketingCampaign();
+  var updateMut = useUpdateMarketingCampaign();
+  var deleteMut = useDeleteMarketingCampaign();
+
+  var campaigns = useMemo(function() {
+    return (Array.isArray(rawCampaigns) ? rawCampaigns : []).map(normalizeCampaign);
+  }, [rawCampaigns]);
 
   var filtered = campaigns.filter(function(c) {
     var matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -134,12 +193,58 @@ export default function MHCampaigns() {
     if (statusCounts[c.status] !== undefined) statusCounts[c.status]++;
   });
 
+  async function setStatusForSelected(status) {
+    if (!selected.length) return;
+    try {
+      await Promise.all(selected.map(function(id) {
+        return updateMut.mutateAsync({ id: id, status: status });
+      }));
+      show(status === 'Paused' ? 'Paused' : status === 'Active' ? 'Resumed' : status, 'success');
+      setSelected([]);
+    } catch (e) {
+      show((e && e.message) || 'Update failed', 'error');
+    }
+  }
+
+  async function deleteSelected() {
+    if (!selected.length) return;
+    if (!window.confirm('Delete ' + selected.length + ' campaign(s)?')) return;
+    try {
+      await Promise.all(selected.map(function(id) { return deleteMut.mutateAsync(id); }));
+      show('Deleted', 'success');
+      setSelected([]);
+    } catch (e) {
+      show((e && e.message) || 'Delete failed', 'error');
+    }
+  }
+
+  async function handleCreate() {
+    if (!form.name.trim()) {
+      show('Name is required', 'error');
+      return;
+    }
+    try {
+      await createMut.mutateAsync({
+        name: form.name.trim(),
+        platform: form.platform,
+        objective: form.objective,
+        status: form.status,
+        budget: parseFloat(form.budget) || 0,
+      });
+      show('Campaign created', 'success');
+      setShowCreate(false);
+      setForm({ name: '', platform: 'Facebook', objective: 'Lead Generation', status: 'Draft', budget: '' });
+    } catch (e) {
+      show((e && e.message) || 'Failed to create', 'error');
+    }
+  }
+
   var toolbarBtns = [
-    { icon: Copy, label: 'Duplicate', fn: function() { show('Duplicated', 'success'); } },
-    { icon: Archive, label: 'Archive', fn: function() { show('Archived', 'success'); } },
-    { icon: Pause, label: 'Pause', fn: function() { show('Paused', 'success'); } },
-    { icon: Play, label: 'Resume', fn: function() { show('Resumed', 'success'); } },
-    { icon: Trash2, label: 'Delete', fn: function() { show('Deleted', 'success'); } },
+    { icon: Copy, label: 'Duplicate', fn: function() { show('Duplicate coming soon', 'info'); } },
+    { icon: Archive, label: 'Archive', fn: function() { setStatusForSelected('Paused'); } },
+    { icon: Pause, label: 'Pause', fn: function() { setStatusForSelected('Paused'); } },
+    { icon: Play, label: 'Resume', fn: function() { setStatusForSelected('Active'); } },
+    { icon: Trash2, label: 'Delete', fn: function() { deleteSelected(); } },
     { icon: Upload, label: 'Import', fn: function() { show('Import coming soon', 'info'); } },
     { icon: Download, label: 'Export', fn: function() { show('Exporting...', 'info'); } },
     { icon: BarChart3, label: 'Report', fn: function() { show('Report coming soon', 'info'); } },
@@ -157,7 +262,7 @@ export default function MHCampaigns() {
             {campaigns.length} campaigns - Manage and track all marketing campaigns
           </p>
         </div>
-        <button className="mh-btn mh-btn-primary" onClick={function() { show('Campaign creation coming soon', 'info'); }}>
+        <button className="mh-btn mh-btn-primary" onClick={function() { setShowCreate(true); }}>
           <Plus size={14} /> Create Campaign
         </button>
       </div>
@@ -187,7 +292,7 @@ export default function MHCampaigns() {
           />
         </div>
         <button className="mh-btn mh-btn-ghost"><Filter size={13} /> Filter</button>
-        <button className="mh-btn mh-btn-ghost" onClick={function() { show('Refreshed', 'success'); }}><RefreshCw size={13} /></button>
+        <button className="mh-btn mh-btn-ghost" onClick={function() { refetch(); show('Refreshed', 'success'); }}><RefreshCw size={13} /></button>
         <div style={{ marginLeft: 'auto', display: 'flex', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
           {[['list', List], ['grid', LayoutGrid], ['kanban', Columns]].map(function(pair) {
             var v = pair[0]; var Ic = pair[1];
@@ -218,7 +323,31 @@ export default function MHCampaigns() {
       </div>
 
       {/* LIST VIEW */}
-      {view === 'list' && (
+      
+      {isLoading && (
+        <div style={{ padding: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#6b7280', fontSize: 13 }}>
+          <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Loading campaigns…
+        </div>
+      )}
+      {isError && !isLoading && (
+        <div style={{ padding: 24, borderRadius: 12, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <AlertCircle size={16} /> Couldn't load campaigns.
+          <button type="button" onClick={function() { refetch(); }} style={{ marginLeft: 8, border: '1px solid #fca5a5', background: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}>Retry</button>
+        </div>
+      )}
+      {!isLoading && !isError && filtered.length === 0 && (
+        <div style={{ padding: 48, textAlign: 'center', color: '#6b7280', fontSize: 13, border: '1px dashed #e5e7eb', borderRadius: 12, background: '#fafafa' }}>
+          No campaigns yet. Create one to track ad-platform spend &amp; performance.
+          <div style={{ marginTop: 12 }}>
+            <button type="button" onClick={function() { setShowCreate(true); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: 'none', background: '#6366f1', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+              <Plus size={14} /> New Campaign
+            </button>
+          </div>
+        </div>
+      )}
+
+{!isLoading && !isError && view === 'list' && (
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -299,7 +428,7 @@ export default function MHCampaigns() {
       )}
 
       {/* GRID VIEW */}
-      {view === 'grid' && (
+      {!isLoading && !isError && view === 'grid' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 14 }}>
           {filtered.map(function(c) {
             var spendPct = c.budget > 0 ? Math.min(100, Math.round((c.spend / c.budget) * 100)) : 0;
@@ -349,7 +478,7 @@ export default function MHCampaigns() {
       )}
 
       {/* KANBAN VIEW */}
-      {view === 'kanban' && (
+      {!isLoading && !isError && view === 'kanban' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, alignItems: 'flex-start' }}>
           {['Draft', 'Scheduled', 'Active', 'Paused'].map(function(status) {
             var colCampaigns = filtered.filter(function(c) { return c.status === status; });
@@ -388,6 +517,41 @@ export default function MHCampaigns() {
         <MHDrawer title={drawer.name} subtitle={drawer.objective + ' - ' + drawer.platform} onClose={function() { setDrawer(null); }}>
           <CampaignDrawer campaign={drawer} />
         </MHDrawer>
+      )}
+
+      {showCreate && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={function() { setShowCreate(false); }}>
+          <div onClick={function(e) { e.stopPropagation(); }}
+            style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 440, padding: 24, boxShadow: '0 20px 50px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontFamily: 'var(--mh-font-display)', fontSize: 18, fontWeight: 700, marginBottom: 16 }}>New Campaign</div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Name</label>
+            <input value={form.name} onChange={function(e) { setForm(function(f) { return Object.assign({}, f, { name: e.target.value }); }); }}
+              placeholder="e.g. AI Bootcamp Lead Gen"
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', marginBottom: 12, fontSize: 13 }} />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Platform</label>
+            <select value={form.platform} onChange={function(e) { setForm(function(f) { return Object.assign({}, f, { platform: e.target.value }); }); }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', marginBottom: 12, fontSize: 13 }}>
+              {['Facebook', 'Google Ads', 'LinkedIn', 'Instagram', 'WhatsApp', 'Email'].map(function(p) {
+                return <option key={p} value={p}>{p}</option>;
+              })}
+            </select>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Objective</label>
+            <input value={form.objective} onChange={function(e) { setForm(function(f) { return Object.assign({}, f, { objective: e.target.value }); }); }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', marginBottom: 12, fontSize: 13 }} />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Budget (Rs.)</label>
+            <input type="number" value={form.budget} onChange={function(e) { setForm(function(f) { return Object.assign({}, f, { budget: e.target.value }); }); }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', marginBottom: 16, fontSize: 13 }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button type="button" onClick={function() { setShowCreate(false); }}
+                style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              <button type="button" onClick={handleCreate} disabled={createMut.isPending}
+                style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#6366f1', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: createMut.isPending ? 0.7 : 1 }}>
+                {createMut.isPending ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

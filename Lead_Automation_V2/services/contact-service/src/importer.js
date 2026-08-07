@@ -359,4 +359,10 @@ module.exports = {
   cellToText,
   suggestMapping,
   matchField,
+  // Exported for sheetsRoutes.js (Google Sheets CSV import preview) — reuses
+  // this same "which row is actually the header" heuristic instead of
+  // re-implementing it, so a public Google Sheet with a title/blank row
+  // above the real header gets detected the same way an uploaded XLSX does.
+  detectHeaderRow,
+  trimTrailingEmpty,
 };

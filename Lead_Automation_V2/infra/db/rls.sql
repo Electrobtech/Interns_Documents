@@ -72,7 +72,13 @@ BEGIN
     'calendar_accounts', 'calendar_events',
     'organization_channel_subscriptions', 'whatsapp_billing_ledger',
     'meta_usage_charges', 'sms_usage_charges',
-    'products'
+    'products',
+    'message_templates',
+    'marketing_assets',
+    'marketing_audiences',
+    'marketing_campaigns',
+    'marketing_broadcasts',
+    'marketing_calendar_events'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
@@ -86,6 +92,26 @@ BEGIN
     );
   END LOOP;
 END $$;
+
+-- marketing_audience_snapshots hangs off marketing_audiences
+ALTER TABLE marketing_audience_snapshots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE marketing_audience_snapshots FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON marketing_audience_snapshots;
+CREATE POLICY tenant_isolation ON marketing_audience_snapshots
+  USING (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM marketing_audiences a
+       WHERE a.id = marketing_audience_snapshots.audience_id
+         AND a.organization_id = app_current_org()
+    )
+  )
+  WITH CHECK (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM marketing_audiences a
+       WHERE a.id = marketing_audience_snapshots.audience_id
+         AND a.organization_id = app_current_org()
+    )
+  );
 
 -- ---------- Indirectly-scoped tables (no organization_id column) ----------
 -- campaign_audiences / campaign_logs hang off campaigns, which is itself
