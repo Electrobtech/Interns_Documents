@@ -22,7 +22,7 @@ function channelKey(href) {
 const PLATFORM = [
   { label: 'Dashboard',               icon: LayoutDashboard, href: '/app'                  },
   { label: 'Unified Inbox',           icon: Inbox,           href: '/app/inbox'              },
-  { label: 'Contacts & Leads',        icon: Users,           href: '/app/contacts'           },
+  { label: 'Leads / CRM',             icon: Users,           href: '/app/contacts'           },
   { label: 'Follow-ups',              icon: CalendarClock,   href: '/app/follow-ups'         },
   { 
     label: 'AI Agents & Automation',  
