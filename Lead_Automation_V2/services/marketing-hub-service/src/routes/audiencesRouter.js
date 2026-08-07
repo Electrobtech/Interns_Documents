@@ -8,10 +8,12 @@ const canWrite = requirePermission('campaigns:write');
 const router = express.Router();
 
 router.get('/', ah(async (req, res) => {
+  console.log('Fetching audiences for organization:', req.user.organizationId);
   const { rows } = await pool.query(
     `SELECT * FROM mh_audiences WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 500`,
     [req.user.organizationId]
   );
+  console.log('Found audiences:', rows.length);
   res.json(rows);
 }));
 
