@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Inbox, Users, Bot, Megaphone, ShoppingCart,
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
@@ -203,8 +203,6 @@ function UnreadBadge({ count }) {
 function ExpandableNavItem({ item, pathname, isActive, unread = 0, collapsed = false }) {
   const { label, icon: Icon, href, sub } = item;
   const subItems = sub || [['Conversations', href]];
-  const searchParams = useSearchParams();
-  const agentParam = searchParams.get('agent');
   const open = (pathname.startsWith(href) && !pathname.startsWith(href + '/automation'))
     || subItems.some(([, h]) => {
       const baseH = h.split('?')[0];
