@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.sales import SalesAgentRun
+from app.models.sales import SalesAgentConfig, SalesAgentRun
 
 
 class SalesRepository:
@@ -29,3 +29,56 @@ class SalesRepository:
             .limit(limit)
         )
         return list((await self._session.execute(stmt)).scalars().all())
+
+
+class SalesConfigRepository:
+    """One row per organization — see app/models/sales.py:SalesAgentConfig
+    for why organization_id is the primary key rather than a synthetic id."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self, organization_id: uuid.UUID) -> SalesAgentConfig | None:
+        stmt = select(SalesAgentConfig).where(SalesAgentConfig.organization_id == organization_id)
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def upsert(
+        self,
+        organization_id: uuid.UUID,
+        *,
+        deal_value_field: str | None | object = ...,
+        confidence_signal_config: dict | None | object = ...,
+        min_hot_score: int | object = ...,
+        max_followup_attempts: int | object = ...,
+        require_approval: bool | object = ...,
+        followup_cadence_days: list[int] | object = ...,
+        monthly_revenue_target: float | None | object = ...,
+    ) -> SalesAgentConfig:
+        """`...` (Ellipsis, via the `object` sentinel default) means "field
+        not sent in this PATCH, leave as-is" — distinct from `None`/empty,
+        which means "explicitly clear the mapping". Mirrors the COALESCE
+        semantics contact-service's PUT /leads/:id already uses, just done
+        in Python since this is a full ORM object, not a raw SQL UPDATE.
+        """
+        row = await self.get(organization_id)
+        if row is None:
+            row = SalesAgentConfig(organization_id=organization_id, confidence_signal_config={})
+            self._session.add(row)
+
+        if deal_value_field is not ...:
+            row.deal_value_field = deal_value_field or None
+        if confidence_signal_config is not ...:
+            row.confidence_signal_config = confidence_signal_config or {}
+        if min_hot_score is not ...:
+            row.min_hot_score = min_hot_score
+        if max_followup_attempts is not ...:
+            row.max_followup_attempts = max_followup_attempts
+        if require_approval is not ...:
+            row.require_approval = require_approval
+        if followup_cadence_days is not ...:
+            row.followup_cadence_days = followup_cadence_days or []
+        if monthly_revenue_target is not ...:
+            row.monthly_revenue_target = monthly_revenue_target
+
+        await self._session.flush()
+        return row

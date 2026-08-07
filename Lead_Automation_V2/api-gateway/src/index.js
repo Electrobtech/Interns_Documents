@@ -115,21 +115,28 @@ const routes = [
   // Message Templates (Template Creation module) — owned by campaign-service
   // (src/templates.js + src/templateMedia.js), not yet in this route table.
   { path: '/templates',           target: CAMPAIGN },
-  { path: '/ai-agents/status',           target: AI_OVERVIEW },
-  { path: '/ai-agents/analytics',        target: AI_OVERVIEW },
-  { path: '/ai-agents/health',          target: AI_OVERVIEW },
-  { path: '/ai-agents/knowledge',       target: AI_OVERVIEW },
-  { path: '/ai-agents/sessions',        target: AI_OVERVIEW },
-  { path: '/ai-agents/runs',            target: AI_OVERVIEW },
-  { path: '/ai-agents/orchestrate',     target: AI_OVERVIEW },
-  { path: '/ai-agents/marketing',       target: AI_MARKETING },
-  { path: '/ai-agents/sales',           target: AI_SALES },
-  { path: '/ai-agents/support',         target: AI_SUPPORT },
-  { path: '/ai-agents',                 target: AI_OVERVIEW },
-  { path: '/agents/marketing',          target: AI_MARKETING },
-  { path: '/agents/sales',              target: AI_SALES },
-  { path: '/agents/support',            target: AI_SUPPORT },
-  { path: '/sessions',                  target: AI_OVERVIEW },
+// Static header images/videos/documents templateMedia.js writes under
+  // campaign service's public/uploads/templates (see src/index.js there).
+  // The upload response hands back a GATEWAY_PUBLIC_URL-rooted URL for the
+  // Live Preview's <img> tag to load directly - this route is what makes
+  // that URL actually resolve, since the browser only ever talks to this
+  // gateway, never to campaign-service's own port.
+  { path: '/uploads', target: CAMPAIGN },
+  { path: '/ai-agents/status', target: AI_OVERVIEW },
+  { path: '/ai-agents/analytics', target: AI_OVERVIEW },
+  { path: '/ai-agents/health', target: AI_OVERVIEW },
+  { path: '/ai-agents/knowledge', target: AI_OVERVIEW },
+  { path: '/ai-agents/sessions', target: AI_OVERVIEW },
+  { path: '/ai-agents/runs', target: AI_OVERVIEW },
+  { path: '/ai-agents/orchestrate', target: AI_OVERVIEW },
+  { path: '/ai-agents/marketing', target: AI_MARKETING },
+  { path: '/ai-agents/sales', target: AI_SALES },
+  { path: '/ai-agents/support', target: AI_SUPPORT },
+  { path: '/ai-agents', target: AI_OVERVIEW },
+  { path: '/agents/marketing', target: AI_MARKETING },
+  { path: '/agents/sales', target: AI_SALES },
+  { path: '/agents/support', target: AI_SUPPORT },
+  { path: '/sessions', target: AI_OVERVIEW },
   { path: '/orders',              target: ECOMMERCE },
   { path: '/carts',               target: ECOMMERCE },
   { path: '/recovery-flows',      target: ECOMMERCE },

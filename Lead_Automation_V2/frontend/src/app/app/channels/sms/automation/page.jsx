@@ -1,11 +1,12 @@
 'use client';
-import Link from 'next/link';
-import { Smartphone, Bot } from 'lucide-react';
+import { Smartphone } from 'lucide-react';
 import SmsAutomationSimulator from '@/components/automation/sms-simulator/SmsAutomationSimulator';
 
-// SMS / RCS > Automation — the SMS Automation Simulation page. Sits alongside
-// the existing /channels/sms conversation view (see [type]/page.jsx), reusing
-// the same Sidebar/Topbar shell as every other channel's Automation tab.
+// SMS / RCS > Automation — the SMS Automation Simulation page. Reuses the
+// same Sidebar/Topbar shell as every other channel's Automation tab.
+// Conversations for this channel live at Sidebar > Channels > SMS/RCS
+// (see [type]/page.jsx) — this used to also duplicate a "Conversations"
+// tab here that just linked back there.
 //
 // This is a self-contained, mock-driven simulator (no flow engine call under
 // the hood — see the "MOCK FALLBACK" badge in EngineDiagnostics) rather than
@@ -25,23 +26,6 @@ export default function SmsAutomationPage() {
           <p className="text-[13px] text-slate-500 mt-1 ml-9">
             Send instant text messages to your leads and contacts.
           </p>
-        </div>
-      </div>
-
-      <div className="px-6 mt-4 shrink-0">
-        <div className="flex items-center gap-4 text-sm border-b border-slate-200">
-          <Link
-            href="/app/channels/sms"
-            className="px-1 pb-2 -mb-px text-slate-500 hover:text-slate-700"
-          >
-            Conversations
-          </Link>
-          <Link
-            href="/app/channels/sms/automation"
-            className="px-1 pb-2 -mb-px border-b-2 border-violet-600 text-violet-600 font-medium flex items-center gap-1.5"
-          >
-            <Bot size={14} /> Automation
-          </Link>
         </div>
       </div>
 

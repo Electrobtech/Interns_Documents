@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import { Image as ImageIcon, FileText as DocIcon, Video as VideoIcon, Reply } from 'lucide-react';
 
 // Fills {{1}}, {{2}}… in body text with the example values collected on the
@@ -12,10 +13,21 @@ function renderBody(body, variables = {}) {
 }
 
 function HeaderMedia({ headerType, headerMediaUrl }) {
+  // Resets whenever the URL itself changes (new upload / new template),
+  // so a fresh URL always gets a fresh chance to load rather than being
+  // stuck showing the placeholder from a previous failed one.
+  const [failedUrl, setFailedUrl] = useState(null);
+
   if (headerType === 'IMAGE') {
-    return headerMediaUrl ? (
+    const showImage = headerMediaUrl && headerMediaUrl !== failedUrl;
+    return showImage ? (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={headerMediaUrl} alt="Template header" className="w-full h-40 object-cover" />
+      <img
+        src={headerMediaUrl}
+        alt="Template header"
+        className="w-full h-40 object-cover"
+        onError={() => setFailedUrl(headerMediaUrl)}
+      />
     ) : (
       <div className="w-full h-40 bg-slate-100 flex items-center justify-center text-slate-300">
         <ImageIcon size={28} />

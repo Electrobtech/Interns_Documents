@@ -8,8 +8,11 @@
 // template-submission API to fetch.
 //
 // Storage is local disk, same caveat as mediaController.js: set
-// CAMPAIGN_PUBLIC_URL once this service has a real public hostname, or
-// swap in multer-s3 once you're running more than one replica.
+// GATEWAY_PUBLIC_URL once the api-gateway has a real public hostname, or
+// swap in multer-s3 once you're running more than one replica. The
+// returned URL is rooted at the gateway (see below), not at this
+// service's own port, so it resolves for any client — the browser
+// included — that only ever talks to the gateway.
 
 const express = require('express');
 const multer = require('multer');
@@ -63,9 +66,20 @@ router.post('/templates/media/upload', (req, res) => {
       return res.status(400).json({ error: 'No file received (expected form field "file").' });
     }
 
+    // NOTE: this used to build the URL against campaign-service's own
+    // port (CAMPAIGN_PUBLIC_URL / CAMPAIGN_PORT), which only resolves if
+    // the browser can reach that service directly. The frontend's fetch
+    // helper (frontend/src/lib/api.js) always talks to the api-gateway
+    // (NEXT_PUBLIC_API_URL, default http://localhost:8080) — not to
+    // individual services — so a campaign-service-rooted URL 404s/fails
+    // to load in the Live Preview whenever the gateway is the only origin
+    // actually reachable from the browser. GATEWAY_PUBLIC_URL is the same
+    // convention integration-service/src/routes/smsDevices.js already
+    // uses for exactly this "the browser needs to fetch this asset"
+    // case; api-gateway/src/index.js proxies /uploads through to this
+    // service so the resulting URL resolves.
     const publicBase =
-      process.env.CAMPAIGN_PUBLIC_URL ||
-      `http://localhost:${process.env.CAMPAIGN_PORT || process.env.PORT || 4004}`;
+      process.env.GATEWAY_PUBLIC_URL || `http://localhost:${process.env.GATEWAY_PORT || 8080}`;
     const url = `${publicBase}/uploads/templates/${req.file.filename}`;
 
     res.status(201).json({

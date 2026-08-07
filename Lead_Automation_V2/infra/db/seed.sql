@@ -129,14 +129,27 @@ INSERT INTO contacts (organization_id, name, email, phone, source, external_id, 
 ON CONFLICT DO NOTHING;
 
 -- ---------- Leads ----------
-INSERT INTO leads (organization_id, contact_id, stage, priority, score)
-SELECT '11111111-1111-1111-1111-111111111111', c.id, v.stage, v.priority, v.score
+-- deal_value + explicit created_at/updated_at gaps so the Sales Agent's
+-- Forecasting/Analytics tabs (weighted pipeline, avg deal size, sales-cycle
+-- days, weekly deals won) have real numbers to show on a fresh `docker
+-- compose up` instead of being blank until someone hand-edits leads —
+-- these still only appear once an org maps sales_agent_config.deal_value_field
+-- to 'deal_value' in the Settings tab (deliberately not auto-set — see
+-- migration 0005/0004 comments). Two 'won' leads (Vikram, Pooja) with
+-- different creation->close gaps and months so sales_cycle_days averages
+-- over more than one data point and weekly_deals_won isn't a single spike.
+INSERT INTO leads (organization_id, contact_id, stage, priority, score, deal_value, created_at, updated_at)
+SELECT '11111111-1111-1111-1111-111111111111', c.id, v.stage, v.priority, v.score, v.deal_value,
+       now() - (v.created_days_ago || ' days')::interval,
+       now() - (v.updated_days_ago || ' days')::interval
 FROM (VALUES
-  ('rohan@example.com','active','high',82),
-  ('ananya@example.com','qualified','medium',60),
-  ('neha@example.com','new','low',35),
-  ('vikram@example.com','won','high',95)
-) AS v(email, stage, priority, score)
+  ('rohan@example.com','active','high',82,45000.00, 10, 1),
+  ('ananya@example.com','qualified','medium',60,28000.00, 6, 2),
+  ('neha@example.com','new','low',35,15000.00, 2, 2),
+  ('vikram@example.com','won','high',95,60000.00, 12, 3),
+  ('pooja@example.com','won','high',90,82000.00, 40, 25),
+  ('amit@example.com','active','medium',55,32000.00, 4, 1)
+) AS v(email, stage, priority, score, deal_value, created_days_ago, updated_days_ago)
 JOIN contacts c ON c.email=v.email AND c.organization_id='11111111-1111-1111-1111-111111111111'
 ON CONFLICT DO NOTHING;
 

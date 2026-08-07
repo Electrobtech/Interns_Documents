@@ -5,10 +5,42 @@ import { useApi } from '@/lib/useApi';
 // Real platform CRM data, reused by the agent dashboards — one source of
 // truth, no mocked metrics.
 
-// GET /leads — { id, contact_id, name, stage, priority, score, created_at }
-export function useLeads() {
+// GET /leads — { id, contact_id, name, source, phone, stage, priority,
+// score, deal_value, course, temperature, contact_status, category,
+// created_at, updated_at }. `name`, `source` and `phone` are joined in from
+// the backing contact; `updated_at` is bumped by contact-service on every
+// PUT /leads/:id or PUT /leads/:id/stage (see
+// infra/db/migrations/031_lead_updated_at.sql).
+//
+// `category` is one of 'hot'|'warm'|'cold' (filters on leads.temperature)
+// or 'active'|'onboarded'|'inactive' (filters on leads.category) — powers
+// the Leads/CRM page's filter tabs server-side. Omit for the unfiltered list.
+export function useLeads(category) {
   const { call } = useApi();
-  return useQuery({ queryKey: ['leads', 'list'], queryFn: () => call('/leads') });
+  return useQuery({
+    queryKey: ['leads', 'list', category || 'all'],
+    queryFn: () => call(category ? `/leads?category=${encodeURIComponent(category)}` : '/leads'),
+  });
+}
+
+// GET /leads/fields — real numeric leads.* columns a dashboard could
+// aggregate into a dollar figure, e.g. [{ key: 'deal_value', label: 'Deal
+// Value', type: 'numeric' }, ...]. Backs the Sales Agent's "Configure Deal
+// Field" modal so it only ever offers fields that actually exist.
+export function useLeadFields() {
+  const { call } = useApi();
+  return useQuery({ queryKey: ['leads', 'fields'], queryFn: () => call('/leads/fields'), staleTime: 5 * 60_000 });
+}
+
+// PUT /leads/:id — partial update (score / stage / deal_value). COALESCE
+// server-side, so sending just { deal_value } leaves score/stage untouched.
+export function useUpdateLead() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }) => call(`/leads/${id}`, { method: 'PUT', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['leads', 'list'] }),
+  });
 }
 
 // GET /contacts — { id, name, email, phone, source, tags, ... }
@@ -75,7 +107,8 @@ export function useCampaignDecision() {
   });
 }
 
-// POST /leads — { name, company?, email?, phone?, score?, priority?, stage?, source? }
+// POST /leads — { name, company?, email?, mobile? (or phone?), score?,
+// priority?, stage?, source?, course?, temperature?, contact_status?, category? }
 export function useCreateLead() {
   const { call } = useApi();
   const qc = useQueryClient();

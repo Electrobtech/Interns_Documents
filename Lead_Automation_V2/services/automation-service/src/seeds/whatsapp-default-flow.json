@@ -1,0 +1,132 @@
+{
+  "_id": "whatsapp-default",
+  "clientId": "client_882",
+  "name": "ElectroBtech — Internship & Training Enquiry Bot",
+  "channels": ["whatsapp"],
+  "playbookType": "default",
+  "triggerKeywords": [],
+  "status": "active",
+  "version": 1,
+  "entryNodeId": "n_welcome",
+  "globalLimits": {
+    "maxConversationsTotal": null,
+    "maxConversationsPerDay": null,
+    "resetWindow": "all_time"
+  },
+  "nodes": [
+    {
+      "id": "n_welcome",
+      "type": "message",
+      "channel": "whatsapp",
+      "position": { "x": 620, "y": 40 },
+      "data": {
+        "messageType": "text",
+        "body": "🚀 🎓 Kickstart Your Career with ElectroBtech Innovations Pvt. Ltd.!\n\nAre you ready to begin your professional journey with a company that values innovation, learning, and real-world experience?\n\nElectroBtech Innovations Pvt. Ltd. is committed to nurturing young talent by providing opportunities to work on cutting-edge technologies, live industry projects, and innovative software solutions. Our team focuses on delivering high-quality technology products while creating an environment where interns and fresh graduates can enhance their technical skills, collaborate with experienced professionals, and gain practical exposure to modern development practices.",
+        "waitForReply": false,
+        "nextNodeId": "n_menu1"
+      },
+      "meta": { "label": "Welcome" }
+    },
+    {
+      "id": "n_menu1",
+      "type": "message",
+      "channel": "whatsapp",
+      "position": { "x": 620, "y": 200 },
+      "data": {
+        "messageType": "list",
+        "body": "📣 Exciting opportunities are now open!\n\nChoose the one you are looking for :",
+        "list": {
+          "buttonLabel": "Options",
+          "sections": [
+            {
+              "title": "Choose one",
+              "rows": [
+                { "id": "b_final_year", "title": "Final Year Projects", "description": "", "nextNodeId": null },
+                { "id": "b_internships", "title": "Internships", "description": "", "nextNodeId": null },
+                { "id": "b_domain_training", "title": "Domain Specific Training", "description": "", "nextNodeId": null }
+              ]
+            }
+          ]
+        },
+        "waitForReply": true,
+        "nextNodeId": "n_branch1",
+        "defaultNextNodeId": "n_branch1"
+      },
+      "meta": { "label": "List Message" }
+    },
+    {
+      "id": "n_branch1",
+      "type": "answer_branch",
+      "channel": "all",
+      "position": { "x": 620, "y": 360 },
+      "data": {
+        "sourceNodeId": "n_menu1",
+        "branches": [
+          { "id": "br_final_year", "label": "Final Year Projects", "matchOptionId": "b_final_year", "nextNodeId": "n_domain_menu" },
+          { "id": "br_internships", "label": "Internships", "matchOptionId": "b_internships", "nextNodeId": "n_domain_menu" },
+          { "id": "br_domain_training", "label": "Domain Specific Training", "matchOptionId": "b_domain_training", "nextNodeId": "n_domain_menu" }
+        ],
+        "defaultBranch": { "label": "Default condition", "nextNodeId": null }
+      },
+      "meta": { "label": "Conditional Branching" }
+    },
+    {
+      "id": "n_domain_menu",
+      "type": "message",
+      "channel": "whatsapp",
+      "position": { "x": 620, "y": 520 },
+      "data": {
+        "messageType": "list",
+        "body": "Choose your preferred domain",
+        "list": {
+          "buttonLabel": "Options",
+          "sections": [
+            {
+              "title": "Choose one",
+              "rows": [
+                { "id": "b_ai_ml", "title": "AI & ML", "description": "", "nextNodeId": null },
+                { "id": "b_fullstack", "title": "Full stack Development", "description": "", "nextNodeId": null },
+                { "id": "b_embedded", "title": "Embedded Systems", "description": "", "nextNodeId": null }
+              ]
+            }
+          ]
+        },
+        "waitForReply": true,
+        "nextNodeId": "n_branch2",
+        "defaultNextNodeId": "n_branch2"
+      },
+      "meta": { "label": "List Message" }
+    },
+    {
+      "id": "n_branch2",
+      "type": "answer_branch",
+      "channel": "all",
+      "position": { "x": 620, "y": 680 },
+      "data": {
+        "sourceNodeId": "n_domain_menu",
+        "branches": [
+          { "id": "br_ai_ml", "label": "AI & ML", "matchOptionId": "b_ai_ml", "nextNodeId": "n_thankyou" },
+          { "id": "br_fullstack", "label": "Full stack Development", "matchOptionId": "b_fullstack", "nextNodeId": "n_thankyou" },
+          { "id": "br_embedded", "label": "Embedded Systems", "matchOptionId": "b_embedded", "nextNodeId": "n_thankyou" }
+        ],
+        "defaultBranch": { "label": "Default condition", "nextNodeId": null }
+      },
+      "meta": { "label": "Conditional Branching" }
+    },
+    {
+      "id": "n_thankyou",
+      "type": "message",
+      "channel": "whatsapp",
+      "position": { "x": 620, "y": 840 },
+      "data": {
+        "messageType": "text",
+        "body": "Thank you for your interest in *ElectroBtech Innovations Pvt. Ltd.*\n\nWe have received your inquiry. Our team will contact you shortly with more information. In the meantime, please feel free to go through the attached guidelines. If you have any questions, don't hesitate to reach out.\n\nWe look forward to connecting with you!\n\n*Team ElectroBtech Innovations Pvt. Ltd.*",
+        "waitForReply": false,
+        "nextNodeId": null
+      },
+      "meta": { "label": "Thank You" }
+    }
+  ],
+  "createdAt": "2026-08-07T00:00:00Z",
+  "updatedAt": "2026-08-07T00:00:00Z"
+}

@@ -109,7 +109,16 @@ export function useAgentSessions(workspace) {
 }
 
 /**
- * GET /ai-agents/runs?workspace=X — recent execution history for one agent.
+ * GET /ai-agents/{workspace}/runs — recent execution history for one agent.
+ *
+ * NOTE: this used to call `/ai-agents/runs?workspace=X`, which 404s — no
+ * such route exists on this backend (see api/v1/router.py: only
+ * `/marketing/runs`, `/sales/runs`, `/support/runs` are registered, each
+ * under its own file). That 404 is the exact bug in the error report: three
+ * workspaces all failing the same way because they share this one hook.
+ * `limit` isn't accepted server-side (each endpoint returns its own default
+ * page), so it's applied client-side after the fact — harmless, just means
+ * asking for more than you'll use.
  *
  * Distinct from useAgentSessions: a session is a conversation, a run is a
  * single execution within it. The dashboard cards and the per-page "recent
@@ -119,8 +128,10 @@ export function useAgentRuns(workspace, { limit = 10 } = {}) {
   const { call } = useApi();
   return useQuery({
     queryKey: ['ai-agents', 'runs', workspace, limit],
-    queryFn: () =>
-      call(`${AI}/runs?workspace=${encodeURIComponent(workspace)}&limit=${limit}`),
+    queryFn: async () => {
+      const rows = await call(`${AI}/${encodeURIComponent(workspace)}/runs`);
+      return Array.isArray(rows) ? rows.slice(0, limit) : rows;
+    },
     enabled: !!workspace,
     refetchInterval: 20_000,
   });
@@ -129,6 +140,26 @@ export function useAgentRuns(workspace, { limit = 10 } = {}) {
 export const useMarketingRuns = (opts) => useAgentRuns('marketing', opts);
 export const useSalesRuns = (opts) => useAgentRuns('sales', opts);
 export const useSupportRuns = (opts) => useAgentRuns('support', opts);
+
+/**
+ * GET /ai-agents/sales/runs — recent Sales Agent executions with full output
+ * (lead_score, lead_qualification_reason, buying_intent_summary, ...).
+ *
+ * Distinct from useSalesRuns() above: that one calls the generic
+ * `/ai-agents/runs?workspace=sales` endpoint, which isn't implemented on
+ * this backend (see api/v1/router.py — no such route is registered) and
+ * will 404. This hook calls the sales-specific endpoint that actually
+ * exists (api/v1/sales.py `list_sales_runs`), so the Sales Agent Brain Log
+ * can show real completed runs instead of mock entries.
+ */
+export function useSalesAgentRuns() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['ai-agents', 'sales', 'runs'],
+    queryFn: () => call(`${AI}/sales/runs`),
+    refetchInterval: 20_000,
+  });
+}
 
 /**
  * GET /sessions/{id}/executions — the decision trace (§15).
@@ -225,6 +256,73 @@ export function useDecideApproval() {
   });
 }
 
+/* ─── Lead fit scoring (random forest) ───────────────────────────────────── */
+
+/**
+ * POST /ai-agents/sales/fit-score — { org_size, budget, channel } ->
+ * { score, tier, tier_reason, factors[], recommended_action }.
+ *
+ * Backed by a random forest model (ai-agent-backend/app/ml/lead_scoring_model.py),
+ * not an LLM call — this is why it's safe to fire on every pill change in
+ * FitScorerPanel/LeadDetailDrawer without debouncing: inference is
+ * sub-millisecond and deterministic for the same three inputs.
+ */
+export function useScoreLeadFit() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: (body) => call(`${AI}/sales/fit-score`, { method: 'POST', body }),
+  });
+}
+
+/**
+ * Applies a Fit Scorer result to a real lead: writes the score/stage to the
+ * CRM record and, if the caller drafted a follow-up and asked to send it,
+ * dispatches it on the lead's channel. Two plain REST calls chained
+ * client-side (update lead, then best-effort find-conversation + reply)
+ * rather than a bespoke backend endpoint — both calls already exist and are
+ * used elsewhere (contact-service /leads/:id, inbox-service conversations).
+ *
+ * @param leadId, lead_score, opportunity_stage, follow_up_message?,
+ *        channel_type?, send_follow_up?
+ */
+export function useApplyRecommendation() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ leadId, lead_score, opportunity_stage, follow_up_message, channel_type, send_follow_up }) => {
+      const updated = await call(`/leads/${leadId}`, {
+        method: 'PUT',
+        body: { score: lead_score, stage: opportunity_stage },
+      });
+
+      let follow_up_queued = false;
+      if (send_follow_up && follow_up_message) {
+        try {
+          const matches = await call(`/conversations?q=${encodeURIComponent(updated?.name || '')}&limit=1`);
+          const conversation = Array.isArray(matches) && matches.length ? matches[0] : null;
+          if (conversation) {
+            await call(`/conversations/${conversation.id}/reply`, {
+              method: 'POST',
+              body: { body: follow_up_message },
+            });
+            follow_up_queued = true;
+          }
+        } catch {
+          // Best-effort: the CRM update above already succeeded and is the
+          // part the "Applied to CRM" confirmation is about. A missing
+          // conversation to reply on shouldn't fail the whole action.
+        }
+      }
+
+      return { ...updated, follow_up_queued };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['leads', 'list'] });
+      qc.invalidateQueries({ queryKey: ['conversations', 'list'] });
+    },
+  });
+}
+
 /* ─── Handoffs (Phase 20) ────────────────────────────────────────────────── */
 
 export function useHandoffs(status) {
@@ -242,6 +340,108 @@ export function useUpdateHandoff() {
   return useMutation({
     mutationFn: ({ id, ...body }) => call(`${AI}/handoff/${id}`, { method: 'PATCH', body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['ai-agents', 'handoff'] }),
+  });
+}
+
+/* ─── Sales Agent config (Pipeline Value + AI Confidence CTAs) ───────────── */
+
+/**
+ * GET /ai-agents/sales/config — the deal-value field mapping and confidence
+ * signal weights, plus backend-computed `computed.pipeline_value` /
+ * `computed.ai_confidence`. Powers the Overview tab's Pipeline Value and AI
+ * Confidence metric cards: while unconfigured these come back null and the
+ * card shows its CTA; once configured they show a real number.
+ */
+export function useSalesAgentConfig() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['ai-agents', 'sales', 'config'],
+    queryFn: () => call(`${AI}/sales/config`),
+    staleTime: 10_000,
+  });
+}
+
+/** PATCH /ai-agents/sales/config — { deal_value_field?, confidence_signals? } */
+export function useUpdateSalesAgentConfig() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => call(`${AI}/sales/config`, { method: 'PATCH', body }),
+    onSuccess: (data) => {
+      qc.setQueryData(['ai-agents', 'sales', 'config'], data);
+      qc.invalidateQueries({ queryKey: ['ai-agents', 'sales', 'config'] });
+    },
+  });
+}
+
+/**
+ * GET /ai-agents/sales/queue — real queued work (overdue/today follow-ups +
+ * pending handoffs). Backs the header's "Running · N tasks queued" badge and
+ * its click-to-expand drawer, replacing the hardcoded "12 tasks queued".
+ */
+export function useSalesAgentQueue() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['ai-agents', 'sales', 'queue'],
+    queryFn: () => call(`${AI}/sales/queue`),
+    refetchInterval: 20_000,
+  });
+}
+
+/**
+ * GET /ai-agents/sales/export — export payload for the header's Export
+ * button. Fetched on demand (button click), not on mount, so it's a
+ * mutation-shaped query rather than a useQuery.
+ */
+export function useExportSalesData() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: () => call(`${AI}/sales/export`),
+  });
+}
+
+/* ─── Forecasting & Analytics tabs ───────────────────────────────────────── */
+
+/**
+ * GET /ai-agents/sales/forecast — pipeline value by stage, weighted
+ * quarterly prediction, monthly revenue trend, and target-vs-actual gap
+ * analysis. Backs the Forecasting tab, replacing its hardcoded numbers.
+ */
+export function useSalesForecast() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['ai-agents', 'sales', 'forecast'],
+    queryFn: () => call(`${AI}/sales/forecast`),
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * GET /ai-agents/sales/analytics — MTD closed deals, avg deal size, sales
+ * cycle length, weekly deals-won, and agent productivity. Backs the
+ * Analytics tab, replacing its hardcoded metrics/charts.
+ */
+export function useSalesAnalytics() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['ai-agents', 'sales', 'analytics'],
+    queryFn: () => call(`${AI}/sales/analytics`),
+    staleTime: 30_000,
+  });
+}
+
+/* ─── Follow-up draft generation (Follow-ups tab) ────────────────────────── */
+
+/**
+ * POST /ai-agents/sales/draft-followup — { lead_id?, lead_name?, company?,
+ * stage?, score?, channel?, notes? } -> { email, whatsapp, call_script,
+ * knowledge_sources_used }. Read-only: never sends anything. Approve & Send
+ * in the UI calls useSendReply (crm.js) separately once a human signs off.
+ */
+export function useDraftFollowup() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: (body) => call(`${AI}/sales/draft-followup`, { method: 'POST', body }),
   });
 }
 

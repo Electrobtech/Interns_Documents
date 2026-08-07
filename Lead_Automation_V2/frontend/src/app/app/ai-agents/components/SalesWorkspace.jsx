@@ -1,14 +1,30 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   WorkspaceHeader, TabNav, Card, Badge, SectionTitle, Label, Value,
   KnowledgePanel, BrainLog, TaskQueue, ApprovalQueue, ConfidenceMeter,
   MetricsRow, MiniBarChart, Divider, TimelineItem, Mono,
 } from './SharedUI';
-import { ArrowRight, Mail, MessageSquare, Phone, RefreshCw } from 'lucide-react';
+import { Mail, MessageSquare, Phone, RefreshCw } from 'lucide-react';
+import FitScorerPanel from '@/components/ai-agents/sales/FitScorerPanel';
+import DealValueFieldModal from '@/components/ai-agents/sales/DealValueFieldModal';
+import ConfidenceSignalModal from '@/components/ai-agents/sales/ConfidenceSignalModal';
+import SalesQueueDrawer from '@/components/ai-agents/sales/SalesQueueDrawer';
+import SalesExportModal from '@/components/ai-agents/sales/SalesExportModal';
+import LeadDetailDrawer from '@/components/ai-agents/sales/LeadDetailDrawer';
+import { useLeads, useSendReply, useFindConversationByName } from '@/lib/queries/crm';
+import { useFollowUps, useFollowUpCounts } from '@/lib/queries/followUps';
+import {
+  useHandoffs, useUpdateHandoff, useSalesAgentRuns,
+  useSalesAgentConfig, useSalesAgentQueue, useUpdateSalesAgentConfig,
+  useKnowledgeSources, useScoreLeadFit, useSalesForecast, useSalesAnalytics,
+  useDraftFollowup,
+} from '@/lib/queries/aiAgents';
 
 const TABS = ['Overview', 'Pipeline', 'Lead Intelligence', 'Follow-ups', 'Forecasting', 'Knowledge', 'Analytics', 'Settings'];
 
+// Still used by the Knowledge tab's illustrative RAG demo. Overview pulls
+// real leads/follow-ups/handoffs/runs instead (see SalesOverview()).
 const BRAIN_LOG = [
   { time: '09:40', type: 'retrieve', text: 'Loaded 23 new leads from LinkedIn Campaign #4812 into scoring queue' },
   { time: '09:41', type: 'thinking', text: 'Analyzing firmographic signals: company size, tech stack, funding stage' },
@@ -18,229 +34,511 @@ const BRAIN_LOG = [
   { time: '09:38', type: 'action', text: 'Follow-up email drafted for 8 hot leads — awaiting approval' },
 ];
 
-const TASKS = [
-  { title: 'Score 23 new LinkedIn leads', status: 'running', priority: 'high' },
-  { title: 'Draft follow-up emails for 8 hot leads', status: 'queued' },
-  { title: 'Cold lead revival: 34 dormant Q2 contacts', status: 'queued' },
-  { title: 'Update pipeline forecast model', status: 'queued' },
-  { title: 'Sales handoff: Acme Corp — ready for AE', status: 'queued', priority: 'high' },
-];
+function timeLabel(iso) {
+  if (!iso) return '--:--';
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
-const APPROVALS = [
-  { title: 'Follow-up sequence: 8 hot leads (email + WA)', agent: 'Sales Agent', confidence: 87 },
-  { title: 'Cold Lead Revival Campaign — 34 contacts', agent: 'Sales Agent', confidence: 79 },
-];
+function dateLabel(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
 
-function SalesOverview() {
-  const leads = [
-    { label: 'Hot', count: 28, color: '#EF4444', pct: 18 },
-    { label: 'Warm', count: 71, color: '#F59E0B', pct: 45 },
-    { label: 'Cold', count: 57, color: '#94A3B8', pct: 37 },
-  ];
+const STAGE_ORDER = ['new', 'qualified', 'active', 'won', 'lost'];
+const STAGE_LABEL = { new: 'New Leads', qualified: 'Qualified', active: 'Active', won: 'Won', lost: 'Lost' };
+const STAGE_COLOR = { new: '#94A3B8', qualified: '#3B6EF0', active: '#F59E0B', won: '#10B981', lost: '#EF4444' };
+
+function tierOf(score) {
+  const s = Number(score) || 0;
+  return s >= 75 ? 'hot' : s >= 45 ? 'warm' : 'cold';
+}
+
+function SalesOverview({ onOpenDealValueModal, onOpenConfidenceModal }) {
+  const { data: leadsData, isLoading: leadsLoading } = useLeads();
+  const { data: followUpCounts } = useFollowUpCounts();
+  const { data: overdueFollowUps = [] } = useFollowUps('overdue');
+  const { data: todayFollowUps = [] } = useFollowUps('today');
+  const { data: handoffs = [] } = useHandoffs('pending');
+  const { data: recentRuns = [] } = useSalesAgentRuns();
+  const { data: salesConfig } = useSalesAgentConfig();
+  const updateHandoff = useUpdateHandoff();
+
+  const leads = leadsData || [];
+  const minHot = salesConfig?.min_hot_score ?? 75;
+
+  const { hot, warm, cold, stages, wonCount, lostCount } = useMemo(() => {
+    const hot = leads.filter((l) => Number(l.score) >= minHot);
+    const warm = leads.filter((l) => Number(l.score) >= 45 && Number(l.score) < minHot);
+    const cold = leads.filter((l) => Number(l.score) < 45);
+    const byStage = {};
+    STAGE_ORDER.forEach((s) => { byStage[s] = 0; });
+    leads.forEach((l) => { if (byStage[l.stage] !== undefined) byStage[l.stage] += 1; });
+    return {
+      hot, warm, cold, stages: byStage,
+      wonCount: byStage.won || 0, lostCount: byStage.lost || 0,
+    };
+  }, [leads, minHot]);
+
+  const totalLeads = leads.length;
+  const closedCount = wonCount + lostCount;
+  const winRate = closedCount > 0 ? Math.round((wonCount / closedCount) * 100) : null;
+  const maxStageCount = Math.max(1, ...STAGE_ORDER.map((s) => stages[s]));
+
+  const salesHandoffs = (handoffs || []).filter((h) => h.agent_type === 'sales');
+
+  const tasks = [
+    ...overdueFollowUps.map((f) => ({
+      title: `Follow up: ${f.contact_name || 'Unnamed contact'}`,
+      sub: f.notes || 'Overdue', status: 'queued', priority: 'high',
+    })),
+    ...todayFollowUps.map((f) => ({
+      title: `Follow up: ${f.contact_name || 'Unnamed contact'}`,
+      sub: f.notes || 'Due today', status: 'queued',
+    })),
+  ].slice(0, 6);
+
+  const approvals = salesHandoffs.map((h) => ({
+    id: h.id,
+    title: `${h.customer_name || 'Unnamed lead'} — human handoff requested`,
+    agent: 'Sales Agent',
+  }));
+
+  const brainLogEntries = (recentRuns || []).slice(0, 4).map((r) => ({
+    time: timeLabel(r.created_at),
+    type: 'output',
+    text: r.output?.lead_qualification_reason || r.output?.recommended_sales_action || r.brief,
+  }));
+
+  const computed = salesConfig?.computed;
+  const pipelineValueMetric = computed?.pipeline_value != null
+    ? {
+        label: 'Pipeline Value',
+        value: `$${computed.pipeline_value.toLocaleString()}`,
+        sub: computed.pipeline_value_note,
+        color: '#059669',
+      }
+    : {
+        label: 'Pipeline Value', value: '—',
+        color: '#059669',
+        cta: { label: '+ Set Up Deal Values', onClick: onOpenDealValueModal },
+      };
+
+  const aiConfidenceMetric = computed?.ai_confidence != null
+    ? {
+        label: 'AI Confidence',
+        value: `${computed.ai_confidence}%`,
+        sub: computed.ai_confidence_note,
+        color: '#0284C7',
+      }
+    : {
+        label: 'AI Confidence', value: '—',
+        color: '#0284C7',
+        cta: { label: '⚡ Wire Confidence Signal', onClick: onOpenConfidenceModal },
+      };
+
   return (
     <div className="space-y-6">
       <MetricsRow metrics={[
-        { label: "Today's Follow-ups", value: '12', sub: '4 overdue', color: '#EF4444' },
-        { label: 'Hot Leads', value: '28', sub: '+6 from AI scoring', color: '#EF4444' },
-        { label: 'Pipeline Value', value: '$1.24M', sub: 'Q4 active', color: '#059669' },
-        { label: 'AI Confidence', value: '87%', color: '#0284C7' },
-        { label: 'Win Rate', value: '34%', sub: '+4% vs last Q', color: '#10B981' },
+        {
+          label: "Today's Follow-ups",
+          value: followUpCounts ? String(followUpCounts.today) : '—',
+          sub: followUpCounts ? `${followUpCounts.overdue} overdue` : undefined,
+          color: '#EF4444',
+        },
+        {
+          label: 'Hot Leads', value: leadsLoading ? '—' : String(hot.length),
+          sub: leadsLoading ? undefined : `of ${totalLeads} total, ≥${minHot} RF score`, color: '#EF4444',
+        },
+        pipelineValueMetric,
+        aiConfidenceMetric,
+        {
+          label: 'Win Rate', value: winRate != null ? `${winRate}%` : '—',
+          sub: winRate != null ? `${wonCount} won / ${lostCount} lost` : 'no closed deals yet', color: '#10B981',
+        },
       ]} />
 
       <div className="grid grid-cols-3 gap-6">
         <Card className="p-5">
           <SectionTitle className="mb-4">Lead Distribution</SectionTitle>
-          {leads.map(l => (
+          {[
+            { label: 'Hot', count: hot.length, color: '#EF4444' },
+            { label: 'Warm', count: warm.length, color: '#F59E0B' },
+            { label: 'Cold', count: cold.length, color: '#94A3B8' },
+          ].map((l) => (
             <div key={l.label} className="mb-4">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs text-slate-600">{l.label} Leads</span>
                 <Mono color={l.color}>{l.count}</Mono>
               </div>
-              <ConfidenceMeter value={l.pct * 2} color={l.color} />
+              <ConfidenceMeter value={totalLeads ? (l.count / totalLeads) * 100 : 0} color={l.color} />
             </div>
           ))}
           <Divider className="my-3" />
-          <div className="text-xs text-slate-400">Total: 156 leads · AI scored today</div>
+          <div className="text-xs text-slate-400">
+            {leadsLoading ? 'Loading leads…' : `Total: ${totalLeads} leads · scored by the random forest model`}
+          </div>
         </Card>
 
         <Card className="p-5 col-span-2">
           <div className="flex items-center justify-between mb-4">
             <SectionTitle>Pipeline Health</SectionTitle>
-            <Badge variant="info">6 stages</Badge>
+            <Badge variant="info">{STAGE_ORDER.length} stages</Badge>
           </div>
           <div className="space-y-3">
-            {[
-              { stage: 'New Leads', count: 52, value: '$0', color: '#94A3B8' },
-              { stage: 'Qualified', count: 28, value: '$340K', color: '#3B6EF0' },
-              { stage: 'Proposal Sent', count: 14, value: '$480K', color: '#7C3AED' },
-              { stage: 'Negotiation', count: 8, value: '$290K', color: '#F59E0B' },
-              { stage: 'Won', count: 12, value: '$130K', color: '#10B981' },
-              { stage: 'Lost', count: 9, value: '—', color: '#EF4444' },
-            ].map(s => (
-              <div key={s.stage} className="flex items-center gap-4">
-                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                <span className="text-xs text-slate-600 w-28 flex-shrink-0">{s.stage}</span>
+            {STAGE_ORDER.map((s) => (
+              <div key={s} className="flex items-center gap-4">
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: STAGE_COLOR[s] }} />
+                <span className="text-xs text-slate-600 w-24 flex-shrink-0">{STAGE_LABEL[s]}</span>
                 <div className="flex-1">
                   <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${(s.count / 52) * 100}%`, background: s.color }} />
+                    <div className="h-full rounded-full" style={{ width: `${(stages[s] / maxStageCount) * 100}%`, background: STAGE_COLOR[s] }} />
                   </div>
                 </div>
-                <Mono color="#0F1929">{s.count}</Mono>
-                <span className="text-xs text-slate-400 w-16 text-right">{s.value}</span>
+                <Mono color="#0F1929">{stages[s]}</Mono>
               </div>
             ))}
+          </div>
+          <div className="text-xs text-slate-400 mt-3">
+            {computed?.pipeline_value != null
+              ? `Dollar totals reflect ${computed.leads_with_deal_value} lead(s) with a mapped deal value.`
+              : 'No deal-value field mapped yet — stage counts are real, dollar totals aren\'t shown rather than invented.'}
           </div>
         </Card>
       </div>
 
       <div className="grid grid-cols-3 gap-6">
-        <TaskQueue tasks={TASKS} />
-        <ApprovalQueue items={APPROVALS} />
-        <BrainLog entries={BRAIN_LOG.slice(0, 4)} />
+        <TaskQueue tasks={tasks} emptyLabel="No follow-ups due today or overdue." />
+        <ApprovalQueue
+          items={approvals}
+          emptyLabel="No pending sales handoffs."
+          busyId={updateHandoff.isPending ? updateHandoff.variables?.id : null}
+          onApprove={(item) => updateHandoff.mutate({ id: item.id, status: 'resolved' })}
+          onReject={(item) => updateHandoff.mutate({ id: item.id, status: 'rejected' })}
+        />
+        <BrainLog entries={brainLogEntries} />
       </div>
     </div>
   );
 }
 
-function Pipeline() {
-  const stages = [
-    { label: 'New Leads', color: '#94A3B8', bg: '#F8FAFC', leads: [{ name: 'TechFlow Inc.', contact: 'Sarah Chen, CTO', score: 72 }, { name: 'Glasswork Studio', contact: 'Marco Vega, RevOps', score: 65 }, { name: 'NorthStar Analytics', contact: 'Priya Mehta, CMO', score: 58 }] },
-    { label: 'Qualified', color: '#3B6EF0', bg: '#EEF2FF', leads: [{ name: 'Acme Corp', contact: 'James Liu, VP Sales', score: 88 }, { name: 'Prisma SaaS', contact: 'Diana Okafor, CEO', score: 82 }] },
-    { label: 'Proposal', color: '#7C3AED', bg: '#F5F3FF', leads: [{ name: 'Vertex AI Co.', contact: 'Tom Burke, Director', score: 91 }, { name: 'Bloom Markets', contact: 'Ana Santos, COO', score: 85 }] },
-    { label: 'Negotiation', color: '#F59E0B', bg: '#FFFBEB', leads: [{ name: 'FinCore Ltd.', contact: 'Alex Rand, CFO', score: 94 }] },
-    { label: 'Won', color: '#10B981', bg: '#F0FDF4', leads: [{ name: 'Cloudify Inc.', contact: 'Ben Park, CEO', score: 97 }, { name: 'DataMesh Pro', contact: 'Lena Fischer, CTO', score: 95 }] },
-  ];
+// ─── Pipeline tab — real leads, grouped by real stage, click to open the
+// Lead Detail Drawer (which is how a card's stage actually changes — Apply
+// writes PUT /leads/:id via useApplyRecommendation, same endpoint the task
+// spec's "connect card stage transitions to PUT /leads/:id/stage" calls for).
+function Pipeline({ leads, isLoading, onSelectLead }) {
+  const byStage = useMemo(() => {
+    const grouped = {};
+    STAGE_ORDER.forEach((s) => { grouped[s] = []; });
+    (leads || []).forEach((l) => {
+      const stage = STAGE_ORDER.includes(l.stage) ? l.stage : 'new';
+      grouped[stage].push(l);
+    });
+    return grouped;
+  }, [leads]);
+
+  if (isLoading) {
+    return <div className="text-xs text-slate-400 py-8 text-center">Loading pipeline…</div>;
+  }
+
   return (
     <div className="flex gap-4 overflow-x-auto pb-4">
-      {stages.map(stage => (
-        <div key={stage.label} className="flex-shrink-0 w-56">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-2 h-2 rounded-full" style={{ background: stage.color }} />
-            <span className="text-xs font-semibold text-[#0F1929]">{stage.label}</span>
-            <span className="ml-auto text-xs text-slate-400">{stage.leads.length}</span>
+      {STAGE_ORDER.map((stage) => {
+        const stageLeads = byStage[stage];
+        const color = STAGE_COLOR[stage];
+        return (
+          <div key={stage} className="flex-shrink-0 w-56">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-2 h-2 rounded-full" style={{ background: color }} />
+              <span className="text-xs font-semibold text-[#0F1929]">{STAGE_LABEL[stage]}</span>
+              <span className="ml-auto text-xs text-slate-400">{stageLeads.length}</span>
+            </div>
+            <div className="space-y-2.5">
+              {stageLeads.length === 0 && (
+                <div className="text-xs text-slate-300 text-center py-4">No leads</div>
+              )}
+              {stageLeads.map((lead) => (
+                <button
+                  key={lead.id}
+                  onClick={() => onSelectLead(lead)}
+                  className="w-full text-left p-3.5 rounded-xl border border-[#E4E8F0] bg-white hover:shadow-md transition-all hover:border-blue-100"
+                >
+                  <div className="text-xs font-semibold text-[#0F1929] mb-0.5 truncate">{lead.name || 'Unnamed lead'}</div>
+                  <div className="text-xs text-slate-400 mb-2 truncate">{lead.source || 'Source unknown'}</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1"><ConfidenceMeter value={Number(lead.score) || 0} color={color} /></div>
+                    <Mono color={color}>{lead.score ?? '—'}</Mono>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="space-y-2.5">
-            {stage.leads.map(lead => (
-              <div key={lead.name} className="p-3.5 rounded-xl border border-[#E4E8F0] bg-white hover:shadow-md transition-all cursor-default hover:border-blue-100">
-                <div className="text-xs font-semibold text-[#0F1929] mb-0.5">{lead.name}</div>
-                <div className="text-xs text-slate-400 mb-2">{lead.contact}</div>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex-1"><ConfidenceMeter value={lead.score} color={stage.color} /></div>
-                  <Mono color={stage.color}>{lead.score}</Mono>
-                </div>
-              </div>
-            ))}
-            <button className="w-full p-2 rounded-xl border border-dashed border-[#E4E8F0] text-xs text-slate-400 hover:border-blue-300 hover:text-blue-500 transition-all">+ Add lead</button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-function LeadIntelligence() {
+// ─── Lead Intelligence tab — Signal Breakdown + Lead Timeline are bound to
+// whichever lead was last clicked in Pipeline, using real useScoreLeadFit
+// output rather than a static "Acme Corp" mock.
+function LeadIntelligence({ selectedLead, onOpenDrawer }) {
+  const score = useScoreLeadFit();
+  const { data: sources } = useKnowledgeSources('sales');
+
+  useEffect(() => {
+    if (!selectedLead) return;
+    score.mutate({ org_size: 'medium', budget: 'high', channel: selectedLead.source || 'email' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLead?.id]);
+
+  const out = score.data;
+  const tier = selectedLead ? tierOf(selectedLead.score) : null;
+  const tierVariant = tier === 'hot' ? 'error' : tier === 'warm' ? 'warning' : 'default';
+
   return (
     <div className="grid grid-cols-3 gap-6">
       <div className="col-span-2 space-y-5">
-        <Card className="p-6">
-          <div className="flex items-start justify-between mb-5">
-            <div>
-              <div className="text-xs text-slate-400 mb-1">Analyzing Lead</div>
-              <div className="text-xl font-bold text-[#0F1929]" style={{ fontFamily: "'Outfit', sans-serif" }}>Acme Corp</div>
-              <div className="text-sm text-slate-500">James Liu · VP Sales · 340 employees · Series B</div>
-            </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold text-blue-600" style={{ fontFamily: "'Outfit', sans-serif" }}>88</div>
-              <div className="text-xs text-slate-400">Lead Score</div>
-              <Badge variant="error">Hot</Badge>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-5">
-            {[
-              { label: 'Buying Intent', value: 'Very High', detail: 'Visited pricing 4× this week', color: '#EF4444' },
-              { label: 'Qualification', value: 'Qualified', detail: 'Meets ICP: B2B SaaS, 200+ employees', color: '#10B981' },
-              { label: 'Opportunity Stage', value: 'Proposal', detail: 'Demo completed on Aug 1, 2026', color: '#7C3AED' },
-              { label: 'Recommended Action', value: 'Send Proposal', detail: 'Optimal window: next 48 hours', color: '#3B6EF0' },
-            ].map(f => (
-              <div key={f.label} className="p-4 rounded-xl bg-slate-50">
-                <Label>{f.label}</Label>
-                <div className="text-sm font-bold" style={{ color: f.color }}>{f.value}</div>
-                <div className="text-xs text-slate-400 mt-1">{f.detail}</div>
-              </div>
-            ))}
-          </div>
-          <div>
-            <SectionTitle className="mb-3">AI Reasoning — Why This Lead Is Ready</SectionTitle>
-            <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
-              <p className="text-xs text-blue-800 leading-relaxed">Acme Corp has visited the pricing page 4 times in the last 7 days and downloaded the ROI calculator twice. Their CRM profile shows budget authority ($50K+ deal size typical for their segment), and they recently hired a new RevOps director — a strong buying signal. Their Q3 earnings call mentioned "automating top-of-funnel" as a priority. I recommend assigning to an Account Executive within 24 hours.</p>
-            </div>
-          </div>
-        </Card>
+        <div>
+          <SectionTitle className="mb-3">Live Fit Scorer · Random Forest</SectionTitle>
+          <FitScorerPanel />
+        </div>
 
-        <Card className="p-5">
-          <SectionTitle className="mb-4">Lead Timeline</SectionTitle>
-          <TimelineItem title="First website visit" sub="Pricing page · 12 min session" time="Jul 26" />
-          <TimelineItem title="Email opened (outbound seq. #3)" sub="Clicked: 'See pricing' CTA" time="Jul 28" />
-          <TimelineItem title="Demo scheduled & completed" sub="45 min · attended by CTO + VP Sales" time="Aug 1" />
-          <TimelineItem title="Pricing page revisited (4×)" sub="ROI calculator downloaded" time="Aug 2" />
-          <TimelineItem title="AI Lead Score updated: 88 (Hot)" sub="Assigned to AE queue" time="Aug 3" last />
-        </Card>
+        {!selectedLead ? (
+          <Card className="p-6 text-center text-xs text-slate-400">
+            Select a lead from the Pipeline tab to see its real AI analysis here.
+          </Card>
+        ) : (
+          <>
+            <Card className="p-6">
+              <div className="flex items-start justify-between mb-5">
+                <div>
+                  <div className="text-xs text-slate-400 mb-1">Analyzing Lead</div>
+                  <div className="text-xl font-bold text-[#0F1929]" style={{ fontFamily: "'Outfit', sans-serif" }}>
+                    {selectedLead.name || 'Unnamed lead'}
+                  </div>
+                  <div className="text-sm text-slate-500">
+                    {selectedLead.source || 'Source unknown'} · Created {dateLabel(selectedLead.created_at)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-3xl font-bold text-blue-600" style={{ fontFamily: "'Outfit', sans-serif" }}>
+                    {selectedLead.score ?? '—'}
+                  </div>
+                  <div className="text-xs text-slate-400">Lead Score (CRM)</div>
+                  <Badge variant={tierVariant}>{tier}</Badge>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mb-5">
+                {(out?.factors || []).map((f) => (
+                  <div key={f.label} className="p-4 rounded-xl bg-slate-50">
+                    <Label>{f.label}</Label>
+                    <div className="text-sm font-bold text-[#0F1929]">{f.value}</div>
+                    <div className="text-xs text-slate-400 mt-1">{f.points} of {f.max} pts · model weight {Math.round((f.model_weight || 0) * 100)}%</div>
+                  </div>
+                ))}
+                <div className="p-4 rounded-xl bg-slate-50">
+                  <Label>Recommended Action</Label>
+                  <div className="text-sm font-bold text-blue-600">{out?.recommended_action || (score.isPending ? 'Scoring…' : '—')}</div>
+                  <div className="text-xs text-slate-400 mt-1">Current stage: {selectedLead.stage || 'new'}</div>
+                </div>
+              </div>
+              <div>
+                <SectionTitle className="mb-3">AI Reasoning</SectionTitle>
+                <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
+                  <p className="text-xs text-blue-800 leading-relaxed">
+                    {out?.tier_reason || 'Scoring this lead against the random forest model…'}
+                  </p>
+                </div>
+                <button
+                  onClick={onOpenDrawer}
+                  className="mt-3 text-xs font-medium text-blue-600 hover:underline"
+                >
+                  Adjust signals & apply to CRM →
+                </button>
+              </div>
+            </Card>
+
+            <Card className="p-5">
+              <SectionTitle className="mb-4">Lead Timeline</SectionTitle>
+              <TimelineItem
+                title="Lead created"
+                sub={selectedLead.source ? `Source: ${selectedLead.source}` : undefined}
+                time={dateLabel(selectedLead.created_at)}
+              />
+              <TimelineItem
+                title={`Currently in "${selectedLead.stage || 'new'}" stage`}
+                sub={`CRM score: ${selectedLead.score ?? '—'}`}
+                time={dateLabel(selectedLead.updated_at || selectedLead.created_at)}
+              />
+              <TimelineItem
+                title="AI fit score computed"
+                sub={out ? `${out.score}/100 · ${out.tier} tier (random forest)` : 'Scoring…'}
+                time="just now"
+                last
+              />
+            </Card>
+          </>
+        )}
       </div>
 
       <div className="space-y-5">
         <Card className="p-5">
           <SectionTitle className="mb-4">Signal Breakdown</SectionTitle>
-          <div className="space-y-3">
-            {[
-              { label: 'Web Engagement', score: 94 },
-              { label: 'Email Interaction', score: 78 },
-              { label: 'Firmographic Fit', score: 88 },
-              { label: 'Budget Signals', score: 82 },
-              { label: 'Timing Urgency', score: 91 },
-            ].map(s => (
-              <div key={s.label}>
-                <div className="flex items-center justify-between mb-1">
-                  <Label>{s.label}</Label>
-                  <Mono color="#0284C7">{s.score}</Mono>
+          {selectedLead && out?.factors?.length ? (
+            <div className="space-y-3">
+              {out.factors.map((f) => (
+                <div key={f.label}>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label>{f.label}</Label>
+                    <Mono color="#0284C7">{f.points}</Mono>
+                  </div>
+                  <ConfidenceMeter value={(f.points / (f.max || 100)) * 100} color="#0284C7" />
                 </div>
-                <ConfidenceMeter value={s.score} color="#0284C7" />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400">Select a lead to see its real fit-model signal breakdown.</p>
+          )}
         </Card>
-        <KnowledgePanel />
+        <KnowledgePanel sources={sources} />
       </div>
     </div>
   );
 }
 
-function Followups() {
+// ─── Follow-ups tab — real drafts per lead via POST /sales/draft-followup,
+// with Edit (local override before send) and Approve & Send (dispatches via
+// the existing POST /conversations/:id/reply).
+const DRAFT_META = {
+  email: { icon: <Mail size={16} />, label: 'Email Draft', color: '#3B6EF0', bg: '#EEF2FF' },
+  whatsapp: { icon: <MessageSquare size={16} />, label: 'WhatsApp Draft', color: '#25D366', bg: '#F0FFF4' },
+  call_script: { icon: <Phone size={16} />, label: 'Call Script', color: '#7C3AED', bg: '#F5F3FF' },
+};
+
+function DraftCard({ kind, draft, leadName, onRegenerate, regenerating, onSend, sendState }) {
+  const meta = DRAFT_META[kind];
+  const [editing, setEditing] = useState(false);
+  const [body, setBody] = useState(draft?.body || '');
+
+  useEffect(() => { setBody(draft?.body || ''); }, [draft?.body]);
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: meta.bg, color: meta.color }}>{meta.icon}</div>
+          <SectionTitle>{meta.label}</SectionTitle>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onRegenerate}
+            disabled={regenerating}
+            className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 disabled:opacity-50"
+          >
+            <RefreshCw size={11} className={regenerating ? 'animate-spin' : ''} /> Regenerate
+          </button>
+          <Badge variant="warning">Draft</Badge>
+        </div>
+      </div>
+      {draft?.subject && <div className="text-xs font-medium text-slate-500 mb-2">{draft.subject}</div>}
+      {editing ? (
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          rows={6}
+          className="w-full p-4 bg-slate-50 rounded-xl text-xs text-slate-600 leading-relaxed border border-[#E4E8F0] focus:outline-none focus:border-blue-300"
+        />
+      ) : (
+        <div className="p-4 bg-slate-50 rounded-xl text-xs text-slate-600 leading-relaxed whitespace-pre-line min-h-[4rem]">
+          {body || (regenerating ? 'Generating…' : 'No draft yet — click Regenerate.')}
+        </div>
+      )}
+      <div className="flex items-center gap-2 mt-3">
+        <button
+          onClick={() => setEditing((v) => !v)}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#E4E8F0] text-slate-500 hover:bg-slate-50 transition-all"
+        >
+          {editing ? 'Done editing' : 'Edit'}
+        </button>
+        <button
+          onClick={() => onSend(body)}
+          disabled={!body.trim() || sendState?.isPending}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg text-white transition-all hover:opacity-90 disabled:opacity-50"
+          style={{ background: meta.color }}
+        >
+          {sendState?.isPending ? 'Sending…' : sendState?.sent ? 'Sent ✓' : 'Approve & Send'}
+        </button>
+      </div>
+      {sendState?.error && <div className="text-xs text-red-500 mt-2">{sendState.error}</div>}
+    </Card>
+  );
+}
+
+function Followups({ leads, selectedLead, onSelectLead }) {
+  const draftMutation = useDraftFollowup();
+  const findConversation = useFindConversationByName();
+  const sendReply = useSendReply();
+  const [drafts, setDrafts] = useState(null);
+  const [sendStateByKind, setSendStateByKind] = useState({});
+
+  const lead = selectedLead || (leads || [])[0] || null;
+
+  const generate = () => {
+    if (!lead) return;
+    draftMutation.mutate(
+      { lead_id: lead.id, lead_name: lead.name, stage: lead.stage, score: lead.score, channel: lead.source },
+      { onSuccess: (data) => setDrafts(data) },
+    );
+  };
+
+  useEffect(() => {
+    setDrafts(null);
+    setSendStateByKind({});
+    if (lead) generate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?.id]);
+
+  const sendDraft = async (kind, body) => {
+    setSendStateByKind((s) => ({ ...s, [kind]: { isPending: true } }));
+    try {
+      const match = await findConversation.mutateAsync(lead?.name || '');
+      if (!match) {
+        setSendStateByKind((s) => ({ ...s, [kind]: { isPending: false, error: 'No matching conversation found for this lead yet.' } }));
+        return;
+      }
+      await sendReply.mutateAsync({ conversationId: match.id, body });
+      setSendStateByKind((s) => ({ ...s, [kind]: { isPending: false, sent: true } }));
+    } catch (e) {
+      setSendStateByKind((s) => ({ ...s, [kind]: { isPending: false, error: e?.message || 'Send failed' } }));
+    }
+  };
+
   return (
     <div className="grid grid-cols-3 gap-6">
       <div className="col-span-2 space-y-5">
-        {[
-          { icon: <Mail size={16} />, label: 'Email Draft', color: '#3B6EF0', bg: '#EEF2FF', subject: 'Following up on your Orbq demo, James', body: "Hi James,\n\nThanks for joining the demo on Aug 1. Based on what you shared about your team's goals around automating lead qualification, I think Orbq could deliver significant ROI within the first 60 days.\n\nI've put together a custom proposal tailored to Acme Corp's RevOps use case — happy to walk you through it on a 20-min call.\n\nAre you available Thursday or Friday this week?\n\nBest,\nSarah from Orbq" },
-          { icon: <MessageSquare size={16} />, label: 'WhatsApp Draft', color: '#25D366', bg: '#F0FFF4', subject: 'WhatsApp message · James Liu', body: "Hi James! 👋 This is Sarah from Orbq. Just following up on our demo from last week. I've put together a proposal for Acme Corp — mind if I send it over? Happy to answer any questions on a quick call too." },
-          { icon: <Phone size={16} />, label: 'Call Script', color: '#7C3AED', bg: '#F5F3FF', subject: 'Call prep · Acme Corp · James Liu', body: "Opening: Confirm they saw the demo recording.\nCore message: Orbq reduces lead qualification time by 70%.\nObjection handling: 'We already have HubSpot' → Orbq integrates natively, adds AI on top.\nClose: Propose a 2-week pilot at no cost.\nTalk time target: 12 minutes." },
-        ].map(draft => (
-          <Card key={draft.label} className="p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: draft.bg, color: draft.color }}>{draft.icon}</div>
-                <SectionTitle>{draft.label}</SectionTitle>
-              </div>
-              <div className="flex items-center gap-2">
-                <button className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"><RefreshCw size={11} /> Regenerate</button>
-                <Badge variant="warning">Draft</Badge>
-              </div>
-            </div>
-            <div className="text-xs font-medium text-slate-500 mb-2">{draft.subject}</div>
-            <div className="p-4 bg-slate-50 rounded-xl text-xs text-slate-600 leading-relaxed whitespace-pre-line">{draft.body}</div>
-            <div className="flex items-center gap-2 mt-3">
-              <button className="px-3 py-1.5 text-xs font-medium rounded-lg border border-[#E4E8F0] text-slate-500 hover:bg-slate-50 transition-all">Edit</button>
-              <button className="px-3 py-1.5 text-xs font-medium rounded-lg text-white transition-all hover:opacity-90" style={{ background: draft.color }}>Approve & Send</button>
-            </div>
-          </Card>
+        <Card className="p-4 flex items-center gap-3">
+          <Label>Drafting for</Label>
+          <select
+            value={lead?.id || ''}
+            onChange={(e) => onSelectLead((leads || []).find((l) => String(l.id) === e.target.value) || null)}
+            className="flex-1 text-xs font-medium text-slate-700 bg-slate-50 border border-[#E4E8F0] rounded-lg px-3 py-1.5"
+          >
+            {(leads || []).map((l) => (
+              <option key={l.id} value={l.id}>{l.name || 'Unnamed lead'} · {l.stage || 'new'}</option>
+            ))}
+          </select>
+        </Card>
+        {['email', 'whatsapp', 'call_script'].map((kind) => (
+          <DraftCard
+            key={kind}
+            kind={kind}
+            draft={drafts?.[kind]}
+            leadName={lead?.name}
+            regenerating={draftMutation.isPending}
+            onRegenerate={generate}
+            onSend={(body) => sendDraft(kind, body)}
+            sendState={sendStateByKind[kind]}
+          />
         ))}
       </div>
       <div className="space-y-5">
@@ -248,11 +546,11 @@ function Followups() {
           <SectionTitle className="mb-3">AI Suggestions</SectionTitle>
           <div className="space-y-2.5">
             {[
-              { label: 'Best send time', value: 'Tue 9–10am CET' },
-              { label: 'Subject line A/B', value: 'Test 3 variants' },
-              { label: 'Follow-up cadence', value: 'Day 1, 3, 7' },
-              { label: 'Meeting suggestion', value: 'Thu Aug 7, 10am' },
-            ].map(s => (
+              { label: 'Best send time', value: 'Tue 9–10am' },
+              { label: 'Knowledge sources used', value: String(drafts?.knowledge_sources_used?.length ?? 0) },
+              { label: 'Drafting for', value: lead?.name || '—' },
+              { label: 'Channel', value: lead?.source || '—' },
+            ].map((s) => (
               <div key={s.label} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
                 <Label>{s.label}</Label>
                 <Value className="text-xs">{s.value}</Value>
@@ -260,45 +558,49 @@ function Followups() {
             ))}
           </div>
         </Card>
-        <TaskQueue tasks={TASKS} />
       </div>
     </div>
   );
 }
 
-function Forecasting() {
-  const monthlyData = [
-    { label: 'Aug', value: 42 }, { label: 'Sep', value: 61 }, { label: 'Oct', value: 78 },
-    { label: 'Nov', value: 94 }, { label: 'Dec', value: 112 },
-  ];
+// ─── Forecasting tab — real pipeline-by-stage, monthly revenue trend, and
+// target-vs-actual gap analysis from GET /ai-agents/sales/forecast.
+function Forecasting({ onOpenDealValueModal, onOpenTargetModal }) {
+  const { data, isLoading } = useSalesForecast();
+
+  if (isLoading || !data) {
+    return <div className="text-xs text-slate-400 py-8 text-center">Loading forecast…</div>;
+  }
+
+  const gap = data.revenue_gap;
+  const targetMetric = gap.target != null
+    ? { label: 'Monthly Revenue Target', value: `$${gap.target.toLocaleString()}`, color: '#0284C7' }
+    : { label: 'Monthly Revenue Target', value: '—', color: '#0284C7', cta: { label: '+ Set Target', onClick: onOpenTargetModal } };
+
   return (
     <div className="space-y-6">
       <MetricsRow metrics={[
-        { label: 'Monthly Revenue Target', value: '$120K', color: '#0284C7' },
-        { label: 'Quarterly Prediction', value: '$340K', sub: 'AI forecast', color: '#7C3AED' },
-        { label: 'Pipeline Value', value: '$1.24M', color: '#059669' },
-        { label: 'Avg Win Probability', value: '34%', color: '#F59E0B' },
-        { label: 'Forecast Confidence', value: '82%', color: '#10B981' },
+        targetMetric,
+        { label: 'Quarterly Prediction', value: data.quarterly_prediction != null ? `$${data.quarterly_prediction.toLocaleString()}` : '—', sub: 'AI-weighted, open pipeline', color: '#7C3AED' },
+        { label: 'Weighted Pipeline Value', value: data.weighted_pipeline_value != null ? `$${data.weighted_pipeline_value.toLocaleString()}` : '—', color: '#059669',
+          ...(data.weighted_pipeline_value == null ? { cta: { label: '+ Set Up Deal Values', onClick: onOpenDealValueModal } } : {}) },
+        { label: 'Revenue Gap (MTD)', value: gap.gap != null ? `${gap.gap >= 0 ? '-' : '+'}$${Math.abs(gap.gap).toLocaleString()}` : '—',
+          sub: gap.note, color: gap.gap != null && gap.gap <= 0 ? '#10B981' : '#F59E0B' },
       ]} />
       <div className="grid grid-cols-2 gap-6">
         <Card className="p-5">
-          <SectionTitle className="mb-4">Revenue Forecast (Monthly)</SectionTitle>
-          <MiniBarChart data={monthlyData} color="#0284C7" />
+          <SectionTitle className="mb-4">Revenue Closed (Monthly)</SectionTitle>
+          <MiniBarChart data={data.monthly_revenue.map((m) => ({ label: m.label, value: m.closed_value || 0.0001 }))} color="#0284C7" />
         </Card>
         <Card className="p-5">
           <SectionTitle className="mb-4">Pipeline by Stage · Value</SectionTitle>
           <div className="space-y-3">
-            {[
-              { stage: 'Qualified', value: '$340K', prob: 30 },
-              { stage: 'Proposal', value: '$480K', prob: 60 },
-              { stage: 'Negotiation', value: '$290K', prob: 75 },
-              { stage: 'Committed', value: '$130K', prob: 90 },
-            ].map(s => (
+            {data.pipeline_by_stage.filter((s) => s.stage !== 'lost').map((s) => (
               <div key={s.stage} className="flex items-center gap-4">
-                <span className="text-xs text-slate-600 w-24 flex-shrink-0">{s.stage}</span>
-                <div className="flex-1"><ConfidenceMeter value={s.prob} color="#0284C7" /></div>
-                <Mono color="#0F1929">{s.value}</Mono>
-                <span className="text-xs text-slate-400 w-8">{s.prob}%</span>
+                <span className="text-xs text-slate-600 w-20 flex-shrink-0">{s.label}</span>
+                <div className="flex-1"><ConfidenceMeter value={s.win_probability * 100} color="#0284C7" /></div>
+                <Mono color="#0F1929">{s.value != null ? `$${s.value.toLocaleString()}` : `${s.count} leads`}</Mono>
+                <span className="text-xs text-slate-400 w-10">{Math.round(s.win_probability * 100)}%</span>
               </div>
             ))}
           </div>
@@ -307,44 +609,43 @@ function Forecasting() {
       <Card className="p-5">
         <SectionTitle className="mb-4">AI Forecast Explanation</SectionTitle>
         <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
-          <p className="text-xs text-blue-800 leading-relaxed">Based on current pipeline velocity, win rates by stage, and seasonal patterns from Q4 2024–2025, the AI forecasts $340K in Q4 revenue. Key drivers: 8 active negotiations totaling $290K (75% close probability), strong intent signals from 14 hot leads in proposal stage. Risk: 2 enterprise deals with long legal review cycles may slip to Q1 2027. Recommendation: accelerate Acme Corp and FinCore proposals this week.</p>
+          <p className="text-xs text-blue-800 leading-relaxed">{data.explanation}</p>
         </div>
       </Card>
     </div>
   );
 }
 
+// ─── Analytics tab — real MTD/avg-deal/cycle/productivity from
+// GET /ai-agents/sales/analytics.
 function SalesAnalytics() {
-  const weeklyDeals = [
-    { label: 'W35', value: 5 }, { label: 'W36', value: 8 }, { label: 'W37', value: 6 },
-    { label: 'W38', value: 11 }, { label: 'W39', value: 14 }, { label: 'W40', value: 12 },
-  ];
+  const { data, isLoading } = useSalesAnalytics();
+
+  if (isLoading || !data) {
+    return <div className="text-xs text-slate-400 py-8 text-center">Loading analytics…</div>;
+  }
+
   return (
     <div className="space-y-6">
       <MetricsRow metrics={[
-        { label: 'Deals Closed MTD', value: '12', sub: '+4 vs last month', color: '#10B981' },
-        { label: 'Avg Deal Size', value: '$38K', sub: '+12%', color: '#0284C7' },
-        { label: 'Sales Cycle', value: '32 days', sub: '−5 days', color: '#7C3AED' },
-        { label: 'AI Resolutions', value: '74%', sub: 'No-touch closes', color: '#059669' },
+        { label: 'Deals Closed MTD', value: String(data.deals_closed_mtd), sub: data.deals_closed_mtd_delta != null ? `${data.deals_closed_mtd_delta >= 0 ? '+' : ''}${data.deals_closed_mtd_delta} vs last month` : undefined, color: '#10B981' },
+        { label: 'Avg Deal Size', value: data.avg_deal_size != null ? `$${data.avg_deal_size.toLocaleString()}` : '—', sub: data.avg_deal_size_note, color: '#0284C7' },
+        { label: 'Sales Cycle', value: data.sales_cycle_days != null ? `${Math.round(data.sales_cycle_days)} days` : '—', sub: data.sales_cycle_note, color: '#7C3AED' },
+        { label: 'AI Resolutions', value: data.ai_resolution_rate != null ? `${data.ai_resolution_rate}%` : '—', sub: 'No-touch closes', color: '#059669' },
       ]} />
       <div className="grid grid-cols-2 gap-6">
         <Card className="p-5">
           <SectionTitle className="mb-4">Deals Won Weekly</SectionTitle>
-          <MiniBarChart data={weeklyDeals} color="#0284C7" />
+          <MiniBarChart data={data.weekly_deals_won.map((w) => ({ label: w.label, value: w.count || 0.0001 }))} color="#0284C7" />
         </Card>
         <Card className="p-5">
           <SectionTitle className="mb-4">Agent Productivity</SectionTitle>
           <div className="space-y-3">
-            {[
-              { name: 'Lead Scoring', calls: 156, color: '#3B6EF0' },
-              { name: 'Follow-up Generation', calls: 47, color: '#7C3AED' },
-              { name: 'Cold Lead Revival', calls: 34, color: '#F59E0B' },
-              { name: 'Sales Handoffs', calls: 12, color: '#10B981' },
-            ].map(a => (
+            {data.agent_productivity.map((a, i) => (
               <div key={a.name} className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: a.color }} />
+                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: ['#3B6EF0', '#7C3AED', '#10B981', '#F59E0B'][i % 4] }} />
                 <span className="text-xs text-slate-600 flex-1">{a.name}</span>
-                <Mono color="#0F1929">{a.calls}</Mono>
+                <Mono color="#0F1929">{a.count}</Mono>
                 <span className="text-xs text-slate-400">tasks</span>
               </div>
             ))}
@@ -355,67 +656,173 @@ function SalesAnalytics() {
   );
 }
 
+// ─── Settings tab — real config from GET/PATCH /ai-agents/sales/config.
+function Toggle({ value, onChange }) {
+  return (
+    <div
+      onClick={onChange}
+      role="switch"
+      aria-checked={value}
+      className={`w-9 h-5 rounded-full relative cursor-pointer transition-colors ${value ? 'bg-blue-500' : 'bg-slate-200'}`}
+    >
+      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${value ? 'left-4' : 'left-0.5'}`} />
+    </div>
+  );
+}
+
 function SalesSettings() {
+  const { data: config, isLoading } = useSalesAgentConfig();
+  const update = useUpdateSalesAgentConfig();
+
+  const patch = (body) => update.mutate(body);
+
+  if (isLoading || !config) {
+    return <div className="text-xs text-slate-400 py-8 text-center">Loading settings…</div>;
+  }
+
+  const cadenceLabel = (config.followup_cadence_days || []).length
+    ? `Day ${config.followup_cadence_days.join(', ')}`
+    : 'None set';
+
   return (
     <div className="max-w-2xl space-y-5">
-      {[
-        { title: 'Lead Scoring', fields: [
-          { label: 'Minimum score for "Hot" classification', type: 'select', value: '80/100' },
-          { label: 'Include intent signals in scoring', type: 'toggle', value: true },
-          { label: 'Auto-route hot leads to AE queue', type: 'toggle', value: true },
-        ]},
-        { title: 'Follow-up Automation', fields: [
-          { label: 'Max follow-up attempts before cold', type: 'select', value: '5 touches' },
-          { label: 'Require approval before sending', type: 'toggle', value: true },
-          { label: 'Follow-up cadence', type: 'select', value: 'Day 1, 3, 7, 14' },
-        ]},
-      ].map(section => (
-        <Card key={section.title} className="p-5">
-          <SectionTitle className="mb-4">{section.title}</SectionTitle>
-          <div className="space-y-3.5">
-            {section.fields.map(f => (
-              <div key={f.label} className="flex items-center justify-between">
-                <span className="text-sm text-slate-600">{f.label}</span>
-                {f.type === 'toggle' ? (
-                  <div className={`w-9 h-5 rounded-full relative cursor-pointer transition-colors ${f.value ? 'bg-blue-500' : 'bg-slate-200'}`}>
-                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${f.value ? 'left-4' : 'left-0.5'}`} />
-                  </div>
-                ) : (
-                  <div className="px-3 py-1.5 bg-slate-50 rounded-lg text-xs text-slate-600 border border-[#E4E8F0]">{f.value}</div>
-                )}
-              </div>
-            ))}
+      <Card className="p-5">
+        <SectionTitle className="mb-4">Lead Scoring</SectionTitle>
+        <div className="space-y-3.5">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-600">Minimum score for &quot;Hot&quot; classification</span>
+            <select
+              value={config.min_hot_score}
+              onChange={(e) => patch({ min_hot_score: Number(e.target.value) })}
+              className="px-3 py-1.5 bg-slate-50 rounded-lg text-xs text-slate-600 border border-[#E4E8F0]"
+            >
+              {[60, 65, 70, 75, 80, 85, 90].map((v) => <option key={v} value={v}>{v}/100</option>)}
+            </select>
           </div>
-        </Card>
-      ))}
+        </div>
+      </Card>
+      <Card className="p-5">
+        <SectionTitle className="mb-4">Follow-up Automation</SectionTitle>
+        <div className="space-y-3.5">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-600">Max follow-up attempts before cold</span>
+            <select
+              value={config.max_followup_attempts}
+              onChange={(e) => patch({ max_followup_attempts: Number(e.target.value) })}
+              className="px-3 py-1.5 bg-slate-50 rounded-lg text-xs text-slate-600 border border-[#E4E8F0]"
+            >
+              {[1, 2, 3, 4, 5, 6, 8, 10].map((v) => <option key={v} value={v}>{v} touches</option>)}
+            </select>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-600">Require approval before sending</span>
+            <Toggle value={config.require_approval} onChange={() => patch({ require_approval: !config.require_approval })} />
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-600">Follow-up cadence</span>
+            <div className="px-3 py-1.5 bg-slate-50 rounded-lg text-xs text-slate-600 border border-[#E4E8F0]">{cadenceLabel}</div>
+          </div>
+        </div>
+      </Card>
+      {update.isError && (
+        <div className="text-xs text-red-500">Couldn&apos;t save: {update.error?.message}</div>
+      )}
     </div>
   );
 }
 
 export default function SalesWorkspace() {
   const [tab, setTab] = useState('Overview');
+  const [showDealValueModal, setShowDealValueModal] = useState(false);
+  const [showConfidenceModal, setShowConfidenceModal] = useState(false);
+  const [showQueueDrawer, setShowQueueDrawer] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [drawerLead, setDrawerLead] = useState(null);
+  const [selectedLead, setSelectedLead] = useState(null);
+
+  const { data: salesConfig } = useSalesAgentConfig();
+  const { data: queue } = useSalesAgentQueue();
+  const { data: leadsData, isLoading: leadsLoading } = useLeads();
+  const leads = leadsData || [];
+
+  const badge = queue
+    ? `Running · ${queue.total} task${queue.total === 1 ? '' : 's'} queued`
+    : 'Running · tasks queued';
+
+  const confidence = salesConfig?.computed?.ai_confidence ?? '—';
+
+  const selectLeadFromPipeline = (lead) => {
+    setSelectedLead(lead);
+    setDrawerLead(lead);
+  };
+
   return (
     <div className="min-h-screen">
-      <WorkspaceHeader name="Sales Agent" icon="📈" badge="Running · 12 tasks queued" confidence={87}
-        color="#0284C7" bgColor="#F0F9FF" description="Lead scoring, pipeline intelligence, follow-up automation, and revenue forecasting" />
+      <WorkspaceHeader name="Sales Agent" icon="📈" badge={badge} confidence={confidence}
+        color="#0284C7" bgColor="#F0F9FF" description="Lead scoring, pipeline intelligence, follow-up automation, and revenue forecasting"
+        onExport={() => setShowExportModal(true)}
+        onBadgeClick={() => setShowQueueDrawer(true)}
+        onSettingsClick={() => setTab('Settings')}
+      />
       <div className="px-8">
         <TabNav tabs={TABS} active={tab} onChange={setTab} />
       </div>
       <div className="px-8 pb-8 mt-6">
-        {tab === 'Overview' && <SalesOverview />}
-        {tab === 'Pipeline' && <Pipeline />}
-        {tab === 'Lead Intelligence' && <LeadIntelligence />}
-        {tab === 'Follow-ups' && <Followups />}
-        {tab === 'Forecasting' && <Forecasting />}
+        {tab === 'Overview' && (
+          <SalesOverview
+            onOpenDealValueModal={() => setShowDealValueModal(true)}
+            onOpenConfidenceModal={() => setShowConfidenceModal(true)}
+          />
+        )}
+        {tab === 'Pipeline' && (
+          <Pipeline leads={leads} isLoading={leadsLoading} onSelectLead={selectLeadFromPipeline} />
+        )}
+        {tab === 'Lead Intelligence' && (
+          <LeadIntelligence selectedLead={selectedLead} onOpenDrawer={() => setDrawerLead(selectedLead)} />
+        )}
+        {tab === 'Follow-ups' && (
+          <Followups leads={leads} selectedLead={selectedLead} onSelectLead={setSelectedLead} />
+        )}
+        {tab === 'Forecasting' && (
+          <Forecasting
+            onOpenDealValueModal={() => setShowDealValueModal(true)}
+            onOpenTargetModal={() => setTab('Settings')}
+          />
+        )}
         {tab === 'Knowledge' && (
-          <div className="grid grid-cols-3 gap-6">
-            <KnowledgePanel />
-            <div className="col-span-2"><BrainLog entries={BRAIN_LOG} /></div>
-          </div>
+          <KnowledgeTab />
         )}
         {tab === 'Analytics' && <SalesAnalytics />}
         {tab === 'Settings' && <SalesSettings />}
       </div>
+
+      {showDealValueModal && (
+        <DealValueFieldModal config={salesConfig} onClose={() => setShowDealValueModal(false)} />
+      )}
+      {showConfidenceModal && (
+        <ConfidenceSignalModal config={salesConfig} onClose={() => setShowConfidenceModal(false)} />
+      )}
+      {showQueueDrawer && <SalesQueueDrawer onClose={() => setShowQueueDrawer(false)} />}
+      {showExportModal && <SalesExportModal onClose={() => setShowExportModal(false)} />}
+      {drawerLead && (
+        <LeadDetailDrawer
+          lead={drawerLead}
+          onClose={() => setDrawerLead(null)}
+          onApplied={() => setDrawerLead(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Split out so the Knowledge tab's data fetch doesn't run on every render of
+// the whole workspace — only when that tab is actually mounted.
+function KnowledgeTab() {
+  const { data: sources, isLoading } = useKnowledgeSources('sales');
+  return (
+    <div className="grid grid-cols-3 gap-6">
+      <KnowledgePanel sources={isLoading ? undefined : sources} />
+      <div className="col-span-2"><BrainLog entries={BRAIN_LOG} /></div>
     </div>
   );
 }

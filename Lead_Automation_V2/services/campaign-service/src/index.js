@@ -1,419 +1,187 @@
-require('dotenv').config();
-
-const path = require('path');
 const express = require('express');
-const productRoutes = require('./products');
-const templateRoutes = require('./templates');
-const templateMediaRoutes = require('./templateMedia');
 const cors = require('cors');
 const { pool, authenticate, requirePermission, logAudit } = require('@lead/shared');
-const { enqueueBroadcast } = require('./services/bulkCampaignQueue');
-const { startBulkCampaignWorker } = require('./services/bulkCampaignWorker');
-const whatsappBilling = require('./whatsappBilling');
+const importRoutes = require('./importRoutes');
+const followUpRoutes = require('./followUpRoutes');
 
 const app = express();
 app.use(cors());
-
-// Serves the header images/videos/documents templateMedia.js writes to
-// public/uploads/templates — the URL it hands back
-// (`${CAMPAIGN_PUBLIC_URL}/uploads/templates/<file>`) only resolves once
-// this is mounted. Ahead of authenticate(): the WhatsApp live preview (and,
-// later, Meta fetching the header media for template submission) needs to
-// load these unauthenticated, same as any other public asset URL.
-app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
-
 app.use(express.json());
 app.use(authenticate);
 
-const canWrite = requirePermission('campaigns:write');
-const canSend = requirePermission('campaigns:send');
+const canWrite = requirePermission('contacts:write');
+const canDelete = requirePermission('contacts:delete');
 
-// FIX: Express 4 (this app uses ^4.19.2) does NOT automatically catch a
-// rejected promise thrown inside an `async (req, res) => {...}` route
-// handler — it becomes an unhandled promise rejection at the process level,
-// and Node 20 terminates the whole process on those by default. That's
-// exactly what happened here: a DB error in GET /campaigns/:id/recipients
-// (missing "rendered_message" column) crashed the entire campaign-service
-// container instead of just 500-ing that one request. Wrapping every async
-// route in this forwards the error to next(err) -> the error-handling
-// middleware at the bottom instead, so one bad request/query can never take
-// the whole service down again.
-const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+app.get('/health', (_req, res) => res.json({ service: 'contact', ok: true }));
 
-// jsonb columns accept either a JSON string (from a textarea) or a JS object.
-const asJson = (v) => (v == null || v === '' ? null : typeof v === 'string' ? v : JSON.stringify(v));
+// CSV/XLSX import. Mounted before the /contacts/:id routes below so
+// /contacts/import is not swallowed by :id, and it parses its own
+// multipart body via multer (express.json above ignores multipart).
+app.use(importRoutes);
 
-app.get('/health', (_req, res) => res.json({ service: 'campaign', ok: true }));
+// Follow-ups: manual reminders (Follow-ups page, Contact/Lead detail views)
+// plus rows created automatically by the Automation Builder's Handoff node
+// (services/automation-service writes those directly to the shared
+// follow_ups table — see followUpRepository.js — so nothing here needs to
+// call out to automation-service).
+app.use(followUpRoutes);
 
-// Products / offers — what the company sells. Mounted here so /products
-// is matched before any campaign :id routes below.
-app.use(productRoutes);
-
-// Message Templates (Template Creation module) + their media uploads.
-// Mounted here for the same reason as productRoutes above — /templates and
-// /templates/media/upload must be matched before any campaign :id routes.
-app.use(templateMediaRoutes);
-app.use(templateRoutes);
-
-app.get('/campaigns', ah(async (req, res) => {
+app.get('/contacts', async (req, res) => {
+  // ?tag=vip lets the Bulk Campaign tab's "Contact Segment" dropdown
+  // (BulkCampaignTab.jsx) pull every contact carrying a given tag as the
+  // broadcast's recipient list — same `tags` column used elsewhere (e.g.
+  // /contacts/bulk-tag below), just filterable here instead of write-only.
+  const { tag } = req.query;
   const { rows } = await pool.query(
-    `SELECT * FROM campaigns WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 200`,
+    tag
+      ? `SELECT * FROM contacts WHERE organization_id=$1 AND $2 = ANY(tags) ORDER BY created_at DESC LIMIT 5000`
+      : `SELECT * FROM contacts WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 200`,
+    tag ? [req.user.organizationId, tag] : [req.user.organizationId]
+  );
+  res.json(rows);
+});
+
+// GET /contacts/segments
+// Every distinct tag this org currently has on at least one contact, with
+// how many contacts carry it — powers the Bulk Campaign tab's segment
+// picker without it needing to know tag names in advance. Registered
+// before /contacts/:id so it's never mistaken for an id lookup.
+app.get('/contacts/segments', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT tag, COUNT(*)::int AS contact_count
+       FROM contacts, UNNEST(tags) AS tag
+      WHERE organization_id = $1
+      GROUP BY tag
+      ORDER BY tag`,
     [req.user.organizationId]
   );
   res.json(rows);
-}));
-
-app.post('/campaigns', canWrite, ah(async (req, res) => {
-  const { name, type, channel_type, message_body, cta, scheduled_at, status } = req.body;
-  const { rows } = await pool.query(
-    `INSERT INTO campaigns (organization_id, name, type, channel_type, message_body, cta, scheduled_at, status)
-     VALUES ($1,$2,COALESCE($3,'broadcast'),$4,$5,$6,$7,COALESCE($8,'draft')) RETURNING *`,
-    [req.user.organizationId, name, type, channel_type, message_body, asJson(cta), scheduled_at || null, status]
-  );
-  logAudit(req, 'campaign.create', { id: rows[0].id, name });
-  res.status(201).json(rows[0]);
-}));
-
-app.get('/campaigns/:id', ah(async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT * FROM campaigns WHERE id=$1 AND organization_id=$2`,
-    [req.params.id, req.user.organizationId]
-  );
-  res.json(rows[0] || {});
-}));
-
-app.put('/campaigns/:id', canWrite, ah(async (req, res) => {
-  const { name, type, channel_type, message_body, cta, scheduled_at, status } = req.body;
-  const { rows } = await pool.query(
-    `UPDATE campaigns SET name=COALESCE($1,name), type=COALESCE($2,type),
-            channel_type=COALESCE($3,channel_type), message_body=COALESCE($4,message_body),
-            cta=COALESCE($5,cta), scheduled_at=COALESCE($6,scheduled_at), status=COALESCE($7,status)
-      WHERE id=$8 AND organization_id=$9 RETURNING *`,
-    [name, type, channel_type, message_body, asJson(cta), scheduled_at || null, status,
-     req.params.id, req.user.organizationId]
-  );
-  logAudit(req, 'campaign.update', { id: req.params.id, changes: { name, status } });
-  res.json(rows[0] || {});
-}));
-
-app.delete('/campaigns/:id', canWrite, ah(async (req, res) => {
-  await pool.query(`DELETE FROM campaigns WHERE id=$1 AND organization_id=$2`,
-    [req.params.id, req.user.organizationId]);
-  logAudit(req, 'campaign.delete', { id: req.params.id });
-  res.json({ ok: true });
-}));
-
-// Human-approval gate — a campaign sitting in 'needs_approval' cannot be sent
-// until a reviewer decides. Approving moves it to 'scheduled' if it already
-// has a scheduled_at, otherwise back to 'draft' (ready, but still requires
-// an explicit send/schedule action). Rejecting is a distinct terminal status
-// so the Approval Queue can show it was reviewed and declined, not just reset.
-app.post('/campaigns/:id/decision', canWrite, ah(async (req, res) => {
-  const { decision, note } = req.body;
-  if (!['approved', 'rejected'].includes(decision)) {
-    return res.status(400).json({ error: "decision must be 'approved' or 'rejected'" });
-  }
-  const { rows: existing } = await pool.query(
-    `SELECT * FROM campaigns WHERE id=$1 AND organization_id=$2`,
-    [req.params.id, req.user.organizationId]
-  );
-  const campaign = existing[0];
-  if (!campaign) return res.status(404).json({ error: 'not found' });
-  if (campaign.status !== 'needs_approval') {
-    return res.status(400).json({ error: 'campaign is not pending approval' });
-  }
-
-  const newStatus = decision === 'approved'
-    ? (campaign.scheduled_at ? 'scheduled' : 'draft')
-    : 'rejected';
-
-  const { rows } = await pool.query(
-    `UPDATE campaigns SET status=$1 WHERE id=$2 AND organization_id=$3 RETURNING *`,
-    [newStatus, req.params.id, req.user.organizationId]
-  );
-  logAudit(req, `campaign.${decision}`, { id: campaign.id, name: campaign.name, note: note || null });
-  res.json(rows[0]);
-}));
-
-// ---------------------------------------------------------------------
-// Bulk Messaging / Broadcast Campaign
-//
-// This is a deliberately separate path from POST /campaigns/:id/send above:
-// that route sends one static message_body to a pre-existing
-// campaign_audiences list synchronously (a handful of contacts, fine to
-// await in-request). This route is built for "thousands of rows from a
-// CSV, running an actual flow, at a controlled rate" — it creates the
-// campaign + every campaign_recipients row, hands them to BullMQ
-// (bulkCampaignQueue.js), and returns immediately; the worker
-// (bulkCampaignWorker.js) does the actual (simulated) sending afterward.
-// ---------------------------------------------------------------------
-
-/**
- * POST /campaigns/broadcast
- * Body: {
- *   name, channelType: 'sms' | 'rcs',
- *   messageBody,              // the flow's template text, {{var}} placeholders,
- *                              // resolved client-side from SmsAutomationSimulator's
- *                              // local flow catalog (no server-side flow lookup for SMS)
- *   recipients: [{ phone, name, variables }],   // already parsed client-side
- *                                                 // from CSV / manual entry / segment
- *   recipientSource: 'csv' | 'manual' | 'segment',
- *   sendMode: 'immediate' | 'scheduled', scheduledAt,
- *   throttlePerMinute,
- * }
- */
-app.post('/campaigns/broadcast', canSend, async (req, res) => {
-  const {
-    name, channelType, messageBody, recipients, recipientSource,
-    sendMode = 'immediate', scheduledAt, throttlePerMinute = 60,
-  } = req.body;
-
-  if (!name || !Array.isArray(recipients) || recipients.length === 0) {
-    return res.status(400).json({ error: 'name and a non-empty recipients[] array are required.' });
-  }
-  if (sendMode === 'scheduled' && !scheduledAt) {
-    return res.status(400).json({ error: 'scheduledAt is required when sendMode is "scheduled".' });
-  }
-
-  // Recipients need at least a phone number; silently dropping unusable
-  // rows here (rather than failing the whole upload) matches how a real
-  // CSV import behaves elsewhere in this codebase (see campaign-service's
-  // /send route treating a missing external id as a per-contact failure,
-  // not a request-level error).
-  const validRecipients = recipients.filter((r) => r && typeof r.phone === 'string' && r.phone.trim());
-  if (validRecipients.length === 0) {
-    return res.status(400).json({ error: 'No recipient in the list had a usable phone number.' });
-  }
-
-  // NOTE: this uses pool.query (not pool.connect()) for BEGIN/COMMIT/ROLLBACK
-  // too. authenticate() (see shared/src/auth.js) already wraps this whole
-  // request in withTenantScope(), which checks out one Postgres connection,
-  // sets app.current_org on it, and pins it via AsyncLocalStorage so every
-  // pool.query() call in this request's async call graph transparently runs
-  // on that same connection (see shared/src/db.js). A separate
-  // pool.connect() here would hand out a *different*, unscoped connection —
-  // app.current_org never gets set on it, and the RLS policies on
-  // `campaigns`/`campaign_recipients` fail closed on the INSERT.
-  try {
-    await pool.query('BEGIN');
-
-    const { rows: campaignRows } = await pool.query(
-      `INSERT INTO campaigns (
-         organization_id, name, type, channel_type, message_body,
-         recipient_source, send_mode, scheduled_at, throttle_per_minute,
-         total_recipients, status
-       ) VALUES ($1,$2,'broadcast',$3,$4,$5,$6,$7,$8,$9, $10)
-       RETURNING *`,
-      [
-        req.user.organizationId, name, channelType || 'sms', messageBody || null,
-        recipientSource || 'manual', sendMode, sendMode === 'scheduled' ? scheduledAt : null,
-        throttlePerMinute, validRecipients.length,
-        sendMode === 'scheduled' ? 'scheduled' : 'queued',
-      ]
-    );
-    const campaign = campaignRows[0];
-
-    // Bulk-insert every recipient row in one round trip rather than N
-    // inserts — UNNEST turns the three parallel arrays into rows.
-    const phones = validRecipients.map((r) => r.phone.trim());
-    const names = validRecipients.map((r) => r.name || null);
-    const variables = validRecipients.map((r) => JSON.stringify(r.variables || {}));
-
-    const { rows: recipientRows } = await pool.query(
-      `INSERT INTO campaign_recipients (campaign_id, phone, name, variables)
-       SELECT $1, p, n, v::jsonb
-         FROM UNNEST($2::text[], $3::text[], $4::text[]) AS t(p, n, v)
-       RETURNING id, phone, name, variables`,
-      [campaign.id, phones, names, variables]
-    );
-
-    await pool.query('COMMIT');
-
-    logAudit(req, 'campaign.broadcast_created', { id: campaign.id, name, recipientCount: recipientRows.length });
-
-    // Enqueueing happens after COMMIT: a worker picking up a job whose
-    // campaign_recipients row doesn't exist yet (because we're still mid-
-    // transaction) would just error out, so BullMQ only sees these jobs
-    // once Postgres has durably committed them.
-    const enqueued = await enqueueBroadcast(campaign.id, recipientRows, {
-      throttlePerMinute,
-      channelType: channelType || 'sms',
-      scheduledAt: sendMode === 'scheduled' ? scheduledAt : null,
-    });
-
-    res.status(201).json({ campaign, queuedRecipients: enqueued.length });
-  } catch (err) {
-    await pool.query('ROLLBACK');
-    console.error('[campaign-service] broadcast creation failed:', err.message);
-    res.status(500).json({ error: err.message });
-  }
 });
 
-/**
- * GET /campaigns/:id/recipients
- * Per-recipient status list for the Bulk Campaign tab's diagnostics view
- * (error messages, retry counts) — the aggregate sent/failed_count on the
- * campaign row itself (returned by GET /campaigns/:id) is enough for the
- * live progress bar alone.
- */
-app.get('/campaigns/:id/recipients', ah(async (req, res) => {
-  const { rows: owned } = await pool.query(
-    `SELECT id FROM campaigns WHERE id=$1 AND organization_id=$2`,
+app.post('/contacts', canWrite, async (req, res) => {
+  const { name, email, phone, source, tags } = req.body;
+  const { rows } = await pool.query(
+    `INSERT INTO contacts (organization_id, name, email, phone, source, tags)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [req.user.organizationId, name, email, phone, source, tags || []]
+  );
+  logAudit(req, 'contact.create', { id: rows[0].id, email });
+  res.status(201).json(rows[0]);
+});
+
+app.get('/contacts/:id', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT * FROM contacts WHERE id=$1 AND organization_id=$2`,
     [req.params.id, req.user.organizationId]
   );
-  if (!owned[0]) return res.status(404).json({ error: 'not found' });
+  res.json(rows[0] || {});
+});
 
+app.put('/contacts/:id', canWrite, async (req, res) => {
+  const { name, email, phone, notes } = req.body;
   const { rows } = await pool.query(
-    `SELECT id, phone, name, status, error, attempts, rendered_message, sent_at
-       FROM campaign_recipients WHERE campaign_id=$1
-      ORDER BY updated_at DESC LIMIT 500`,
-    [req.params.id]
+    `UPDATE contacts SET name=COALESCE($1,name), email=COALESCE($2,email),
+            phone=COALESCE($3,phone), notes=COALESCE($4,notes)
+      WHERE id=$5 AND organization_id=$6 RETURNING *`,
+    [name, email, phone, notes, req.params.id, req.user.organizationId]
+  );
+  logAudit(req, 'contact.update', { id: req.params.id, changes: { name, email, phone, notes } });
+  res.json(rows[0] || {});
+});
+
+app.delete('/contacts/:id', canDelete, async (req, res) => {
+  await pool.query(`DELETE FROM contacts WHERE id=$1 AND organization_id=$2`,
+    [req.params.id, req.user.organizationId]);
+  logAudit(req, 'contact.delete', { id: req.params.id });
+  res.json({ ok: true });
+});
+
+// Bulk-tags every contact matching a real, existing `source` value — used by
+// the Marketing Agent's "Apply Segment Tags" action. Deliberately scoped to
+// an actual contact attribute rather than an AI-guessed match: the agent's
+// audience_segments are free-text personas with no contact_id mapping, so
+// this only ever tags a real, queryable group, never a fabricated one.
+app.post('/contacts/bulk-tag', canWrite, async (req, res) => {
+  const { source, tag } = req.body;
+  if (!source || !tag) return res.status(400).json({ error: 'source and tag required' });
+  const { rows } = await pool.query(
+    `UPDATE contacts SET tags = array_append(tags, $1::text)
+      WHERE organization_id=$2 AND source=$3 AND NOT ($1::text = ANY(tags))
+      RETURNING id`,
+    [tag, req.user.organizationId, source]
+  );
+  logAudit(req, 'contact.bulk_tag', { source, tag, tagged: rows.length });
+  res.json({ tagged: rows.length });
+});
+
+// Leads
+app.get('/leads', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT l.*, c.name FROM leads l JOIN contacts c ON c.id=l.contact_id
+      WHERE l.organization_id=$1 ORDER BY l.created_at DESC`,
+    [req.user.organizationId]
   );
   res.json(rows);
-}));
-
-// automation-service owns the channel Send API credentials + the Unified
-// Inbox transcript writes (messageRepository), so actually delivering a
-// campaign message is a service-to-service call there rather than campaign-
-// service reaching across process/Docker-image boundaries for it (each
-// service's Dockerfile only COPYs its own src + shared — see automation-
-// service/Dockerfile). The two services share one JWT secret (@lead/shared),
-// so forwarding the caller's own bearer token is enough to authenticate.
-const AUTOMATION_SERVICE_URL = process.env.AUTOMATION_SERVICE_URL || 'http://localhost:4011';
-
-// Sends a campaign to every contact in its audience, marks it sent, and logs
-// a real per-contact campaign_logs event for each attempt. One contact's
-// failure (bad/missing number, expired token, a transcript write hiccup on
-// the automation-service side, etc) never aborts the rest of the run —
-// every outcome is caught and recorded rather than thrown.
-// GET /campaigns/:id/cost-estimate — pre-send cost estimate shown to the
-// user before they trigger a WhatsApp broadcast (per task brief: "so they
-// don't accidentally trigger a ₹40,000 blast"). Not billing-service, since
-// it needs the campaign's actual audience, which only campaign-service has
-// resolved. Non-WhatsApp channels have no Meta pass-through, so this
-// returns a zero estimate for them rather than a 404 — the frontend can
-// call this unconditionally for any campaign.
-app.get('/campaigns/:id/cost-estimate', canSend, ah(async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT * FROM campaigns WHERE id=$1 AND organization_id=$2`,
-    [req.params.id, req.user.organizationId]
-  );
-  const campaign = rows[0];
-  if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
-
-  if (campaign.channel_type !== 'whatsapp') {
-    return res.json({ channel_type: campaign.channel_type, currency: 'INR', total_amount: 0, note: 'No Meta pass-through fee for this channel.' });
-  }
-
-  const { rows: audience } = await pool.query(
-    `SELECT c.id AS contact_id, c.phone FROM campaign_audiences ca
-       JOIN contacts c ON c.id = ca.contact_id
-      WHERE ca.campaign_id = $1`,
-    [campaign.id]
-  );
-  const estimate = await whatsappBilling.estimateFor(
-    req.user.organizationId,
-    audience.map((c) => ({ contactId: c.contact_id, phone: c.phone })),
-    'marketing'
-  );
-  res.json({ channel_type: 'whatsapp', ...estimate });
-}));
-
-app.post('/campaigns/:id/send', canSend, ah(async (req, res) => {
-  const { rows } = await pool.query(
-    `UPDATE campaigns SET status='sent' WHERE id=$1 AND organization_id=$2 RETURNING *`,
-    [req.params.id, req.user.organizationId]
-  );
-  const campaign = rows[0];
-  if (!campaign) return res.json({});
-  logAudit(req, 'campaign.send', { id: campaign.id, name: campaign.name, channel: campaign.channel_type });
-
-  const { rows: audience } = await pool.query(
-    `SELECT c.* FROM campaign_audiences ca
-       JOIN contacts c ON c.id = ca.contact_id
-      WHERE ca.campaign_id = $1`,
-    [campaign.id]
-  );
-
-  // WhatsApp carries a real Meta pass-through cost — place a soft hold for
-  // the estimated total before any message goes out. Every other channel
-  // (Messenger/Instagram today, Email/LinkedIn/SMS elsewhere) skips this;
-  // see meta_rate_cards for how a future Meta fee on Messenger/Instagram
-  // would plug into the same reserve/settle path without a code change here.
-  const isWhatsApp = campaign.channel_type === 'whatsapp';
-  let reservation = null;
-  if (isWhatsApp) {
-    const { reservation: res_ } = await whatsappBilling.reserve(req.user.organizationId, {
-      campaignId: campaign.id,
-      recipients: audience.map((c) => ({ contactId: c.id, phone: c.phone })),
-      category: 'marketing',
-    });
-    reservation = res_;
-  }
-
-  const authHeader = req.headers.authorization;
-  const logEvent = (contactId, event) =>
-    pool.query(`INSERT INTO campaign_logs (campaign_id, contact_id, event) VALUES ($1,$2,$3)`,
-      [campaign.id, contactId, event]
-    ).catch((err) => console.error('[campaign-service] failed to write campaign_log (non-fatal):', err.message));
-
-  const deliveries = [];
-  await Promise.all(audience.map(async (contact) => {
-    // WhatsApp sends to the E.164 phone number; Instagram (and anything
-    // else) sends to the channel-scoped external_id (PSID etc) — falls back
-    // to external_id either way in case a contact has no phone on file.
-    const externalId = campaign.channel_type === 'whatsapp'
-      ? (contact.phone || contact.external_id)
-      : contact.external_id;
-
-    if (!externalId) {
-      deliveries.push({ contactId: contact.id, phone: contact.phone, delivered: false });
-      return logEvent(contact.id, 'failed');
-    }
-
-    try {
-      const resp = await fetch(`${AUTOMATION_SERVICE_URL}/automation/internal/campaign-send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authHeader ? { Authorization: authHeader } : {}),
-        },
-        body: JSON.stringify({ channel: campaign.channel_type, externalId, body: campaign.message_body }),
-      });
-      deliveries.push({ contactId: contact.id, phone: contact.phone, delivered: resp.ok });
-      await logEvent(contact.id, resp.ok ? 'delivered' : 'failed');
-    } catch (err) {
-      console.error(`[campaign-service] send failed for contact ${contact.id}:`, err.message);
-      deliveries.push({ contactId: contact.id, phone: contact.phone, delivered: false });
-      await logEvent(contact.id, 'failed');
-    }
-  }));
-
-  // Reconcile the hold down to what actually delivered (and was actually
-  // billable — some deliveries may have landed in a free window). This is
-  // what writes the meta_usage_charges rows the invoice job later reads.
-  if (isWhatsApp && reservation) {
-    await whatsappBilling.settle(req.user.organizationId, reservation.id, {
-      deliveries, category: 'marketing',
-    }).catch((err) => console.error('[campaign-service] WhatsApp billing settle failed (non-fatal):', err.message));
-  }
-
-  res.json(campaign);
-}));
-
-// FIX: catches anything ah() forwards via next(err) — without this, Express's
-// own default error handler would still respond (it doesn't crash on its
-// own), but this gives consistent JSON error responses and, importantly,
-// logs the failure loudly so a schema/query bug like the one that caused
-// this outage is easy to spot in `docker compose logs campaign-service`.
-app.use((err, req, res, _next) => {
-  console.error('[campaign-service] unhandled route error:', err);
-  if (res.headersSent) return;
-  res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
-const PORT = process.env.CAMPAIGN_PORT || 4004;
-app.listen(PORT, () => {
-  console.log(`campaign-service on :${PORT}`);
-  startBulkCampaignWorker();
+app.put('/leads/:id/stage', async (req, res) => {
+  const { rows } = await pool.query(
+    `UPDATE leads SET stage=$1 WHERE id=$2 AND organization_id=$3 RETURNING *`,
+    [req.body.stage, req.params.id, req.user.organizationId]
+  );
+  res.json(rows[0] || {});
 });
+
+// Generic lead update — currently just score + stage, used by the Sales
+// Agent's "Apply to CRM" action (random-forest fit score + AI-recommended
+// stage get written back to the real record). COALESCE so a caller that
+// only sends one field doesn't null out the other.
+app.put('/leads/:id', canWrite, async (req, res) => {
+  const { score, stage } = req.body;
+  const { rows } = await pool.query(
+    `UPDATE leads SET score=COALESCE($1, score), stage=COALESCE($2, stage)
+      WHERE id=$3 AND organization_id=$4
+      RETURNING *, (SELECT name FROM contacts WHERE id=leads.contact_id) as name`,
+    [score ?? null, stage ?? null, req.params.id, req.user.organizationId]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'lead not found' });
+  logAudit(req, 'lead.update', { id: req.params.id, score, stage });
+  res.json(rows[0]);
+});
+
+// Creates a lead from a name (e.g. the AI Sales Agent's "Save as Lead"
+// action) — finds-or-creates the backing contact by name+source first,
+// since these callers usually only have a free-text name/company, not an
+// existing contact_id.
+app.post('/leads', canWrite, async (req, res) => {
+  const { name, company, email, phone, score, priority, stage, source } = req.body;
+  if (!name) return res.status(400).json({ error: 'name required' });
+
+  const leadSource = source || 'ai-sales-agent';
+  const { rows: existing } = await pool.query(
+    `SELECT * FROM contacts WHERE organization_id=$1 AND name=$2 AND source=$3 LIMIT 1`,
+    [req.user.organizationId, name, leadSource]
+  );
+  let contact = existing[0];
+  if (!contact) {
+    const { rows: created } = await pool.query(
+      `INSERT INTO contacts (organization_id, name, email, phone, source, notes)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.user.organizationId, name, email || null, phone || null, leadSource, company ? `Company: ${company}` : null]
+    );
+    contact = created[0];
+    logAudit(req, 'contact.create', { id: contact.id, name });
+  }
+
+  const { rows } = await pool.query(
+    `INSERT INTO leads (organization_id, contact_id, stage, priority, score)
+     VALUES ($1,$2,COALESCE($3,'new'),COALESCE($4,'medium'),COALESCE($5,0))
+     RETURNING *, (SELECT name FROM contacts WHERE id=$2) as name`,
+    [req.user.organizationId, contact.id, stage, priority, score]
+  );
+  logAudit(req, 'lead.create', { id: rows[0].id, contact_id: contact.id, score });
+  res.status(201).json(rows[0]);
+});
+
+const PORT = process.env.CONTACT_PORT || 4003;
+app.listen(PORT, () => console.log(`contact-service on :${PORT}`));

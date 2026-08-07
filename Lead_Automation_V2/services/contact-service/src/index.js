@@ -116,20 +116,74 @@ app.post('/contacts/bulk-tag', canWrite, async (req, res) => {
 
 // Leads
 app.get('/leads', async (req, res) => {
+  // ?category=hot|warm|cold filters on temperature (Leads/CRM page's
+  // Hot/Warm/Cold tabs); ?category=active|onboarded|inactive filters on
+  // the `category` column (its Active/Onboarded/Inactive-Lost tabs). Both
+  // live under the same query param since the page only ever has one
+  // category tab active at a time.
+  const { category } = req.query;
+  const params = [req.user.organizationId];
+  let extra = '';
+  if (category && ['hot', 'warm', 'cold'].includes(category)) {
+    params.push(category);
+    extra = ` AND l.temperature = $${params.length}`;
+  } else if (category && ['active', 'onboarded', 'inactive'].includes(category)) {
+    params.push(category);
+    extra = ` AND l.category = $${params.length}`;
+  }
   const { rows } = await pool.query(
-    `SELECT l.*, c.name FROM leads l JOIN contacts c ON c.id=l.contact_id
-      WHERE l.organization_id=$1 ORDER BY l.created_at DESC`,
-    [req.user.organizationId]
+    // c.source is the lead's real inbound channel (email/whatsapp/linkedin/
+    // etc — see contacts.source) — joined in so the Sales Agent workspace
+    // has a real channel to show/default the Fit Scorer's pills to, instead
+    // of guessing one. c.phone is the Leads/CRM page's "Mobile" column.
+    `SELECT l.*, c.name, c.source, c.phone FROM leads l JOIN contacts c ON c.id=l.contact_id
+      WHERE l.organization_id=$1${extra} ORDER BY l.created_at DESC`,
+    params
   );
   res.json(rows);
 });
 
+// GET /leads/fields — the real numeric columns on `leads` a dashboard could
+// aggregate into a dollar figure. Backs the "Configure Deal Field" modal's
+// dropdown so it only ever offers a field that actually exists on the
+// table, rather than a hardcoded/fabricated list of CRM field names.
+app.get('/leads/fields', (_req, res) => {
+  res.json([
+    { key: 'deal_value', label: 'Deal Value', type: 'numeric', description: 'Manually entered per-lead deal value' },
+    { key: 'score', label: 'Lead Score', type: 'numeric', description: '0-100 fit score — not a dollar figure, but selectable for relative pipeline weighting' },
+  ]);
+});
+
 app.put('/leads/:id/stage', async (req, res) => {
   const { rows } = await pool.query(
-    `UPDATE leads SET stage=$1 WHERE id=$2 AND organization_id=$3 RETURNING *`,
+    `UPDATE leads SET stage=$1, updated_at=now() WHERE id=$2 AND organization_id=$3 RETURNING *`,
     [req.body.stage, req.params.id, req.user.organizationId]
   );
   res.json(rows[0] || {});
+});
+
+// Generic lead update — score + stage + deal_value, used by the Sales
+// Agent's "Apply to CRM" action (random-forest fit score + AI-recommended
+// stage get written back to the real record) and by the Pipeline Value
+// "Set Up Deal Values" flow (see migrations/030_lead_deal_value.sql).
+// COALESCE so a caller that only sends one field doesn't null out the rest.
+app.put('/leads/:id', canWrite, async (req, res) => {
+  const { score, stage, deal_value, course, temperature, contact_status, category } = req.body;
+  const { rows } = await pool.query(
+    `UPDATE leads SET score=COALESCE($1, score), stage=COALESCE($2, stage),
+            deal_value=COALESCE($3, deal_value), course=COALESCE($4, course),
+            temperature=COALESCE($5, temperature), contact_status=COALESCE($6, contact_status),
+            category=COALESCE($7, category), updated_at=now()
+      WHERE id=$8 AND organization_id=$9
+      RETURNING *, (SELECT name FROM contacts WHERE id=leads.contact_id) as name,
+                   (SELECT source FROM contacts WHERE id=leads.contact_id) as source,
+                   (SELECT phone FROM contacts WHERE id=leads.contact_id) as phone`,
+    [score ?? null, stage ?? null, deal_value ?? null, course ?? null, temperature ?? null,
+     contact_status ?? null, category ?? null, req.params.id, req.user.organizationId]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'lead not found' });
+  logAudit(req, 'lead.update', { id: req.params.id, score, stage, deal_value, course, temperature, contact_status, category });
+  res.json(rows[0]);
 });
 
 // Creates a lead from a name (e.g. the AI Sales Agent's "Save as Lead"
@@ -137,9 +191,16 @@ app.put('/leads/:id/stage', async (req, res) => {
 // since these callers usually only have a free-text name/company, not an
 // existing contact_id.
 app.post('/leads', canWrite, async (req, res) => {
-  const { name, company, email, phone, score, priority, stage, source } = req.body;
+  const {
+    name, company, email, phone, mobile, score, priority, stage, source, deal_value,
+    // Leads/CRM page fields (see migrations/032_lead_crm_fields.sql). `mobile`
+    // is accepted as an alias for `phone` since that's what the page's
+    // "Add Lead" form and mock dataset both call it.
+    course, temperature, contact_status, category,
+  } = req.body;
   if (!name) return res.status(400).json({ error: 'name required' });
 
+  const contactPhone = phone || mobile || null;
   const leadSource = source || 'ai-sales-agent';
   const { rows: existing } = await pool.query(
     `SELECT * FROM contacts WHERE organization_id=$1 AND name=$2 AND source=$3 LIMIT 1`,
@@ -150,19 +211,24 @@ app.post('/leads', canWrite, async (req, res) => {
     const { rows: created } = await pool.query(
       `INSERT INTO contacts (organization_id, name, email, phone, source, notes)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [req.user.organizationId, name, email || null, phone || null, leadSource, company ? `Company: ${company}` : null]
+      [req.user.organizationId, name, email || null, contactPhone, leadSource, company ? `Company: ${company}` : null]
     );
     contact = created[0];
     logAudit(req, 'contact.create', { id: contact.id, name });
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO leads (organization_id, contact_id, stage, priority, score)
-     VALUES ($1,$2,COALESCE($3,'new'),COALESCE($4,'medium'),COALESCE($5,0))
-     RETURNING *, (SELECT name FROM contacts WHERE id=$2) as name`,
-    [req.user.organizationId, contact.id, stage, priority, score]
+    `INSERT INTO leads (organization_id, contact_id, stage, priority, score, deal_value,
+                         course, temperature, contact_status, category)
+     VALUES ($1,$2,COALESCE($3,'new'),COALESCE($4,'medium'),COALESCE($5,0),$6,
+             $7,COALESCE($8,'warm'),COALESCE($9,'no response'),COALESCE($10,'active'))
+     RETURNING *, (SELECT name FROM contacts WHERE id=$2) as name,
+                  (SELECT source FROM contacts WHERE id=$2) as source,
+                  (SELECT phone FROM contacts WHERE id=$2) as phone`,
+    [req.user.organizationId, contact.id, stage, priority, score, deal_value ?? null,
+     course || null, temperature, contact_status, category]
   );
-  logAudit(req, 'lead.create', { id: rows[0].id, contact_id: contact.id, score });
+  logAudit(req, 'lead.create', { id: rows[0].id, contact_id: contact.id, score, deal_value });
   res.status(201).json(rows[0]);
 });
 

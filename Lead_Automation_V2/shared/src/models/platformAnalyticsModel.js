@@ -527,7 +527,8 @@ async function financePerformance({ start, end }) {
   const churnRes = await pool.query(
     `SELECT
        COUNT(*) FILTER (WHERE status = 'canceled' AND canceled_at >= $1 AND canceled_at < $2)::int AS churned,
-       COUNT(*) FILTER (WHERE status = 'active')::int AS active_now`,
+       COUNT(*) FILTER (WHERE status = 'active')::int AS active_now
+       FROM subscriptions`,
     [start, end]
   );
   const churned = Number(churnRes.rows[0].churned);

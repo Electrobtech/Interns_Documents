@@ -61,7 +61,7 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
 
   // ---- Graph + title state, hydrated from Postgres on mount -----------
   const [graph, setGraphState] = useState(seedGraph);
-  const [title, setTitleState] = useState('WEB — Ecommerce Customer Support');
+  const [title, setTitleState] = useState('ElectroBtech — Internship & Training Enquiry Bot');
   const [tab, setTab] = useState('builder'); // 'builder' | 'simulate' | 'bulk'
   const [syncStatus, setSyncStatus] = useState('loading'); // loading | saved | saving | offline | error
   // Deploy is DELIBERATELY separate from the debounced autosave above: the
@@ -169,7 +169,7 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
         const playbook = await call(`/automation/playbooks/${playbookId}`);
         if (cancelled) return;
         setGraphState(importFlowJson(playbook));
-        setTitleState(playbook.name || 'WEB — Ecommerce Customer Support');
+        setTitleState(playbook.name || 'ElectroBtech — Internship & Training Enquiry Bot');
         setPlaybookStatus(playbook.status || 'draft');
         setSyncStatus('saved');
       } catch (err) {
@@ -180,7 +180,7 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
           setTitleState(cached.title);
         } else {
           setGraphState(seedGraph());
-          setTitleState('WEB — Ecommerce Customer Support');
+          setTitleState('ElectroBtech — Internship & Training Enquiry Bot');
         }
         // A 404 just means "nothing saved yet for this id" — that's normal
         // for a brand-new playbook, not an error worth flagging.
@@ -243,7 +243,7 @@ export default function PlaybookStudioApp({ channel = 'whatsapp', playbookId = '
           Simulate
         </TabButton>
         <TabButton active={tab === 'bulk'} onClick={() => setTab('bulk')}>
-          Bulk Campaign
+          Broadcast
         </TabButton>
         <div className="flex-1" />
         <ViewPreferenceToggle value={viewPreference} onChange={handleViewPreferenceChange} />

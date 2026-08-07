@@ -165,13 +165,13 @@ export default function Dashboard() {
     const next = row.handledBy === 'human' ? 'bot' : 'human';
     setData((d) => ({
       ...d,
-      recentInbox: d.recentInbox.map((r) => (r.id === row.id ? { ...r, handledBy: next } : r)),
+      recentInbox: (d?.recentInbox || []).map((r) => (r.id === row.id ? { ...r, handledBy: next } : r)),
     }));
     setHandledBy.mutate({ id: row.id, handled_by: next }, {
       onError: () => {
         setData((d) => ({
           ...d,
-          recentInbox: d.recentInbox.map((r) => (r.id === row.id ? { ...r, handledBy: row.handledBy } : r)),
+          recentInbox: (d?.recentInbox || []).map((r) => (r.id === row.id ? { ...r, handledBy: row.handledBy } : r)),
         }));
         setErr('Could not update human takeover for that conversation.');
       },

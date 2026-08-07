@@ -22,7 +22,7 @@ function channelKey(href) {
 const PLATFORM = [
   { label: 'Dashboard',               icon: LayoutDashboard, href: '/app'                  },
   { label: 'Unified Inbox',           icon: Inbox,           href: '/app/inbox'              },
-  { label: 'Contacts & Leads',        icon: Users,           href: '/app/contacts'           },
+  { label: 'Leads / CRM',             icon: Users,           href: '/app/contacts'           },
   { label: 'Follow-ups',              icon: CalendarClock,   href: '/app/follow-ups'         },
   { 
     label: 'AI Agents & Automation',  
@@ -47,15 +47,22 @@ const PLATFORM = [
   { label: 'Click Notification Demo', icon: Bell,            href: '/app/notification-demo' },
 ];
 
+// Every channel here just opens the Unified Inbox pre-filtered to that
+// channel (see isChannelActive below) — there's nothing to expand.
+// These used to be ExpandableNavItem entries with a chevron toggle whose
+// only sub-item was a single "Conversations" link pointing at the exact
+// same href as the parent, i.e. a dropdown that expanded to reveal one
+// link identical to the one you'd already clicked to open it. Plain
+// direct links, same as Voice Call / Email already were.
 const CHANNELS = [
-  { label: 'WhatsApp',  icon: MessageCircle, href: '/app/channels/whatsapp',  expandable: true  },
-  { label: 'Instagram', icon: Instagram,     href: '/app/channels/instagram', expandable: true  },
-  { label: 'Messenger', icon: MessageSquare, href: '/app/channels/messenger', expandable: true  },
-  { label: 'LinkedIn',  icon: Linkedin,      href: '/app/channels/linkedin',  expandable: true  },
-  { label: 'SMS / RCS', icon: Smartphone,    href: '/app/channels/sms',       expandable: true  },
-  { label: 'Web Chat',  icon: Globe,         href: '/app/channels/webchat',   expandable: true  },
-  { label: 'Voice Call',icon: Phone,         href: '/app/channels/voice',     expandable: false },
-  { label: 'Email',     icon: Mail,          href: '/app/channels/email',     expandable: false },
+  { label: 'WhatsApp',  icon: MessageCircle, href: '/app/channels/whatsapp'  },
+  { label: 'Instagram', icon: Instagram,     href: '/app/channels/instagram' },
+  { label: 'Messenger', icon: MessageSquare, href: '/app/channels/messenger' },
+  { label: 'LinkedIn',  icon: Linkedin,      href: '/app/channels/linkedin'  },
+  { label: 'SMS / RCS', icon: Smartphone,    href: '/app/channels/sms'       },
+  { label: 'Web Chat',  icon: Globe,         href: '/app/channels/webchat'   },
+  { label: 'Voice Call',icon: Phone,         href: '/app/channels/voice'     },
+  { label: 'Email',     icon: Mail,          href: '/app/channels/email'     },
 ];
 
 const AUTOMATION = [
@@ -138,11 +145,8 @@ export default function Sidebar() {
         ))}
         <p className="px-3 pt-5 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Channels</p>
         {CHANNELS.map((item) =>
-          item.expandable
-            ? <ExpandableNavItem key={item.href} item={item} pathname={pathname} isActive={isChannelActive(item.href)}
-                unread={byChannel[channelKey(item.href)] || 0} />
-            : <NavItem key={item.href} item={item} isActive={isChannelActive(item.href)} collapsed={collapsed}
-                unread={byChannel[channelKey(item.href)] || 0} />
+          <NavItem key={item.href} item={item} isActive={isChannelActive(item.href)} collapsed={collapsed}
+            unread={byChannel[channelKey(item.href)] || 0} />
         )}
         <p className="px-3 pt-5 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Automation</p>
         {AUTOMATION.map((item) => (

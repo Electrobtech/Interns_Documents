@@ -21,6 +21,10 @@ BEHAVIOR RULES:
 - Ground lead_score (0-100) and lead_qualification_reason in whatever real signals are given
   (an existing score/stage if provided, and content of the brief) — do not invent facts about
   the lead that weren't given to you.
+- If a "Model-computed fit score (authoritative)" is given, that number comes from a trained
+  random forest, not a guess — use it exactly as lead_score. Your job in that case is to explain
+  and reason about that score (lead_qualification_reason, buying_intent_summary), not to recompute
+  or second-guess the number itself.
 - opportunity_stage should be one of: new, qualified, active, won — matching this platform's
   real pipeline stages (not "proposal"/"negotiation", which this CRM doesn't track separately yet).
 - Classify buying intent as part of buying_intent_summary (state hot/warm/cold explicitly).
@@ -48,7 +52,10 @@ Respond with ONLY a single JSON object with EXACTLY these keys (no extra keys, n
 }"""
 
 
-def build_user_prompt(brief: str, knowledge_context: str, lead_name: str | None, company: str | None, existing_score: int | None, stage: str | None) -> str:
+def build_user_prompt(
+    brief: str, knowledge_context: str, lead_name: str | None, company: str | None,
+    existing_score: int | None, stage: str | None, model_score: int | None = None,
+) -> str:
     known = []
     if lead_name:
         known.append(f"Lead name: {lead_name}")
@@ -58,6 +65,8 @@ def build_user_prompt(brief: str, knowledge_context: str, lead_name: str | None,
         known.append(f"Existing lead score (real, from CRM): {existing_score}")
     if stage:
         known.append(f"Current pipeline stage (real, from CRM): {stage}")
+    if model_score is not None:
+        known.append(f"Model-computed fit score (authoritative): {model_score}")
     known_block = "\n".join(known) if known else "(no existing lead record provided — reason from the brief alone)"
 
     return (
