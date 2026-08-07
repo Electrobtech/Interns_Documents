@@ -225,6 +225,39 @@ export function useAISuggestions() {
   });
 }
 
+/* ─── Assets Library ─────────────────────────────────────────────────────── */
+
+export function useAssets() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketingHub', 'assets'],
+    queryFn: () => call(`${BASE}/assets`),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useUploadAsset() {
+  const { upload } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (file) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return upload(`${BASE}/assets`, formData);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketingHub', 'assets'] }),
+  });
+}
+
+export function useDeleteAsset() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => call(`${BASE}/assets/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketingHub', 'assets'] }),
+  });
+}
+
 /* ─── Channels ─────────────────────────────────────────────────────────── */
 
 // { whatsapp: {campaigns, broadcasts}, email: {...}, ... } — real aggregate
