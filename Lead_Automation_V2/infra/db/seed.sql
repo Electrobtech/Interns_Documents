@@ -388,3 +388,59 @@ ON CONFLICT (organization_id, review_id) DO NOTHING;
 -- `npm run seed` (from services/automation-service) rather than inserted
 -- here directly, since they're maintained/versioned alongside the flow
 -- builder rather than as bootstrap CRM data.
+-- ---------- Marketing Hub Audiences (demo data for Audience Manager) ----------
+INSERT INTO marketing_audiences (id, organization_id, name, source, size, score, status, filter_definition, created_at, updated_at) VALUES
+  ('a1111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 'High-Intent Leads Q3', 'Custom', 4820, 92, 'Active', '{"tags":["vip","hot"]}', now() - interval '14 days', now() - interval '1 day'),
+  ('a2222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'Website Visitors 30d', 'Pixel', 18400, 74, 'Active', '{"window_days":30}', now() - interval '21 days', now()),
+  ('a3333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111', 'Lookalike - Top Buyers', 'Lookalike', 2100000, 81, 'Active', '{"seed":"top_buyers","pct":2}', now() - interval '30 days', now() - interval '5 days'),
+  ('a4444444-4444-4444-4444-444444444444', '11111111-1111-1111-1111-111111111111', 'Email List - Opted In', 'Import', 9650, 88, 'Active', '{}', now() - interval '60 days', now() - interval '45 days'),
+  ('a5555555-5555-5555-5555-555555555555', '11111111-1111-1111-1111-111111111111', 'Webinar Registrants 2025', 'CRM', 3240, 95, 'Active', '{"event":"webinar_2025"}', now() - interval '10 days', now() - interval '2 days')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO marketing_audience_snapshots (audience_id, size, captured_at)
+SELECT a.id,
+       GREATEST(100, ROUND(a.size * (0.55 + 0.45 * (w.n / 8.0)))::bigint),
+       date_trunc('week', now()) - ((8 - w.n) * interval '1 week') + interval '3 days'
+  FROM marketing_audiences a
+  CROSS JOIN generate_series(1, 8) AS w(n)
+ WHERE a.organization_id = '11111111-1111-1111-1111-111111111111';
+
+-- ---------- Marketing Hub Campaigns (manual-entry ad-platform tracking) ----------
+INSERT INTO marketing_campaigns (
+  id, organization_id, name, platform, objective, status,
+  budget, spend, ctr, cpm, cpc, reach, impressions, leads, conversions,
+  revenue, roas, start_date, end_date, ai_score, created_at, updated_at
+) VALUES
+  ('aaaaaaaa-0001-4000-8000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'AI Bootcamp Lead Gen Q3', 'Facebook', 'Lead Generation', 'Active',
+   5000, 3240, 4.2, 8.4, 2.1, 142000, 385000, 1540, 312,
+   93600, 28.9, '2025-06-01', '2025-08-31', 94, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000002', '11111111-1111-1111-1111-111111111111',
+   'SaaS Growth Campaign', 'LinkedIn', 'Website Traffic', 'Active',
+   8000, 6120, 3.1, 12.6, 4.1, 89000, 486000, 890, 198,
+   59400, 9.7, '2025-05-15', '2025-09-30', 81, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000003', '11111111-1111-1111-1111-111111111111',
+   'Webinar Registration Drive', 'Google Ads', 'Event Registration', 'Scheduled',
+   3000, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, '2025-08-10', '2025-08-20', 72, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000004', '11111111-1111-1111-1111-111111111111',
+   'Brand Awareness Wave', 'Instagram', 'Brand Awareness', 'Paused',
+   4500, 2100, 1.8, 6.2, 3.4, 320000, 338000, 0, 45,
+   0, 0, '2025-04-20', '2025-06-30', 56, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000005', '11111111-1111-1111-1111-111111111111',
+   'WhatsApp Retargeting', 'WhatsApp', 'Remarketing', 'Active',
+   1200, 940, 6.7, 4.1, 0.6, 22000, 229000, 1100, 540,
+   162000, 172.3, '2025-07-01', '2025-08-31', 97, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000006', '11111111-1111-1111-1111-111111111111',
+   'Enterprise Sales Push', 'Email', 'Sales', 'Draft',
+   500, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, '2025-07-25', '2025-09-01', 68, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000007', '11111111-1111-1111-1111-111111111111',
+   'Course Enrollment - Python', 'Facebook', 'Course Registration', 'Active',
+   2500, 2100, 5.4, 7.8, 1.4, 68000, 269000, 1870, 420,
+   126000, 60.0, '2025-06-15', '2025-08-15', 91, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000008', '11111111-1111-1111-1111-111111111111',
+   'Google Search - B2B', 'Google Ads', 'Lead Generation', 'Active',
+   6000, 5400, 8.2, 22.1, 2.7, 45000, 245000, 2100, 380,
+   114000, 21.1, '2025-05-01', '2025-08-31', 88, now(), now())
+ON CONFLICT (id) DO NOTHING;

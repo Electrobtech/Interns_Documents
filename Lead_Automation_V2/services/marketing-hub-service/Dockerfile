@@ -10,6 +10,4 @@ RUN cd /app/shared && npm install --omit=dev
 COPY services/marketing-hub-service ./services/marketing-hub-service
 WORKDIR /app/services/marketing-hub-service
 RUN npm install --omit=dev
-# Create uploads directory for assets
-RUN mkdir -p /app/services/marketing-hub-service/uploads/assets
 CMD ["npm", "start"]

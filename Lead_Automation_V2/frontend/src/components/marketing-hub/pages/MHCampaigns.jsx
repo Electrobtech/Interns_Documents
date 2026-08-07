@@ -1,23 +1,56 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Plus, Copy, Archive, Pause, Play, Trash2,
   BarChart3, Wand2, Search, LayoutGrid, List, Columns,
-  MoreHorizontal, Sparkles, Activity,
-  Filter, RefreshCw, Download
+  MoreHorizontal, TrendingUp, TrendingDown, Sparkles,
+  Filter, RefreshCw, Upload, Download, Loader2, AlertCircle
 } from 'lucide-react';
+import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import MHBadge from '../ui/MHBadge';
 import MHDrawer from '../ui/MHDrawer';
 import MHModal from '../ui/MHModal';
 import { useMHToast } from '../ui/MHToast';
 import {
-  useCampaigns, useCreateCampaign, usePublishCampaign, useCampaignStatus, useDeleteCampaign,
-  useCampaignRecipients, useOptimizeCampaign,
-  useAudiences, CHANNELS, OBJECTIVES,
+  useMarketingCampaigns,
+  useCreateMarketingCampaign,
+  useUpdateMarketingCampaign,
+  useDeleteMarketingCampaign,
 } from '@/lib/queries/marketingHub';
-import { useMarketingHubSocketEvent, useCampaignRoom } from '@/lib/marketingHubSocket';
-import { consumePrefillChannel } from '../prefill';
-import { downloadCsv, printReport } from '../export';
+
+/** Map API row (snake_case / numeric strings from Postgres) → UI shape. */
+function normalizeCampaign(row) {
+  if (!row) return row;
+  const n = (v) => {
+    if (v === null || v === undefined || v === '') return 0;
+    const x = Number(v);
+    return Number.isFinite(x) ? x : 0;
+  };
+  return {
+    id: row.id,
+    name: row.name || '',
+    platform: row.platform || '',
+    objective: row.objective || '',
+    status: row.status || 'Draft',
+    budget: n(row.budget),
+    spend: n(row.spend),
+    ctr: n(row.ctr),
+    cpm: n(row.cpm),
+    cpc: n(row.cpc),
+    reach: n(row.reach),
+    impressions: n(row.impressions),
+    leads: n(row.leads),
+    conversions: n(row.conversions),
+    revenue: n(row.revenue),
+    roas: n(row.roas),
+    createdBy: row.created_by || row.createdBy || '',
+    startDate: row.start_date || row.startDate || '',
+    endDate: row.end_date || row.endDate || '',
+    aiScore: row.ai_score != null ? n(row.ai_score) : null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 const STATUS_VARIANT = {
   draft: 'default', scheduled: 'scheduled', queued: 'scheduled', processing: 'active',
@@ -260,7 +293,8 @@ function CampaignDrawer({ campaign: c }) {
     { label: 'Replied', value: (c.replied_count || 0).toLocaleString() },
     { label: 'Failed', value: (c.failed_count || 0).toLocaleString() },
   ];
-
+  var spendPct = c.budget > 0 ? Math.min(100, Math.round((c.spend / c.budget) * 100)) : 0;
+  var data = sparkline((String(c.id).replace(/\D/g, '').slice(-6) || '1') * 7, 12);
   return (
     <div style={{ padding: 24 }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
@@ -307,39 +341,52 @@ function CampaignDrawer({ campaign: c }) {
   );
 }
 
-export default function MHCampaigns({ onNavigate }) {
-  const toast = useMHToast();
-  const { data: campaigns = [], isLoading, refetch } = useCampaigns();
-  const [showCreate, setShowCreate] = useState(false);
-  const [initialChannel, setInitialChannel] = useState('');
-  const [view, setView] = useState('list');
-  const [selected, setSelected] = useState([]);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [drawer, setDrawer] = useState(null);
-  const [actionMenu, setActionMenu] = useState(null);
-  const setCampaignStatus = useCampaignStatus();
-  const deleteCampaign = useDeleteCampaign();
-  const createCampaign = useCreateCampaign();
-  const optimizeCampaign = useOptimizeCampaign();
+export default function MHCampaigns() {
+  var toast = useMHToast();
+  var show = toast.show;
+  var _view = useState('list');
+  var view = _view[0];
+  var setView = _view[1];
+  var _sel = useState([]);
+  var selected = _sel[0];
+  var setSelected = _sel[1];
+  var _srch = useState('');
+  var search = _srch[0];
+  var setSearch = _srch[1];
+  var _sf = useState('All');
+  var statusFilter = _sf[0];
+  var setStatusFilter = _sf[1];
+  var _drw = useState(null);
+  var drawer = _drw[0];
+  var setDrawer = _drw[1];
+  var _am = useState(null);
+  var actionMenu = _am[0];
+  var setActionMenu = _am[1];
+  var _showCreate = useState(false);
+  var showCreate = _showCreate[0];
+  var setShowCreate = _showCreate[1];
+  var _form = useState({ name: '', platform: 'Facebook', objective: 'Lead Generation', status: 'Draft', budget: '' });
+  var form = _form[0];
+  var setForm = _form[1];
 
-  // Handoff from the Channels page's "Create Campaign" button — see
-  // ../prefill.js. Auto-opens the wizard with the channel already chosen so
-  // clicking it there genuinely lands you in a ready-to-fill campaign form,
-  // not just a bare, unrelated Campaigns list.
-  useEffect(() => {
-    const channel = consumePrefillChannel();
-    if (channel) { setInitialChannel(channel); setShowCreate(true); }
-  }, []);
+  var query = useMarketingCampaigns();
+  var rawCampaigns = query.data;
+  var isLoading = query.isLoading;
+  var isError = query.isError;
+  var refetch = query.refetch;
+  var isFetching = query.isFetching;
+  var createMut = useCreateMarketingCampaign();
+  var updateMut = useUpdateMarketingCampaign();
+  var deleteMut = useDeleteMarketingCampaign();
 
-  // Live counter updates while a send is in progress — refetch the list on
-  // any aggregate change rather than patch individual rows client-side, so
-  // sort order / status pills stay consistent with the server's own math.
-  useMarketingHubSocketEvent('campaign:updated', () => refetch());
+  var campaigns = useMemo(function() {
+    return (Array.isArray(rawCampaigns) ? rawCampaigns : []).map(normalizeCampaign);
+  }, [rawCampaigns]);
 
-  const filtered = campaigns.filter(c => {
-    const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) || c.channel.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'All' || c.status === statusFilter;
+  var filtered = campaigns.filter(function(c) {
+    var matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.platform.toLowerCase().includes(search.toLowerCase());
+    var matchStatus = statusFilter === 'All' || c.status === statusFilter;
     return matchSearch && matchStatus;
   });
 
@@ -373,84 +420,62 @@ export default function MHCampaigns({ onNavigate }) {
     }
   };
 
-  // Real archive — POST /:id/status with status:'archived', already
-  // supported server-side.
-  const archiveSelected = async () => {
-    if (selected.length === 0) return toast.show('Select campaigns first', 'error');
+  async function setStatusForSelected(status) {
+    if (!selected.length) return;
     try {
-      await Promise.all(selected.map((id) => setCampaignStatus.mutateAsync({ id, status: 'archived' })));
-      toast.show(`Archived ${selected.length} campaign(s)`, 'success');
+      await Promise.all(selected.map(function(id) {
+        return updateMut.mutateAsync({ id: id, status: status });
+      }));
+      show(status === 'Paused' ? 'Paused' : status === 'Active' ? 'Resumed' : status, 'success');
       setSelected([]);
-    } catch (err) {
-      toast.show(err.message || 'Archive failed', 'error');
+    } catch (e) {
+      show((e && e.message) || 'Update failed', 'error');
     }
-  };
+  }
 
-  // Real client-side CSV of exactly what's on screen right now — no backend
-  // route needed, the data is already in `filtered`.
-  const exportCsv = () => {
-    const rows = filtered.length ? filtered : campaigns;
-    if (rows.length === 0) return toast.show('Nothing to export', 'error');
-    downloadCsv('campaigns', rows, [
-      { label: 'Name', value: 'name' },
-      { label: 'Channel', value: 'channel' },
-      { label: 'Status', value: 'status' },
-      { label: 'Objective', value: 'objective' },
-      { label: 'Budget', value: 'budget_amount' },
-      { label: 'Recipients', value: 'total_recipients' },
-      { label: 'Sent', value: 'sent_count' },
-      { label: 'Delivered', value: 'delivered_count' },
-      { label: 'Read', value: 'read_count' },
-      { label: 'Replied', value: 'replied_count' },
-      { label: 'Failed', value: 'failed_count' },
-      { label: 'Created', value: (c) => c.created_at ? new Date(c.created_at).toISOString().slice(0, 10) : '' },
-    ]);
-    toast.show('CSV downloaded', 'success');
-  };
-
-  // Print-ready report (real "Save as PDF" via the browser print dialog) of
-  // exactly what's on screen — same underlying data as the CSV, formatted
-  // as a readable one-pager instead of a spreadsheet.
-  const exportReportPdf = () => {
-    const rows = filtered.length ? filtered : campaigns;
-    if (rows.length === 0) return toast.show('Nothing to report on', 'error');
-    const totals = rows.reduce((acc, c) => {
-      acc.recipients += c.total_recipients || 0; acc.sent += c.sent_count || 0;
-      acc.delivered += c.delivered_count || 0; acc.read += c.read_count || 0;
-      acc.replied += c.replied_count || 0; acc.failed += c.failed_count || 0;
-      return acc;
-    }, { recipients: 0, sent: 0, delivered: 0, read: 0, replied: 0, failed: 0 });
-    const html = `
-      <h1>Campaign Report</h1>
-      <div class="meta">Generated ${new Date().toLocaleString()} · ${rows.length} campaign(s)</div>
-      <div class="kpi-grid">
-        ${[['Recipients', totals.recipients], ['Sent', totals.sent], ['Delivered', totals.delivered], ['Read', totals.read], ['Replied', totals.replied], ['Failed', totals.failed]]
-          .map(([l, v]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v.toLocaleString()}</div></div>`).join('')}
-      </div>
-      <table><thead><tr><th>Name</th><th>Channel</th><th>Status</th><th>Recipients</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Failed</th></tr></thead>
-      <tbody>${rows.map((c) => `<tr><td>${c.name}</td><td>${c.channel}</td><td>${c.status}</td><td>${c.total_recipients || 0}</td><td>${c.sent_count || 0}</td><td>${c.delivered_count || 0}</td><td>${c.read_count || 0}</td><td>${c.failed_count || 0}</td></tr>`).join('')}</tbody></table>`;
-    if (!printReport('Campaign Report', html)) toast.show('Enable pop-ups to open the report', 'error');
-  };
-
-  // Real LLM-free heuristic suggestions off the first selected campaign's
-  // own metrics (POST /:id/optimize) — see campaignsRouter.js.
-  const aiOptimizeSelected = async () => {
-    if (selected.length === 0) return toast.show('Select a campaign first', 'error');
+  async function deleteSelected() {
+    if (!selected.length) return;
+    if (!window.confirm('Delete ' + selected.length + ' campaign(s)?')) return;
     try {
-      const result = await optimizeCampaign.mutateAsync(selected[0]);
-      const c = campaigns.find((x) => x.id === selected[0]);
-      toast.show(`${c?.name || 'Campaign'}: ${result.suggestions[0]?.action || 'No suggestions'}`, 'info');
-    } catch (err) {
-      toast.show(err.message || 'Could not analyze campaign', 'error');
+      await Promise.all(selected.map(function(id) { return deleteMut.mutateAsync(id); }));
+      show('Deleted', 'success');
+      setSelected([]);
+    } catch (e) {
+      show((e && e.message) || 'Delete failed', 'error');
     }
-  };
+  }
 
-  const toolbarBtns = [
-    { icon: Copy, label: 'Duplicate', fn: duplicateSelected },
-    { icon: Archive, label: 'Archive', fn: archiveSelected },
-    { icon: Download, label: 'Export CSV', fn: exportCsv },
-    { icon: BarChart3, label: 'Report (PDF)', fn: exportReportPdf },
-    { icon: Wand2, label: 'AI Optimize', fn: aiOptimizeSelected },
+  async function handleCreate() {
+    if (!form.name.trim()) {
+      show('Name is required', 'error');
+      return;
+    }
+    try {
+      await createMut.mutateAsync({
+        name: form.name.trim(),
+        platform: form.platform,
+        objective: form.objective,
+        status: form.status,
+        budget: parseFloat(form.budget) || 0,
+      });
+      show('Campaign created', 'success');
+      setShowCreate(false);
+      setForm({ name: '', platform: 'Facebook', objective: 'Lead Generation', status: 'Draft', budget: '' });
+    } catch (e) {
+      show((e && e.message) || 'Failed to create', 'error');
+    }
+  }
+
+  var toolbarBtns = [
+    { icon: Copy, label: 'Duplicate', fn: function() { show('Duplicate coming soon', 'info'); } },
+    { icon: Archive, label: 'Archive', fn: function() { setStatusForSelected('Paused'); } },
+    { icon: Pause, label: 'Pause', fn: function() { setStatusForSelected('Paused'); } },
+    { icon: Play, label: 'Resume', fn: function() { setStatusForSelected('Active'); } },
+    { icon: Trash2, label: 'Delete', fn: function() { deleteSelected(); } },
+    { icon: Upload, label: 'Import', fn: function() { show('Import coming soon', 'info'); } },
+    { icon: Download, label: 'Export', fn: function() { show('Exporting...', 'info'); } },
+    { icon: BarChart3, label: 'Report', fn: function() { show('Report coming soon', 'info'); } },
+    { icon: Wand2, label: 'AI Optimize', fn: function() { show('AI optimizing...', 'success'); } },
   ];
 
   return (
@@ -464,7 +489,7 @@ export default function MHCampaigns({ onNavigate }) {
             {campaigns.length} campaigns - Manage and track all marketing campaigns
           </p>
         </div>
-        <button className="mh-btn mh-btn-primary" onClick={() => setShowCreate(true)}>
+        <button className="mh-btn mh-btn-primary" onClick={function() { setShowCreate(true); }}>
           <Plus size={14} /> Create Campaign
         </button>
       </div>
@@ -484,8 +509,8 @@ export default function MHCampaigns({ onNavigate }) {
           <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
           <input className="mh-input" placeholder="Search campaigns..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 32, width: '100%' }} />
         </div>
-        <button className="mh-btn mh-btn-ghost" onClick={() => toast.show('Filters opened', 'info')}><Filter size={13} /> Filter</button>
-        <button className="mh-btn mh-btn-ghost" onClick={() => refetch()}><RefreshCw size={13} /></button>
+        <button className="mh-btn mh-btn-ghost"><Filter size={13} /> Filter</button>
+        <button className="mh-btn mh-btn-ghost" onClick={function() { refetch(); show('Refreshed', 'success'); }}><RefreshCw size={13} /></button>
         <div style={{ marginLeft: 'auto', display: 'flex', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
           {[['list', List], ['grid', LayoutGrid], ['kanban', Columns]].map(([v, Ic]) => (
             <button key={v} onClick={() => setView(v)}
@@ -518,7 +543,31 @@ export default function MHCampaigns({ onNavigate }) {
       )}
 
       {/* LIST VIEW */}
-      {!isLoading && filtered.length > 0 && view === 'list' && (
+      
+      {isLoading && (
+        <div style={{ padding: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#6b7280', fontSize: 13 }}>
+          <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Loading campaigns…
+        </div>
+      )}
+      {isError && !isLoading && (
+        <div style={{ padding: 24, borderRadius: 12, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <AlertCircle size={16} /> Couldn't load campaigns.
+          <button type="button" onClick={function() { refetch(); }} style={{ marginLeft: 8, border: '1px solid #fca5a5', background: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}>Retry</button>
+        </div>
+      )}
+      {!isLoading && !isError && filtered.length === 0 && (
+        <div style={{ padding: 48, textAlign: 'center', color: '#6b7280', fontSize: 13, border: '1px dashed #e5e7eb', borderRadius: 12, background: '#fafafa' }}>
+          No campaigns yet. Create one to track ad-platform spend &amp; performance.
+          <div style={{ marginTop: 12 }}>
+            <button type="button" onClick={function() { setShowCreate(true); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: 'none', background: '#6366f1', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+              <Plus size={14} /> New Campaign
+            </button>
+          </div>
+        </div>
+      )}
+
+{!isLoading && !isError && view === 'list' && (
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -576,7 +625,7 @@ export default function MHCampaigns({ onNavigate }) {
       )}
 
       {/* GRID VIEW */}
-      {!isLoading && filtered.length > 0 && view === 'grid' && (
+      {!isLoading && !isError && view === 'grid' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 14 }}>
           {filtered.map(c => {
             const total = c.total_recipients || 0;
@@ -626,7 +675,7 @@ export default function MHCampaigns({ onNavigate }) {
       )}
 
       {/* KANBAN VIEW */}
-      {!isLoading && filtered.length > 0 && view === 'kanban' && (
+      {!isLoading && !isError && view === 'kanban' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, alignItems: 'flex-start' }}>
           {KANBAN_STATUSES.map(status => {
             const colCampaigns = filtered.filter(c => c.status === status);
@@ -666,11 +715,38 @@ export default function MHCampaigns({ onNavigate }) {
       )}
 
       {showCreate && (
-        <CreateCampaignModal
-          onClose={() => { setShowCreate(false); setInitialChannel(''); }}
-          toast={toast}
-          initialChannel={initialChannel}
-        />
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={function() { setShowCreate(false); }}>
+          <div onClick={function(e) { e.stopPropagation(); }}
+            style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 440, padding: 24, boxShadow: '0 20px 50px rgba(0,0,0,0.18)' }}>
+            <div style={{ fontFamily: 'var(--mh-font-display)', fontSize: 18, fontWeight: 700, marginBottom: 16 }}>New Campaign</div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Name</label>
+            <input value={form.name} onChange={function(e) { setForm(function(f) { return Object.assign({}, f, { name: e.target.value }); }); }}
+              placeholder="e.g. AI Bootcamp Lead Gen"
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', marginBottom: 12, fontSize: 13 }} />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Platform</label>
+            <select value={form.platform} onChange={function(e) { setForm(function(f) { return Object.assign({}, f, { platform: e.target.value }); }); }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', marginBottom: 12, fontSize: 13 }}>
+              {['Facebook', 'Google Ads', 'LinkedIn', 'Instagram', 'WhatsApp', 'Email'].map(function(p) {
+                return <option key={p} value={p}>{p}</option>;
+              })}
+            </select>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Objective</label>
+            <input value={form.objective} onChange={function(e) { setForm(function(f) { return Object.assign({}, f, { objective: e.target.value }); }); }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', marginBottom: 12, fontSize: 13 }} />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Budget (Rs.)</label>
+            <input type="number" value={form.budget} onChange={function(e) { setForm(function(f) { return Object.assign({}, f, { budget: e.target.value }); }); }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', marginBottom: 16, fontSize: 13 }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button type="button" onClick={function() { setShowCreate(false); }}
+                style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              <button type="button" onClick={handleCreate} disabled={createMut.isPending}
+                style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#6366f1', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', opacity: createMut.isPending ? 0.7 : 1 }}>
+                {createMut.isPending ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

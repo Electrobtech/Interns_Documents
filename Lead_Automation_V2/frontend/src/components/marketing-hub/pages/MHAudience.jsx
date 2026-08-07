@@ -1,178 +1,50 @@
 'use client';
 import { useState } from 'react';
-import { Plus, Users, RefreshCw, Trash2 } from 'lucide-react';
+import { Plus, Users, TrendingUp, Zap, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import MHBadge from '../ui/MHBadge';
 import MHModal from '../ui/MHModal';
 import { useMHToast } from '../ui/MHToast';
 import {
-  useAudiences, useCreateAudience, useDeleteAudience, useEstimateAudienceSize, useAudienceTagOptions,
+  useMarketingAudiences,
+  useAudienceGrowth,
+  useCreateMarketingAudience,
+  useDeleteMarketingAudience,
 } from '@/lib/queries/marketingHub';
-
-const SOURCES = ['custom', 'pixel', 'lookalike', 'import', 'crm'];
-
-function Field({ label, required, children }) {
-  return (
-    <div>
-      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>
-        {label}{required && <span style={{ color: '#dc2626' }}> *</span>}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-function CreateAudienceModal({ onClose, toast }) {
-  const [step, setStep] = useState(0);
-  const [form, setForm] = useState({ name: '', source: 'custom', tags: [] });
-  const [createdAudience, setCreatedAudience] = useState(null);
-  const [error, setError] = useState('');
-  const { data: tagOptions = [], isLoading: tagsLoading } = useAudienceTagOptions();
-  const createAudience = useCreateAudience();
-  const estimateSize = useEstimateAudienceSize();
-  const STEPS = ['Name & Source', 'Rule', 'Review'];
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const busy = createAudience.isPending || estimateSize.isPending;
-
-  const canNext = () => {
-    if (step === 0) return form.name.trim();
-    if (step === 1) return !!createdAudience;
-    return true;
-  };
-
-  const toggleTag = (tag) => setForm((f) => ({
-    ...f, tags: f.tags.includes(tag) ? f.tags.filter((t) => t !== tag) : [...f.tags, tag],
-  }));
-
-  // Creates the real mh_audiences row first, then estimates its size against
-  // real contact-service data — estimate-size is a POST against an existing
-  // audience id, so the two calls happen in this order, not the reverse.
-  const runEstimate = async () => {
-    setError('');
-    try {
-      const audience = createdAudience || await createAudience.mutateAsync({
-        name: form.name.trim(), source: form.source, filter: { tags: form.tags },
-      });
-      setCreatedAudience(audience);
-      const updated = await estimateSize.mutateAsync(audience.id);
-      setCreatedAudience(updated);
-    } catch (err) {
-      setError(err.message || 'Could not estimate audience size.');
-    }
-  };
-
-  const finish = () => {
-    toast.show('Audience created.', 'success');
-    onClose();
-  };
-
-  return (
-    <MHModal title="New Audience" onClose={onClose} width={520}>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
-        {STEPS.map((s, i) => (
-          <div key={s} style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ height: 4, borderRadius: 2, background: i <= step ? '#6366f1' : '#e5e7eb', marginBottom: 6 }} />
-            <span style={{ fontSize: 11, fontWeight: i === step ? 700 : 500, color: i === step ? '#6366f1' : '#9ca3af' }}>{s}</span>
-          </div>
-        ))}
-      </div>
-
-      {step === 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Field label="Audience Name" required>
-            <input className="mh-input" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. High-Intent Leads Q3" />
-          </Field>
-          <Field label="Source" required>
-            <select className="mh-input" value={form.source} onChange={(e) => set('source', e.target.value)} style={{ textTransform: 'capitalize' }}>
-              {SOURCES.map((s) => <option key={s} value={s} style={{ textTransform: 'capitalize' }}>{s}</option>)}
-            </select>
-          </Field>
-        </div>
-      )}
-
-      {step === 1 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Field label="Contact tags to include">
-            {tagsLoading ? (
-              <p style={{ fontSize: 12, color: '#9ca3af' }}>Loading tags…</p>
-            ) : tagOptions.length === 0 ? (
-              <p style={{ fontSize: 12, color: '#9ca3af' }}>No tagged contacts found yet — you can still create an audience with 0 contacts and update it later.</p>
-            ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {tagOptions.map((t) => (
-                  <button key={t.tag} type="button" onClick={() => { toggleTag(t.tag); setCreatedAudience(null); }}
-                    className="mh-btn"
-                    style={{
-                      fontSize: 12, padding: '6px 12px', borderRadius: 99,
-                      border: form.tags.includes(t.tag) ? '1px solid #6366f1' : '1px solid #e5e7eb',
-                      background: form.tags.includes(t.tag) ? '#eef2ff' : '#fff',
-                      color: form.tags.includes(t.tag) ? '#3730a3' : '#374151',
-                    }}>
-                    {t.tag} ({t.contact_count})
-                  </button>
-                ))}
-              </div>
-            )}
-          </Field>
-          <div style={{ background: '#f9fafb', border: '1px solid #f3f4f6', borderRadius: 10, padding: '14px 16px' }}>
-            {!createdAudience ? (
-              <button className="mh-btn mh-btn-ghost" onClick={runEstimate} disabled={busy} style={{ width: '100%', justifyContent: 'center' }}>
-                {busy ? 'Estimating…' : 'Create & Estimate Audience Size'}
-              </button>
-            ) : (
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontFamily: 'var(--mh-font-display)', fontSize: 26, fontWeight: 700, color: '#111827' }}>
-                  {(createdAudience.size_cached ?? 0).toLocaleString()}
-                </div>
-                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>real contacts matching this tag set, opted-in only</div>
-              </div>
-            )}
-            {error && <p style={{ color: '#dc2626', fontSize: 12, marginTop: 10, textAlign: 'center' }}>{error}</p>}
-          </div>
-        </div>
-      )}
-
-      {step === 2 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {[
-            ['Name', form.name || '—'],
-            ['Source', form.source],
-            ['Tags', form.tags.length ? form.tags.join(', ') : 'None'],
-            ['Estimated size', createdAudience ? (createdAudience.size_cached ?? 0).toLocaleString() : '—'],
-          ].map(([l, v]) => (
-            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f3f4f6', fontSize: 13 }}>
-              <span style={{ color: '#6b7280' }}>{l}</span><span style={{ fontWeight: 600, color: '#111827' }}>{v}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTop: '1px solid #f3f4f6' }}>
-        <div>{step > 0 && <button className="mh-btn mh-btn-ghost" disabled={busy} onClick={() => setStep((s) => s - 1)}>Back</button>}</div>
-        {step < STEPS.length - 1
-          ? <button className="mh-btn mh-btn-primary" disabled={!canNext()} style={{ opacity: canNext() ? 1 : 0.5 }} onClick={() => setStep((s) => s + 1)}>Next</button>
-          : <button className="mh-btn mh-btn-primary" onClick={finish}>Done</button>}
-      </div>
-    </MHModal>
-  );
-}
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 function ScoreRing({ score, size = 48 }) {
   const r = (size - 8) / 2;
   const circ = 2 * Math.PI * r;
-  const fill = (score / 100) * circ;
-  const color = score >= 85 ? '#059669' : score >= 70 ? '#d97706' : '#dc2626';
+  const safe = typeof score === 'number' ? score : 0;
+  const fill = (safe / 100) * circ;
+  const color = safe >= 85 ? '#059669' : safe >= 70 ? '#d97706' : '#dc2626';
   return (
     <svg width={size} height={size}>
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e5e7eb" strokeWidth={5} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={5}
-        strokeDasharray={`${fill} ${circ - fill}`} strokeLinecap="round"
-        transform={`rotate(-90 ${size / 2} ${size / 2})`} />
-      <text x="50%" y="52%" dominantBaseline="middle" textAnchor="middle" style={{ fontSize: 12, fontWeight: 700, fill: color }}>{score}</text>
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth={5}
+        strokeDasharray={`${fill} ${circ - fill}`}
+        strokeLinecap="round"
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+      <text x="50%" y="52%" dominantBaseline="middle" textAnchor="middle" style={{ fontSize: 12, fontWeight: 700, fill: color }}>
+        {safe || '—'}
+      </text>
     </svg>
   );
 }
 
-const fmtSize = (n) => n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : (n || 0);
+const fmtSize = (n) => {
+  const v = Number(n) || 0;
+  if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
+  return String(v);
+};
 
 // Freshness score off size_computed_at — real, derived from the audience's
 // own data, not a fabricated per-audience "quality" number.
@@ -185,88 +57,276 @@ function freshnessScore(a) {
   return 40;
 }
 
+const SOURCE_OPTIONS = ['Custom', 'Pixel', 'Lookalike', 'Import', 'CRM'];
+
 export default function MHAudience() {
   const toast = useMHToast();
   const { data: audiences = [], isLoading, refetch } = useAudiences();
   const [showCreate, setShowCreate] = useState(false);
   const [hovered, setHovered] = useState(null);
-  const deleteAudience = useDeleteAudience();
-  const estimateSize = useEstimateAudienceSize();
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ name: '', source: 'Custom', size: '', score: '80' });
 
-  const remove = (a) => {
-    deleteAudience.mutate(a.id, { onSuccess: () => toast.show('Audience deleted', 'success') });
+  const { data: audiences = [], isLoading, isError, error, refetch, isFetching } = useMarketingAudiences();
+  const { data: growth = [], isLoading: growthLoading } = useAudienceGrowth(8);
+  const createMut = useCreateMarketingAudience();
+  const deleteMut = useDeleteMarketingAudience();
+
+  const handleCreate = async () => {
+    if (!form.name.trim()) {
+      toast.show('Name is required', 'error');
+      return;
+    }
+    try {
+      await createMut.mutateAsync({
+        name: form.name.trim(),
+        source: form.source,
+        size: parseInt(form.size, 10) || 0,
+        score: form.score === '' ? null : parseInt(form.score, 10),
+        status: 'Active',
+      });
+      toast.show('Audience created', 'success');
+      setShowCreate(false);
+      setForm({ name: '', source: 'Custom', size: '', score: '80' });
+    } catch (e) {
+      toast.show(e?.message || 'Failed to create audience', 'error');
+    }
   };
-  const refreshOne = (a) => {
-    estimateSize.mutate(a.id, { onSuccess: () => toast.show(`Refreshed ${a.name}`, 'success') });
+
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Delete audience "${name}"?`)) return;
+    try {
+      await deleteMut.mutateAsync(id);
+      toast.show('Audience deleted', 'success');
+    } catch (e) {
+      toast.show(e?.message || 'Failed to delete', 'error');
+    }
   };
 
   return (
     <div style={{ padding: '24px 28px', background: 'var(--mh-bg)', minHeight: '100vh' }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontFamily: 'var(--mh-font-display)', fontSize: 22, fontWeight: 700, color: 'var(--mh-text)', margin: 0 }}>Audience Manager</h1>
           <p style={{ fontSize: 13, color: 'var(--mh-text-3)', marginTop: 4 }}>Build audiences from real, tagged contacts — used directly by Campaigns and Broadcasts</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="mh-btn mh-btn-ghost" onClick={() => refetch()}><RefreshCw size={14} /></button>
-          <button className="mh-btn mh-btn-primary" onClick={() => setShowCreate(true)}><Plus size={15} /> New Audience</button>
+          <button
+            className="mh-btn mh-btn-ghost"
+            onClick={() => {
+              refetch();
+              toast.show('Refreshing audiences…', 'info');
+            }}
+            disabled={isFetching}
+          >
+            {isFetching ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          </button>
+          <button className="mh-btn mh-btn-primary" onClick={() => setShowCreate(true)}>
+            <Plus size={15} /> New Audience
+          </button>
         </div>
       </div>
 
-      {isLoading ? (
-        <div style={{ padding: '60px 24px', textAlign: 'center', color: '#9ca3af' }}>Loading…</div>
-      ) : audiences.length === 0 ? (
-        <div style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, padding: '60px 24px', textAlign: 'center' }}>
-          <Users size={36} style={{ color: '#d1d5db', margin: '0 auto 12px' }} />
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#374151' }}>No audiences yet</div>
-          <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 4 }}>Create one to start targeting Campaigns and Broadcasts.</div>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-          {audiences.map((a) => {
-            const score = freshnessScore(a);
-            return (
-              <div key={a.id}
-                onMouseEnter={() => setHovered(a.id)}
-                onMouseLeave={() => setHovered(null)}
-                style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, padding: '20px', boxShadow: hovered === a.id ? 'var(--mh-shadow-md)' : 'var(--mh-shadow-sm)', transition: 'all 0.2s' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#111827', marginBottom: 4 }}>{a.name}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6, background: '#e0e7ff', color: '#3730a3', textTransform: 'capitalize' }}>{a.source}</span>
-                      <MHBadge label={a.status} variant={a.status === 'active' ? 'active' : 'default'} dot />
-                    </div>
-                  </div>
-                  <ScoreRing score={score} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 8 }}>
-                  <Users size={15} style={{ color: '#6366f1' }} />
-                  <span style={{ fontFamily: 'var(--mh-font-display)', fontSize: 24, fontWeight: 700, color: '#111827' }}>{fmtSize(a.size_cached)}</span>
-                  <span style={{ fontSize: 12, color: '#6b7280' }}>real contacts</span>
-                </div>
-                {Array.isArray(a.filter?.tags) && a.filter.tags.length > 0 && (
-                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>Tags: {a.filter.tags.join(', ')}</div>
-                )}
-                <div style={{ fontSize: 11, color: '#9ca3af' }}>
-                  {a.size_computed_at ? `Estimated ${new Date(a.size_computed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Not yet estimated'}
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                  <button className="mh-btn mh-btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }} onClick={() => refreshOne(a)} disabled={estimateSize.isPending}>
-                    <RefreshCw size={12} /> Refresh Size
-                  </button>
-                  <button className="mh-btn mh-btn-ghost" style={{ justifyContent: 'center', fontSize: 12, color: '#dc2626', borderColor: '#fee2e2' }} onClick={() => remove(a)} disabled={deleteAudience.isPending}>
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+      {isError && (
+        <div style={{ marginBottom: 16, padding: '12px 16px', borderRadius: 10, background: '#fef2f2', border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: 8, color: '#991b1b', fontSize: 13 }}>
+          <AlertCircle size={16} />
+          {error?.message || 'Failed to load audiences'}
         </div>
       )}
 
-      {showCreate && <CreateAudienceModal onClose={() => setShowCreate(false)} toast={toast} />}
+      {showCreate && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 420, padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.15)' }}>
+            <div style={{ fontFamily: 'var(--mh-font-display)', fontSize: 16, fontWeight: 700, marginBottom: 16 }}>New Audience</div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>Name</label>
+            <input
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. High-Intent Leads Q3"
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e7eb', marginBottom: 12, fontSize: 13 }}
+            />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>Source</label>
+            <select
+              value={form.source}
+              onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e7eb', marginBottom: 12, fontSize: 13 }}
+            >
+              {SOURCE_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>Size</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.size}
+                  onChange={(e) => setForm((f) => ({ ...f, size: e.target.value }))}
+                  placeholder="0"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>Score (0–100)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={form.score}
+                  onChange={(e) => setForm((f) => ({ ...f, score: e.target.value }))}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="mh-btn mh-btn-ghost" onClick={() => setShowCreate(false)} disabled={createMut.isPending}>Cancel</button>
+              <button className="mh-btn mh-btn-primary" onClick={handleCreate} disabled={createMut.isPending}>
+                {createMut.isPending ? <Loader2 size={14} className="animate-spin" /> : null} Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
+        <div>
+          {isLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 48, color: '#6b7280', gap: 8 }}>
+              <Loader2 size={18} className="animate-spin" /> Loading audiences…
+            </div>
+          ) : audiences.length === 0 ? (
+            <div style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, padding: 40, textAlign: 'center', marginBottom: 24 }}>
+              <Users size={28} style={{ color: '#9ca3af', marginBottom: 8 }} />
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#111827' }}>No audiences yet</div>
+              <div style={{ fontSize: 13, color: '#6b7280', marginTop: 4, marginBottom: 16 }}>Create your first segment to start targeting.</div>
+              <button className="mh-btn mh-btn-primary" onClick={() => setShowCreate(true)}>
+                <Plus size={15} /> New Audience
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 24 }}>
+              {audiences.map((a) => (
+                <div
+                  key={a.id}
+                  onMouseEnter={() => setHovered(a.id)}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{
+                    background: '#fff',
+                    border: '1px solid var(--mh-border)',
+                    borderRadius: 14,
+                    padding: '20px',
+                    boxShadow: hovered === a.id ? 'var(--mh-shadow-md)' : 'var(--mh-shadow-sm)',
+                    transition: 'all 0.2s',
+                    cursor: 'pointer',
+                    position: 'relative',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: '#111827', marginBottom: 4 }}>{a.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6, background: '#e0e7ff', color: '#3730a3' }}>{a.source}</span>
+                        <MHBadge label={a.status} variant={a.status === 'Active' ? 'active' : 'default'} dot />
+                      </div>
+                    </div>
+                    <ScoreRing score={a.score} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 8 }}>
+                    <Users size={15} style={{ color: '#6366f1' }} />
+                    <span style={{ fontSize: 22, fontWeight: 800, color: '#111827' }}>{fmtSize(a.size)}</span>
+                    <span style={{ fontSize: 12, color: '#9ca3af' }}>contacts</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>
+                    Updated {a.lastUpdated || (a.updated_at ? new Date(a.updated_at).toLocaleDateString() : '—')}
+                  </div>
+                  {hovered === a.id && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(a.id, a.name);
+                      }}
+                      style={{ position: 'absolute', top: 10, right: 10, fontSize: 11, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, padding: '16px 20px', boxShadow: 'var(--mh-shadow-sm)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <TrendingUp size={16} style={{ color: '#6366f1' }} />
+              <div style={{ fontFamily: 'var(--mh-font-display)', fontSize: 15, fontWeight: 700, color: '#111827' }}>Audience Growth — Last 8 Weeks</div>
+            </div>
+            {growthLoading ? (
+              <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
+                <Loader2 size={18} className="animate-spin" />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={growth} margin={{ top: 4, right: 16, bottom: 4, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                  <XAxis dataKey="week" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
+                  <Tooltip contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12 }} formatter={(v) => fmtSize(v)} />
+                  <Line type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 4, fill: '#6366f1' }} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+      )}
+
+        <div>
+          <div style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, boxShadow: 'var(--mh-shadow-sm)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f3f4f6', background: 'linear-gradient(135deg,rgba(168,85,247,0.06),rgba(99,102,241,0.06))' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Zap size={16} style={{ color: '#a855f7' }} />
+                <div style={{ fontFamily: 'var(--mh-font-display)', fontSize: 14, fontWeight: 700, color: '#111827' }}>AI Segment Suggestions</div>
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>Based on your audience data and campaign performance</div>
+            </div>
+            <div style={{ padding: '16px' }}>
+              {AI_SUGGESTIONS.map((s, i) => (
+                <div key={i} style={{ padding: '14px', borderRadius: 10, background: '#f9fafb', border: '1px solid #f3f4f6', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#111827' }}>{s.title}</div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: s.color }}>{s.score}%</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 10 }}>{s.desc}</div>
+                  <div className="progress-track">
+                    <div className="progress-fill" style={{ width: `${s.score}%`, background: s.color }} />
+                  </div>
+                  <button
+                    className="mh-btn mh-btn-ghost"
+                    style={{ marginTop: 10, width: '100%', justifyContent: 'center', fontSize: 12 }}
+                    onClick={async () => {
+                      try {
+                        await createMut.mutateAsync({
+                          name: s.title,
+                          source: 'Lookalike',
+                          size: 0,
+                          score: s.score,
+                          status: 'Active',
+                          filter_definition: { suggestion: s.desc },
+                        });
+                        toast.show(`Created segment: ${s.title}`, 'success');
+                      } catch (e) {
+                        toast.show(e?.message || 'Failed to create', 'error');
+                      }
+                    }}
+                  >
+                    Create Segment
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
