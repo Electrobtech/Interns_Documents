@@ -106,7 +106,7 @@ export const calendarEvents = [
   { id:'11', title:'Product Launch - September',  type:'campaign',  date:'2025-09-01', color:'#6366f1' },
   { id:'12', title:'Team Building Event',          type:'meeting',   date:'2025-09-05', color:'#3b82f6' },
   { id:'13', title:'Diwali Campaign Start',        type:'campaign',  date:'2025-09-10', color:'#f59e0b' },
-  { id:'14', title='Email Broadcast - New Leads',   type:'broadcast', date:'2025-09-12', color:'#10b981' },
+  { id:'14', title:'Email Broadcast - New Leads',   type:'broadcast', date:'2025-09-12', color:'#10b981' },
   { id:'15', title:'Competitor Analysis Review',    type:'meeting',   date:'2025-09-15', color:'#3b82f6' },
 ];
 export const seoKeywords = [
