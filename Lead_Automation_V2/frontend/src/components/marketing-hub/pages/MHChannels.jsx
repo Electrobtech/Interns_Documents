@@ -6,9 +6,18 @@ import {
 } from 'lucide-react';
 import MHBadge from '../ui/MHBadge';
 import { useMHToast } from '../ui/MHToast';
-import { channels } from '../mockData';
+import { channels, campaigns as MOCK_CAMPAIGNS, broadcasts as MOCK_BROADCASTS } from '../mockData';
 import { useChannelStats, useIntegrationsList } from '@/lib/queries/marketingHub';
 import { setPrefillChannel } from '../prefill';
+
+// Derive mock stats from the mock datasets — counts how many mock campaigns/broadcasts
+// use each channel's platformKey, so channel cards show non-zero demo counts.
+const MOCK_STATS = channels.reduce((acc, ch) => {
+  const campaigns = MOCK_CAMPAIGNS.filter(c => (c.platform || '').toLowerCase() === (ch.platformKey || '').toLowerCase()).length;
+  const broadcasts = MOCK_BROADCASTS.filter(b => (b.channel || '').toLowerCase() === ch.id.toLowerCase()).length;
+  acc[ch.id] = { campaigns, broadcasts };
+  return acc;
+}, {});
 
 const CHANNEL_ICONS = {
   whatsapp: MessageCircle,
@@ -125,7 +134,9 @@ function ChannelCard({ ch, toast, stats, integrations, onNavigate }) {
 export default function MHChannels({ onNavigate }) {
   const toast = useMHToast();
   const [dateOpen, setDateOpen] = useState(false);
-  const { data: stats } = useChannelStats();
+  const { data: realStats } = useChannelStats();
+  // Fall back to mock-derived stats when the API returns nothing
+  const stats = (realStats && Object.keys(realStats).length > 0) ? realStats : MOCK_STATS;
   const { data: integrations = [] } = useIntegrationsList();
 
   return (

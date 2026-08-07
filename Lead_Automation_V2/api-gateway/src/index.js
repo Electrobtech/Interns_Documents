@@ -174,11 +174,12 @@ const routes = [
 
 const wsProxies = [];
 for (const r of routes) {
+  const isMarketingHub = r.path.startsWith('/marketing-hub');
   const proxy = createProxyMiddleware(r.path, {
     target: r.target,
     changeOrigin: true,
     ws: r.ws || false,
-    // keep the original path (e.g. /auth/login -> AUTH/auth/login)
+    pathRewrite: isMarketingHub ? { '^/marketing-hub': '' } : undefined,
   });
   app.use(r.path, proxy);
   if (r.ws) wsProxies.push(proxy);

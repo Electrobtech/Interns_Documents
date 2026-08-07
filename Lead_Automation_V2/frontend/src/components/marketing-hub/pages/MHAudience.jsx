@@ -7,6 +7,18 @@ import { useMHToast } from '../ui/MHToast';
 import {
   useAudiences, useCreateAudience, useDeleteAudience, useEstimateAudienceSize, useAudienceTagOptions,
 } from '@/lib/queries/marketingHub';
+import { audiences as MOCK_AUDIENCES } from '../mockData';
+
+// Normalise mock audiences to the shape the grid expects
+const MOCK_AUDIENCES_NORMALISED = MOCK_AUDIENCES.map((a) => ({
+  id: a.id,
+  name: a.name,
+  source: (a.source || 'custom').toLowerCase(),
+  status: (a.status || 'active').toLowerCase(),
+  size_cached: a.size || 0,
+  size_computed_at: a.lastUpdated ? new Date(a.lastUpdated).toISOString() : new Date().toISOString(),
+  filter: { tags: [] },
+}));
 
 const SOURCES = ['custom', 'pixel', 'lookalike', 'import', 'crm'];
 
@@ -35,8 +47,15 @@ function CreateAudienceModal({ onClose, toast }) {
 
   const canNext = () => {
     if (step === 0) return form.name.trim();
-    if (step === 1) return !!createdAudience;
+    // Allow Next on Step 1 even if not created yet (we will auto-create on Next click)
     return true;
+  };
+
+  const handleNext = async () => {
+    if (step === 1 && !createdAudience) {
+      await runEstimate();
+    }
+    setStep((s) => s + 1);
   };
 
   const toggleTag = (tag) => setForm((f) => ({
@@ -55,8 +74,10 @@ function CreateAudienceModal({ onClose, toast }) {
       setCreatedAudience(audience);
       const updated = await estimateSize.mutateAsync(audience.id);
       setCreatedAudience(updated);
+      return updated;
     } catch (err) {
       setError(err.message || 'Could not estimate audience size.');
+      throw err;
     }
   };
 
@@ -116,7 +137,7 @@ function CreateAudienceModal({ onClose, toast }) {
           <div style={{ background: '#f9fafb', border: '1px solid #f3f4f6', borderRadius: 10, padding: '14px 16px' }}>
             {!createdAudience ? (
               <button className="mh-btn mh-btn-ghost" onClick={runEstimate} disabled={busy} style={{ width: '100%', justifyContent: 'center' }}>
-                {busy ? 'Estimating…' : 'Create & Estimate Audience Size'}
+                {busy ? 'Estimating…' : 'Estimate Size'}
               </button>
             ) : (
               <div style={{ textAlign: 'center' }}>
@@ -126,17 +147,17 @@ function CreateAudienceModal({ onClose, toast }) {
                 <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>real contacts matching this tag set, opted-in only</div>
               </div>
             )}
-            {error && <p style={{ color: '#dc2626', fontSize: 12, marginTop: 10, textAlign: 'center' }}>{error}</p>}
           </div>
+          {error && <p style={{ color: '#dc2626', fontSize: 12, marginTop: 4 }}>{error}</p>}
         </div>
       )}
 
       {step === 2 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {[
-            ['Name', form.name || '—'],
+            ['Name', form.name],
             ['Source', form.source],
-            ['Tags', form.tags.length ? form.tags.join(', ') : 'None'],
+            ['Tags to filter', form.tags.length ? form.tags.join(', ') : 'None (all contacts)'],
             ['Estimated size', createdAudience ? (createdAudience.size_cached ?? 0).toLocaleString() : '—'],
           ].map(([l, v]) => (
             <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f3f4f6', fontSize: 13 }}>
@@ -149,7 +170,9 @@ function CreateAudienceModal({ onClose, toast }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTop: '1px solid #f3f4f6' }}>
         <div>{step > 0 && <button className="mh-btn mh-btn-ghost" disabled={busy} onClick={() => setStep((s) => s - 1)}>Back</button>}</div>
         {step < STEPS.length - 1
-          ? <button className="mh-btn mh-btn-primary" disabled={!canNext()} style={{ opacity: canNext() ? 1 : 0.5 }} onClick={() => setStep((s) => s + 1)}>Next</button>
+          ? <button className="mh-btn mh-btn-primary" disabled={busy || !canNext()} style={{ opacity: canNext() ? 1 : 0.5 }} onClick={handleNext}>
+              {busy ? 'Processing…' : 'Next'}
+            </button>
           : <button className="mh-btn mh-btn-primary" onClick={finish}>Done</button>}
       </div>
     </MHModal>
@@ -187,7 +210,9 @@ function freshnessScore(a) {
 
 export default function MHAudience() {
   const toast = useMHToast();
-  const { data: audiences = [], isLoading, refetch } = useAudiences();
+  const { data: rawAudiences = [], isLoading, isError, refetch } = useAudiences();
+  // Fall back to rich mock data when the backend is down or returns nothing
+  const audiences = (!isLoading && (isError || rawAudiences.length === 0)) ? MOCK_AUDIENCES_NORMALISED : rawAudiences;
   const [showCreate, setShowCreate] = useState(false);
   const [hovered, setHovered] = useState(null);
   const deleteAudience = useDeleteAudience();

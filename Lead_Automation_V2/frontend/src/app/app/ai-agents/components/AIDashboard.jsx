@@ -139,6 +139,15 @@ const MOCK_SUMMARY = {
   revenueInfluenced: 842000,
 };
 
+// Status label + colour. Derived from real activity, so an idle agent looks
+// idle rather than claiming to be running.
+const STATUS_STYLE = {
+  active:  { label: 'Running', text: 'text-green-600' },
+  idle:    { label: 'Idle',    text: 'text-slate-400' },
+  loading: { label: 'Loading…', text: 'text-slate-300' },
+  error:   { label: 'Unavailable', text: 'text-red-500' },
+};
+
 // ─── Agent Card ───────────────────────────────────────────────────────────────
 function AgentCard({ agent, onOpen }) {
   return (
@@ -219,14 +228,6 @@ function AgentCard({ agent, onOpen }) {
   );
 }
 
-// Status label + colour. Derived from real activity, so an idle agent looks
-// idle rather than claiming to be running.
-const STATUS_STYLE = {
-  active:  { label: 'Running', text: 'text-green-600' },
-  idle:    { label: 'Idle',    text: 'text-slate-400' },
-  loading: { label: 'Loading…', text: 'text-slate-300' },
-  error:   { label: 'Unavailable', text: 'text-red-500' },
-};
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 export default function Dashboard({ onNavigate }) {
@@ -234,13 +235,13 @@ export default function Dashboard({ onNavigate }) {
   // without a manual refresh.
   const { data, isLoading, isError, error, dataUpdatedAt } = useAgentStatus();
 
-  const agents = data?.agents?.length
-    ? data.agents.map((a) => {
-        // Backend currently keys each agent by `type` (e.g. "marketing"),
-        // not `id`, and only sends { type, status, chunk_count } — none of
-        // the card fields below (confidence, queue, capabilities, ...) are
-        // guaranteed to be present. Normalize here so AgentCard always gets
-        // a safe, fully-shaped object no matter what the API returns.
+  // Use mock data when: (1) backend is unreachable/errored, or (2) backend
+  // returned a response but zero agents (empty DB / services not seeded yet)
+  const useMock = isError || (!isLoading && (!data?.agents || data.agents.length === 0));
+
+  const agents = useMock
+    ? MOCK_AGENTS
+    : data.agents.map((a) => {
         const id = a.id ?? a.type;
         return {
           ...PLACEHOLDER_AGENTS.find((p) => p.id === id),
@@ -249,12 +250,9 @@ export default function Dashboard({ onNavigate }) {
           id,
           capabilities: Array.isArray(a.capabilities) ? a.capabilities : [],
         };
-      })
-    : isError
-      ? MOCK_AGENTS // Use mock data when backend is unavailable
-      : PLACEHOLDER_AGENTS.map((a) => a);
+      });
 
-  const s = isError ? MOCK_SUMMARY : (data?.summary ?? {});
+  const s = useMock ? MOCK_SUMMARY : (data?.summary ?? {});
   const activeCount = s.agentsActive ?? 0;
 
   return (
@@ -266,8 +264,8 @@ export default function Dashboard({ onNavigate }) {
           <p className="text-sm text-slate-500 mt-1">
             {isLoading
               ? 'Loading agent status…'
-              : isError
-                ? 'Agent status unavailable'
+              : useMock
+                ? 'Demo mode — showing sample data'
                 : `${activeCount} of 3 agents active`}
             {' · '}
             {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -296,11 +294,11 @@ export default function Dashboard({ onNavigate }) {
         <div className="relative z-10 p-8">
           <div className="flex items-center gap-3 mb-5">
             <div className="relative">
-              <div className={`w-2.5 h-2.5 rounded-full ${isError ? 'bg-amber-400' : 'bg-green-400'}`} />
-              {!isError && <div className="absolute inset-0 w-2.5 h-2.5 rounded-full bg-green-400 animate-ping-slow" />}
+              <div className={`w-2.5 h-2.5 rounded-full ${useMock ? 'bg-amber-400' : 'bg-green-400'}`} />
+              {!useMock && <div className="absolute inset-0 w-2.5 h-2.5 rounded-full bg-green-400 animate-ping-slow" />}
             </div>
-            <span className={`text-xs font-semibold tracking-wide ${isError ? 'text-amber-400' : 'text-green-400'}`}>
-              {isError ? 'DEMO MODE - SHOWING MOCK DATA' : 'ALL SYSTEMS OPERATIONAL'}
+            <span className={`text-xs font-semibold tracking-wide ${useMock ? 'text-amber-400' : 'text-green-400'}`}>
+              {useMock ? 'DEMO MODE - SHOWING MOCK DATA' : 'ALL SYSTEMS OPERATIONAL'}
             </span>
             {dataUpdatedAt > 0 && (
               <span className="text-xs text-white/25 ml-4">
@@ -312,7 +310,7 @@ export default function Dashboard({ onNavigate }) {
             {isLoading ? 'Loading…' : `${activeCount} AI Agent${activeCount === 1 ? '' : 's'} Active`}
           </h2>
           <p className="text-white/45 text-sm max-w-lg leading-relaxed">
-            {isError
+            {useMock
               ? `AI service is currently unavailable. Showing demo data to illustrate functionality. Connect AI backend to see real-time metrics.`
               : s.avgConfidence != null
                 ? `Marketing, Sales, and Support agents ground every response in your company knowledge via RAG, at an average confidence of ${s.avgConfidence}%.`
