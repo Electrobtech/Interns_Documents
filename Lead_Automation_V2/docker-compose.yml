@@ -103,12 +103,13 @@ services:
       redis:    { condition: service_healthy }
     ports: ["4004:4004"]
 
-  # AI Agent service - Python/FastAPI for Marketing + Sales + Support agents
-  ai-agent-service:
+  # AI Agent Overview service - Python/FastAPI for Overview and orchestration
+  ai-overview-service:
     build:
       context: .
       dockerfile: ai-agent-backend/Dockerfile
-    container_name: ai-agent-service
+      network: host
+    container_name: ai-overview-service
     env_file: .env
     environment:
       # NOTE: still connects as the admin/migration role, not app_user. This
@@ -131,7 +132,97 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       ollama:   { condition: service_started }
-    ports: ["4005:4005"]
+    ports: ["4020:4020"]
+    volumes:
+      - ./ai-agent-backend/entrypoint-overview.sh:/app/entrypoint-overview.sh
+    entrypoint: ["./entrypoint-overview.sh"]
+
+  # AI Agent Marketing service - Python/FastAPI for Marketing agent
+  ai-marketing-service:
+    build:
+      context: .
+      dockerfile: ai-agent-backend/Dockerfile
+      network: host
+    container_name: ai-marketing-service
+    env_file: .env
+    environment:
+      DATABASE_URL:          postgresql+asyncpg://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      JWT_SECRET:            ${JWT_SECRET:-change-me-in-prod}
+      LLM_PROVIDER:          ${LLM_PROVIDER:-groq}
+      LLM_FALLBACK_PROVIDER: ${LLM_FALLBACK_PROVIDER:-ollama}
+      GROQ_API_KEY:          ${GROQ_API_KEY}
+      GROQ_BASE_URL:         ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL:            ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      OLLAMA_HOST:           http://ollama:11434
+      OLLAMA_MODEL:          ${OLLAMA_MODEL:-qwen3:8b}
+      EMBEDDING_MODEL:       ${EMBEDDING_MODEL:-nomic-embed-text}
+      CONTACT_SERVICE_URL:   http://contact-service:4003
+      CAMPAIGN_SERVICE_URL:  http://campaign-service:4004
+    depends_on:
+      postgres: { condition: service_healthy }
+      ollama:   { condition: service_started }
+    ports: ["4021:4021"]
+    volumes:
+      - ./ai-agent-backend/entrypoint-marketing.sh:/app/entrypoint-marketing.sh
+    entrypoint: ["./entrypoint-marketing.sh"]
+
+  # AI Agent Sales service - Python/FastAPI for Sales agent
+  ai-sales-service:
+    build:
+      context: .
+      dockerfile: ai-agent-backend/Dockerfile
+      network: host
+    container_name: ai-sales-service
+    env_file: .env
+    environment:
+      DATABASE_URL:          postgresql+asyncpg://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      JWT_SECRET:            ${JWT_SECRET:-change-me-in-prod}
+      LLM_PROVIDER:          ${LLM_PROVIDER:-groq}
+      LLM_FALLBACK_PROVIDER: ${LLM_FALLBACK_PROVIDER:-ollama}
+      GROQ_API_KEY:          ${GROQ_API_KEY}
+      GROQ_BASE_URL:         ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL:            ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      OLLAMA_HOST:           http://ollama:11434
+      OLLAMA_MODEL:          ${OLLAMA_MODEL:-qwen3:8b}
+      EMBEDDING_MODEL:       ${EMBEDDING_MODEL:-nomic-embed-text}
+      CONTACT_SERVICE_URL:   http://contact-service:4003
+      CAMPAIGN_SERVICE_URL:  http://campaign-service:4004
+    depends_on:
+      postgres: { condition: service_healthy }
+      ollama:   { condition: service_started }
+    ports: ["4022:4022"]
+    volumes:
+      - ./ai-agent-backend/entrypoint-sales.sh:/app/entrypoint-sales.sh
+    entrypoint: ["./entrypoint-sales.sh"]
+
+  # AI Agent Support service - Python/FastAPI for Support agent
+  ai-support-service:
+    build:
+      context: .
+      dockerfile: ai-agent-backend/Dockerfile
+      network: host
+    container_name: ai-support-service
+    env_file: .env
+    environment:
+      DATABASE_URL:          postgresql+asyncpg://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      JWT_SECRET:            ${JWT_SECRET:-change-me-in-prod}
+      LLM_PROVIDER:          ${LLM_PROVIDER:-groq}
+      LLM_FALLBACK_PROVIDER: ${LLM_FALLBACK_PROVIDER:-ollama}
+      GROQ_API_KEY:          ${GROQ_API_KEY}
+      GROQ_BASE_URL:         ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL:            ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      OLLAMA_HOST:           http://ollama:11434
+      OLLAMA_MODEL:          ${OLLAMA_MODEL:-qwen3:8b}
+      EMBEDDING_MODEL:       ${EMBEDDING_MODEL:-nomic-embed-text}
+      CONTACT_SERVICE_URL:   http://contact-service:4003
+      CAMPAIGN_SERVICE_URL:  http://campaign-service:4004
+    depends_on:
+      postgres: { condition: service_healthy }
+      ollama:   { condition: service_started }
+    ports: ["4023:4023"]
+    volumes:
+      - ./ai-agent-backend/entrypoint-support.sh:/app/entrypoint-support.sh
+    entrypoint: ["./entrypoint-support.sh"]
 
   # Billing service - Razorpay payment gateway: wallet recharge
   # (campaigns/broadcasts), product-platform checkout, and walk-in POS
@@ -344,18 +435,21 @@ services:
       # and internal PORT above — verified end-to-end this session; the
       # equivalent block on main had drifted (stale ports, pre-rename
       # ai-service, missing linkedin-service) and is superseded by this one.
-      AUTH_SERVICE_URL:         http://auth-service:4001
-      INBOX_SERVICE_URL:        http://inbox-service:4002
-      CONTACT_SERVICE_URL:      http://contact-service:4003
-      CAMPAIGN_SERVICE_URL:     http://campaign-service:4004
-      AI_SERVICE_URL:           http://ai-agent-service:4005
-      ECOMMERCE_SERVICE_URL:    http://ecommerce-service:4006
-      REVIEW_SERVICE_URL:       http://review-service:4007
-      ANALYTICS_SERVICE_URL:    http://analytics-service:4008
-      INTEGRATION_SERVICE_URL:  http://integration-service:4008
-      LINKEDIN_SERVICE_URL:     http://linkedin-service:4009
-      TEAM_SERVICE_URL:         http://team-service:4010
-      AUTOMATION_SERVICE_URL:   http://automation-service:4011
+      AUTH_SERVICE_URL:        http://auth-service:4001
+      INBOX_SERVICE_URL:       http://inbox-service:4002
+      CONTACT_SERVICE_URL:     http://contact-service:4003
+      CAMPAIGN_SERVICE_URL:    http://campaign-service:4004
+      AI_OVERVIEW_SERVICE_URL:    http://ai-overview-service:4020
+      AI_MARKETING_SERVICE_URL:   http://ai-marketing-service:4021
+      AI_SALES_SERVICE_URL:       http://ai-sales-service:4022
+      AI_SUPPORT_SERVICE_URL:     http://ai-support-service:4023
+      ECOMMERCE_SERVICE_URL:   http://ecommerce-service:4006
+      REVIEW_SERVICE_URL:      http://review-service:4007
+      ANALYTICS_SERVICE_URL:   http://analytics-service:4008
+      INTEGRATION_SERVICE_URL: http://integration-service:4008
+      LINKEDIN_SERVICE_URL:    http://linkedin-service:4009
+      TEAM_SERVICE_URL:        http://team-service:4010
+      AUTOMATION_SERVICE_URL:  http://automation-service:4011
       NOTIFICATION_SERVICE_URL: http://notification-service:4012
       EMAIL_SERVICE_URL:        http://email-service:4013
       CALENDAR_SERVICE_URL:     http://calendar-service:4014
@@ -365,7 +459,10 @@ services:
       - inbox-service
       - contact-service
       - campaign-service
-      - ai-agent-service
+      - ai-overview-service
+      - ai-marketing-service
+      - ai-sales-service
+      - ai-support-service
       - billing-service
       - ecommerce-service
       - review-service

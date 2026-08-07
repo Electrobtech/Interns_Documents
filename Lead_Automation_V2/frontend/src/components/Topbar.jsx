@@ -1,5 +1,5 @@
 'use client';
-import { Search, HelpCircle, LogOut } from 'lucide-react';
+import { Search, LogOut } from 'lucide-react';
 import { logout } from '@/lib/auth';
 import NotificationBell from './NotificationBell';
 
@@ -26,9 +26,6 @@ export default function Topbar({ profile }) {
 
       <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-4">
         <NotificationBell />
-        <button title="Help" className="p-2 rounded-lg text-slate-400 hover:text-violet-600 hover:bg-violet-50 transition-colors">
-          <HelpCircle size={18} />
-        </button>
 
         <div className="hidden sm:block w-px h-6 bg-slate-200" />
 

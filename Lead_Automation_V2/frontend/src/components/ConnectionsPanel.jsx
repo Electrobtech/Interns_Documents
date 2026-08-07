@@ -288,38 +288,28 @@ function StatusCard({ platform, icon: Icon, status, onConnect, connecting, isAdm
   );
 }
 
-// ---------- Post composer ----------
+// ---------- Post composers ----------
+// Split into one always-visible block per platform (Instagram, Facebook)
+// instead of a single form behind a Platform dropdown — same layout pattern
+// as the dedicated Google Reviews block, so each channel is its own card.
 
-const PLATFORM_OPTIONS = [
-  { value: 'instagram', label: 'Instagram' },
-  { value: 'facebook', label: 'Facebook' },
-  { value: 'both', label: 'Both' },
+const INSTAGRAM_POST_TYPES = [
+  { value: 'image', label: 'Image' },
+  { value: 'video', label: 'Video / Reel' },
 ];
 
 // Instagram's Graph API has no text-only post type — every IG post needs a
-// photo or video attached. Facebook supports all three. This isn't a bug in
-// this app, it's a Meta platform restriction, so the UI reflects it instead
-// of hiding it and letting the request fail on Meta's side.
-const POST_TYPES_BY_PLATFORM = {
-  instagram: [
-    { value: 'image', label: 'Image' },
-    { value: 'video', label: 'Video / Reel' },
-  ],
-  facebook: [
-    { value: 'text', label: 'Text' },
-    { value: 'image', label: 'Image' },
-    { value: 'video', label: 'Video' },
-  ],
-  both: [
-    { value: 'text', label: 'Text' },
-    { value: 'image', label: 'Image' },
-    { value: 'video', label: 'Video' },
-  ],
-};
+// photo or video attached. This isn't a bug in this app, it's a Meta
+// platform restriction, so the UI reflects it instead of hiding it and
+// letting the request fail on Meta's side.
+const FACEBOOK_POST_TYPES = [
+  { value: 'text', label: 'Text' },
+  { value: 'image', label: 'Image' },
+  { value: 'video', label: 'Video' },
+];
 
-function ComposerResultRow({ platform, result }) {
+function ComposerResultRow({ label, result }) {
   if (!result) return null;
-  const label = platform === 'instagram' ? 'Instagram' : 'Facebook';
   const isSuccess = result.success;
   const isSkipped = !isSuccess && result.skipped;
   const tone = isSuccess
@@ -359,34 +349,17 @@ function ComposerResultRow({ platform, result }) {
   );
 }
 
-function PostComposer() {
+function InstagramComposer() {
   const { call } = useApi();
-  const [platform, setPlatform] = useState('instagram');
   const [postType, setPostType] = useState('image');
   const [mediaUrl, setMediaUrl] = useState('');
   const [caption, setCaption] = useState('');
   const [isReel, setIsReel] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [results, setResults] = useState(null); // { instagram?: {...}, facebook?: {...} />
+  const [result, setResult] = useState(null);
   const [formError, setFormError] = useState('');
 
-  const choosePlatform = (value) => {
-    setPlatform(value);
-    // Instagram has no 'text' type — bump off it if the previous platform allowed it.
-    if (value === 'instagram' && postType === 'text') setPostType('image');
-    setResults(null);
-    setFormError('');
-  };
-
-  const publishToInstagram = useCallback(async () => {
-    if (postType === 'text') {
-      // Not attempted — Instagram's API rejects text-only posts outright.
-      return {
-        success: false,
-        skipped: true,
-        message: "Instagram doesn't support text-only posts — this platform needs a photo or video. Skipped.",
-      };
-    }
+  const publish = useCallback(async () => {
     try {
       const body =
         postType === 'video'
@@ -403,7 +376,125 @@ function PostComposer() {
     }
   }, [call, postType, mediaUrl, caption, isReel]);
 
-  const publishToFacebook = useCallback(async () => {
+  const run = useCallback(async () => {
+    setFormError('');
+    if (!mediaUrl.trim()) {
+      setFormError(`Add a public ${postType} URL to publish.`);
+      return;
+    }
+    setSubmitting(true);
+    setResult(await publish());
+    setSubmitting(false);
+  }, [postType, mediaUrl, publish]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    run();
+  };
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Instagram size={18} className="text-brand" />
+        <h3 className="font-semibold text-sm">Publish to Instagram</h3>
+      </div>
+      <p className="text-[11px] text-slate-400 mb-3">
+        Instagram requires a photo or video for every post — text-only isn't supported by its API.
+      </p>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Post type</label>
+          <div className="flex gap-2">
+            {INSTAGRAM_POST_TYPES.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => { setPostType(o.value); setResult(null); setFormError(''); }}
+                className={`text-xs font-medium rounded-lg px-3 py-1.5 ${
+                  postType === o.value ? 'bg-brand text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">
+            {postType === 'video' ? 'Video URL' : 'Image URL'} <span className="text-red-400">*</span>
+          </label>
+          <input
+            type="url"
+            value={mediaUrl}
+            onChange={(e) => setMediaUrl(e.target.value)}
+            placeholder={postType === 'video' ? 'https://example.com/clip.mp4' : 'https://example.com/photo.jpg'}
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
+          />
+          <p className="text-[11px] text-slate-400 mt-1">
+            Must be a public, direct file URL — there's no file upload yet, so host it somewhere reachable first (S3, Cloudinary, etc.).
+          </p>
+        </div>
+
+        {postType === 'video' && (
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              className="w-4 h-4 accent-brand"
+              checked={isReel}
+              onChange={(e) => setIsReel(e.target.checked)}
+            />
+            Publish as a Reel (uncheck for a regular feed video)
+          </label>
+        )}
+
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Caption</label>
+          <textarea
+            value={caption}
+            onChange={(e) => setCaption(e.target.value)}
+            rows={3}
+            placeholder="Write something…"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
+          />
+        </div>
+
+        {formError && (
+          <p className="text-sm text-red-600 flex items-center gap-1">
+            <AlertCircle size={14} /> {formError}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg
+            bg-brand text-white hover:bg-brand-dark disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {submitting && <Loader2 size={14} className="animate-spin" />}
+          {submitting ? 'Publishing…' : 'Publish'}
+        </button>
+      </form>
+
+      {result && (
+        <div className="mt-4">
+          <ComposerResultRow label="Instagram" result={{ ...result, onRetry: run }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FacebookComposer() {
+  const { call } = useApi();
+  const [postType, setPostType] = useState('text');
+  const [mediaUrl, setMediaUrl] = useState('');
+  const [caption, setCaption] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState(null);
+  const [formError, setFormError] = useState('');
+
+  const publish = useCallback(async () => {
     try {
       let data;
       if (postType === 'text') {
@@ -429,71 +520,41 @@ function PostComposer() {
     }
   }, [call, postType, mediaUrl, caption]);
 
-  const runPublish = useCallback(
-    async (targetPlatform) => {
-      setFormError('');
-
-      if (targetPlatform === 'instagram' && postType === 'text') {
-        setFormError("Instagram doesn't support text-only posts. Choose Image or Video, or switch to Facebook.");
-        return;
-      }
-      if (postType !== 'text' && !mediaUrl.trim()) {
-        setFormError(`Add a public ${postType} URL to publish.`);
-        return;
-      }
-      if (postType === 'text' && !caption.trim()) {
-        setFormError('Write something to post.');
-        return;
-      }
-
-      setSubmitting(true);
-      const next = {};
-
-      if (targetPlatform === 'instagram' || targetPlatform === 'both') {
-        next.instagram = await publishToInstagram();
-      }
-      if (targetPlatform === 'facebook' || targetPlatform === 'both') {
-        next.facebook = await publishToFacebook();
-      }
-
-      setResults(next);
-      setSubmitting(false);
-    },
-    [postType, mediaUrl, caption, publishToInstagram, publishToFacebook]
-  );
+  const run = useCallback(async () => {
+    setFormError('');
+    if (postType !== 'text' && !mediaUrl.trim()) {
+      setFormError(`Add a public ${postType} URL to publish.`);
+      return;
+    }
+    if (postType === 'text' && !caption.trim()) {
+      setFormError('Write something to post.');
+      return;
+    }
+    setSubmitting(true);
+    setResult(await publish());
+    setSubmitting(false);
+  }, [postType, mediaUrl, caption, publish]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    runPublish(platform);
+    run();
   };
-
-  const retry = (key) => runPublish(key === 'both' ? platform : key);
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5">
-      <h3 className="font-semibold text-sm mb-4">Publish a post</h3>
+      <div className="flex items-center gap-2 mb-3">
+        <Facebook size={18} className="text-brand" />
+        <h3 className="font-semibold text-sm">Publish to Facebook</h3>
+      </div>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">Platform</label>
-          <select
-            value={platform}
-            onChange={(e) => choosePlatform(e.target.value)}
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand/30"
-          >
-            {PLATFORM_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        </div>
-
         <div>
           <label className="block text-xs font-medium text-slate-500 mb-1">Post type</label>
           <div className="flex gap-2">
-            {POST_TYPES_BY_PLATFORM[platform].map((o) => (
+            {FACEBOOK_POST_TYPES.map((o) => (
               <button
                 key={o.value}
                 type="button"
-                onClick={() => { setPostType(o.value); setResults(null); setFormError(''); }}
+                onClick={() => { setPostType(o.value); setResult(null); setFormError(''); }}
                 className={`text-xs font-medium rounded-lg px-3 py-1.5 ${
                   postType === o.value ? 'bg-brand text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                 }`}
@@ -502,11 +563,6 @@ function PostComposer() {
               </button>
             ))}
           </div>
-          {platform === 'instagram' && (
-            <p className="text-[11px] text-slate-400 mt-1">
-              Instagram requires a photo or video for every post — text-only isn't supported by its API.
-            </p>
-          )}
         </div>
 
         {postType !== 'text' && (
@@ -525,18 +581,6 @@ function PostComposer() {
               Must be a public, direct file URL — there's no file upload yet, so host it somewhere reachable first (S3, Cloudinary, etc.).
             </p>
           </div>
-        )}
-
-        {(platform === 'instagram' || platform === 'both') && postType === 'video' && (
-          <label className="flex items-center gap-2 text-xs text-slate-600">
-            <input
-              type="checkbox"
-              className="w-4 h-4 accent-brand"
-              checked={isReel}
-              onChange={(e) => setIsReel(e.target.checked)}
-            />
-            Publish to Instagram as a Reel (uncheck for a regular feed video)
-          </label>
         )}
 
         <div>
@@ -569,20 +613,9 @@ function PostComposer() {
         </button>
       </form>
 
-      {results && (
-        <div className="mt-4 space-y-2">
-          {results.instagram && (
-            <ComposerResultRow
-              platform="instagram"
-              result={{ ...results.instagram, onRetry: () => retry('instagram') }}
-            />
-          )}
-          {results.facebook && (
-            <ComposerResultRow
-              platform="facebook"
-              result={{ ...results.facebook, onRetry: () => retry('facebook') }}
-            />
-          )}
+      {result && (
+        <div className="mt-4">
+          <ComposerResultRow label="Facebook" result={{ ...result, onRetry: run }} />
         </div>
       )}
     </div>
@@ -835,8 +868,6 @@ function WhatsAppCard({ isAdmin }) {
           </button>
         )
       )}
-
-      {connected && <WhatsAppSendTest />}
     </div>
   );
 }
@@ -951,8 +982,12 @@ export default function ConnectionsPanel() {
         />
         <WhatsAppCard isAdmin={isAdmin} />
       </div>
-
-      <PostComposer />
     </div>
   );
 }
+
+// InstagramComposer, FacebookComposer ("Publish to Instagram" / "Publish to
+// Facebook") and WhatsAppSendTest ("Send a test message") live in Reviews &
+// Social now, not here — Integrations & APIs is credentials-only.
+// Re-exported so that page can render them directly, each as its own block.
+export { InstagramComposer, FacebookComposer, WhatsAppSendTest };
