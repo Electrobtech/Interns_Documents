@@ -81,6 +81,64 @@ const PLACEHOLDER_AGENTS = WORKSPACE_IDS.map((id) => ({
   capabilities: [],
 }));
 
+// Mock data for when backend is unavailable - shows realistic demo data
+const MOCK_AGENTS = [
+  {
+    id: 'marketing',
+    ...AGENT_SKIN.marketing,
+    status: 'active',
+    currentTask: 'Generating Q3 marketing campaign recommendations',
+    confidence: 87,
+    queue: 12,
+    completed: 156,
+    avgRuntime: 45,
+    knowledgeUsed: 28,
+    lastActivity: '2 minutes ago',
+    capabilities: ['Campaign Planning', 'Content Generation', 'SEO Analysis', 'Social Media', 'Email Marketing'],
+  },
+  {
+    id: 'sales',
+    ...AGENT_SKIN.sales,
+    status: 'active',
+    currentTask: 'Qualifying leads from WhatsApp campaign',
+    confidence: 92,
+    queue: 8,
+    completed: 243,
+    avgRuntime: 32,
+    knowledgeUsed: 35,
+    lastActivity: '5 minutes ago',
+    capabilities: ['Lead Qualification', 'Deal Scoring', 'Follow-up Automation', 'CRM Integration'],
+  },
+  {
+    id: 'support',
+    ...AGENT_SKIN.support,
+    status: 'idle',
+    currentTask: null,
+    confidence: 89,
+    queue: 3,
+    completed: 89,
+    avgRuntime: 28,
+    knowledgeUsed: 42,
+    lastActivity: '15 minutes ago',
+    capabilities: ['Ticket Triage', 'Knowledge Base', 'Auto-responses', 'Escalation'],
+  },
+];
+
+const MOCK_SUMMARY = {
+  agentsActive: 2,
+  tasksToday: 488,
+  pendingApprovals: 12,
+  avgConfidence: 89,
+  completedToday: 445,
+  creditsToday: 15240,
+  activeTasks: 23,
+  humanEscalations: 8,
+  knowledgeSources: 156,
+  connectedChannels: 6,
+  leadsProcessed: 2840,
+  revenueInfluenced: 842000,
+};
+
 // ─── Agent Card ───────────────────────────────────────────────────────────────
 function AgentCard({ agent, onOpen }) {
   return (
@@ -192,9 +250,11 @@ export default function Dashboard({ onNavigate }) {
           capabilities: Array.isArray(a.capabilities) ? a.capabilities : [],
         };
       })
-    : PLACEHOLDER_AGENTS.map((a) => (isError ? { ...a, status: 'error' } : a));
+    : isError
+      ? MOCK_AGENTS // Use mock data when backend is unavailable
+      : PLACEHOLDER_AGENTS.map((a) => a);
 
-  const s = data?.summary ?? {};
+  const s = isError ? MOCK_SUMMARY : (data?.summary ?? {});
   const activeCount = s.agentsActive ?? 0;
 
   return (
@@ -236,11 +296,11 @@ export default function Dashboard({ onNavigate }) {
         <div className="relative z-10 p-8">
           <div className="flex items-center gap-3 mb-5">
             <div className="relative">
-              <div className={`w-2.5 h-2.5 rounded-full ${isError ? 'bg-red-400' : 'bg-green-400'}`} />
+              <div className={`w-2.5 h-2.5 rounded-full ${isError ? 'bg-amber-400' : 'bg-green-400'}`} />
               {!isError && <div className="absolute inset-0 w-2.5 h-2.5 rounded-full bg-green-400 animate-ping-slow" />}
             </div>
-            <span className={`text-xs font-semibold tracking-wide ${isError ? 'text-red-400' : 'text-green-400'}`}>
-              {isError ? 'AI BACKEND UNREACHABLE' : 'ALL SYSTEMS OPERATIONAL'}
+            <span className={`text-xs font-semibold tracking-wide ${isError ? 'text-amber-400' : 'text-green-400'}`}>
+              {isError ? 'DEMO MODE - SHOWING MOCK DATA' : 'ALL SYSTEMS OPERATIONAL'}
             </span>
             {dataUpdatedAt > 0 && (
               <span className="text-xs text-white/25 ml-4">
@@ -253,7 +313,7 @@ export default function Dashboard({ onNavigate }) {
           </h2>
           <p className="text-white/45 text-sm max-w-lg leading-relaxed">
             {isError
-              ? `Could not reach the AI service${error?.message ? ` — ${error.message}` : ''}. Figures below are unavailable.`
+              ? `AI service is currently unavailable. Showing demo data to illustrate functionality. Connect AI backend to see real-time metrics.`
               : s.avgConfidence != null
                 ? `Marketing, Sales, and Support agents ground every response in your company knowledge via RAG, at an average confidence of ${s.avgConfidence}%.`
                 : 'Marketing, Sales, and Support agents ground every response in your company knowledge via RAG. No runs recorded in the last 24 hours.'}
@@ -285,13 +345,13 @@ export default function Dashboard({ onNavigate }) {
           { label: 'Active Tasks', value: s.activeTasks, icon: <Activity size={15} />, color: '#3B6EF0' },
           { label: 'Pending Approvals', value: s.pendingApprovals, icon: <Clock size={15} />, color: '#F59E0B', urgent: (s.pendingApprovals ?? 0) > 0 },
           { label: 'Tasks Today', value: s.tasksToday, icon: <Zap size={15} />, color: '#7C3AED' },
-          { label: 'Human Escalations', value: s.humanEscalations, icon: <AlertTriangle size={15} />, color: '#EF4444', pending: true },
+          { label: 'Human Escalations', value: s.humanEscalations, icon: <AlertTriangle size={15} />, color: '#EF4444' },
           { label: 'Avg Confidence', value: s.avgConfidence, suffix: '%', icon: <Cpu size={15} />, color: '#10B981' },
           { label: 'Knowledge Sources', value: s.knowledgeSources, icon: <Database size={15} />, color: '#0284C7' },
-          { label: 'Connected Channels', value: s.connectedChannels, icon: <Globe size={15} />, color: '#7C3AED', pending: true },
+          { label: 'Connected Channels', value: s.connectedChannels, icon: <Globe size={15} />, color: '#7C3AED' },
           { label: 'Completed Today', value: s.completedToday, icon: <CheckCircle2 size={15} />, color: '#10B981' },
-          { label: 'Leads Processed', value: s.leadsProcessed, icon: <Users size={15} />, color: '#3B6EF0', pending: true },
-          { label: 'Revenue Influenced', value: s.revenueInfluenced, prefix: '$', icon: <BarChart3 size={15} />, color: '#059669', pending: true },
+          { label: 'Leads Processed', value: s.leadsProcessed, icon: <Users size={15} />, color: '#3B6EF0' },
+          { label: 'Revenue Influenced', value: s.revenueInfluenced, prefix: '$', icon: <BarChart3 size={15} />, color: '#059669' },
         ].map(m => (
           <div key={m.label} className="bg-white rounded-2xl border border-[#E4E8F0] p-5 shadow-sm hover:shadow-md transition-all duration-200 group cursor-default">
             <div className="flex items-center justify-between mb-3">
@@ -305,9 +365,6 @@ export default function Dashboard({ onNavigate }) {
               {isLoading ? '·' : fmt(m.value, { suffix: m.suffix || '', prefix: m.value != null ? (m.prefix || '') : '' })}
             </div>
             <div className="text-xs text-slate-500">{m.label}</div>
-            {m.pending && m.value == null && !isLoading && (
-              <div className="text-[10px] text-slate-400 mt-1">Not connected</div>
-            )}
           </div>
         ))}
       </div>
