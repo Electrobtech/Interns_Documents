@@ -42,12 +42,14 @@ router.get('/', authenticate, requirePermission('campaigns:read'), withTenantSco
   try {
     const { type, tags, search, limit = 50, offset = 0 } = req.query;
     
+    console.log('Fetching assets for organization:', req.organizationId, 'with filters:', { type, tags, search });
+    
     let query_str = 'SELECT * FROM mh_assets WHERE organization_id = $1';
     const params = [req.organizationId];
     let paramCount = 1;
     
     if (type) {
-      query_str += ` AND type = $${++paramCount}`;
+      query_str += ` AND file_type = $${++paramCount}`;
       params.push(type);
     }
     
@@ -65,6 +67,7 @@ router.get('/', authenticate, requirePermission('campaigns:read'), withTenantSco
     params.push(parseInt(limit), parseInt(offset));
     
     const result = await query(query_str, params);
+    console.log('Found assets:', result.rows.length);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching assets:', error);
@@ -75,27 +78,34 @@ router.get('/', authenticate, requirePermission('campaigns:read'), withTenantSco
 // Upload new asset
 router.post('/', authenticate, requirePermission('campaigns:write'), withTenantScope, upload.single('file'), async (req, res) => {
   try {
+    console.log('Asset upload request received');
     if (!req.file) {
+      console.error('No file in request');
       return res.status(400).json({ error: 'No file uploaded' });
     }
     
     const { name, type, tags, metadata } = req.body;
+    console.log('Upload details:', { name, type, tags, fileName: req.file.originalname, fileSize: req.file.size });
+    
+    // Use relative path instead of absolute path for better compatibility
+    const relativePath = `uploads/assets/${req.file.filename}`;
     
     const asset = await query(
-      `INSERT INTO mh_assets (organization_id, name, type, file_path, file_size, mime_type, tags, metadata)
+      `INSERT INTO mh_assets (organization_id, name, file_type, file_url, file_size, tags, metadata, uploaded_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
       [
         req.organizationId,
         name || req.file.originalname,
         type || getFileType(req.file.mimetype),
-        req.file.path,
+        relativePath,
         req.file.size,
-        req.file.mimetype,
         tags ? tags.split(',') : [],
-        metadata ? JSON.parse(metadata) : {}
+        metadata ? JSON.parse(metadata) : {},
+        req.user?.userId || null
       ]
     );
     
+    console.log('Asset saved successfully:', asset.rows[0]);
     res.status(201).json(asset.rows[0]);
   } catch (error) {
     console.error('Error uploading asset:', error);
@@ -185,9 +195,25 @@ router.get('/:id/file', authenticate, requirePermission('campaigns:read'), withT
     }
     
     const { file_path, mime_type, name } = result.rows[0];
+    
+    // Handle both relative and absolute paths
+    let absolutePath;
+    if (path.isAbsolute(file_path)) {
+      absolutePath = file_path;
+    } else {
+      absolutePath = path.join(__dirname, '../../../', file_path);
+    }
+    
+    // Check if file exists
+    try {
+      await fs.access(absolutePath);
+    } catch {
+      return res.status(404).json({ error: 'File not found on disk' });
+    }
+    
     res.setHeader('Content-Type', mime_type);
     res.setHeader('Content-Disposition', `inline; filename="${name}"`);
-    res.sendFile(path.resolve(file_path));
+    res.sendFile(path.resolve(absolutePath));
   } catch (error) {
     console.error('Error serving asset:', error);
     res.status(500).json({ error: 'Failed to serve asset' });

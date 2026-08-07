@@ -42,12 +42,15 @@ function buildRouter(kind) {
       return res.status(400).json({ error: 'LinkedIn does not support broadcasts — campaigns only.' });
     }
 
+    console.log('Creating campaign with data:', { name, channel, objective, audience_id, budget_amount, start_date, end_date });
+
     const { rows } = await pool.query(
       `INSERT INTO mh_campaigns (organization_id, kind, name, channel, objective, audience_id, message_body, budget_amount, start_date, end_date, scheduled_at, status, created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'draft',$12) RETURNING *`,
       [req.user.organizationId, kind, name, channel, objective || null, audience_id || null, message_body || null,
        budget_amount || null, start_date || null, end_date || null, scheduled_at || null, req.user.userId]
     );
+    console.log('Campaign created successfully:', rows[0]);
     logAudit(req, `mh_${kind}.create`, { id: rows[0].id, name });
     res.status(201).json(rows[0]);
   }));
@@ -145,12 +148,12 @@ function buildRouter(kind) {
       const names = recipients.map((r) => r.displayName);
 
       const { rows } = await pool.query(
-        `INSERT INTO mh_recipients (campaign_id, contact_id, channel, destination, display_name, rendered_message)
-         SELECT $1, i::uuid, $2, d, n, $3
-           FROM UNNEST($4::text[], $5::text[], $6::text[]) AS t(i, d, n)
+        `INSERT INTO mh_recipients (campaign_id, contact_id, destination, status)
+         SELECT $1, i::uuid, d, 'queued'
+           FROM UNNEST($4::text[], $5::text[]) AS t(i, d)
          ON CONFLICT (campaign_id, destination) DO NOTHING
-         RETURNING id, channel, destination, display_name, rendered_message`,
-        [campaign.id, campaign.channel, campaign.message_body, ids, destinations, names]
+         RETURNING id, destination, status`,
+        [campaign.id, ids, destinations]
       );
       recipientRows = rows;
 
