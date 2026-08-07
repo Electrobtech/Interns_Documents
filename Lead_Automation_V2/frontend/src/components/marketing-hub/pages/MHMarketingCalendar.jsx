@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMHToast } from '../ui/MHToast';
-import { calendarEvents } from '../mockData';
+import MHModal from '../ui/MHModal';
+import { calendarEvents as initialCalendarEvents } from '../mockData';
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAME = 'August 2025';
@@ -16,6 +17,51 @@ const LEGEND = [
   { type: 'reminder', label: 'Reminder', color: '#8b5cf6' },
 ];
 
+function AddEventModal({ onClose, onCreated, defaultDate }) {
+  const [title, setTitle] = useState('');
+  const [type, setType] = useState('campaign');
+  const [date, setDate] = useState(defaultDate || '2025-08-01');
+
+  const submit = () => {
+    if (!title.trim()) return;
+    onCreated({
+      id: String(Date.now()),
+      title: title.trim(),
+      type,
+      date,
+      color: (LEGEND.find(l => l.type === type) || LEGEND[0]).color,
+    });
+    onClose();
+  };
+
+  return (
+    <MHModal title="Add Event" onClose={onClose} width={420}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Event Title <span style={{ color: '#dc2626' }}>*</span></label>
+          <input className="mh-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Product Launch Webinar" />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Type</label>
+            <select className="mh-input" value={type} onChange={e => setType(e.target.value)}>
+              {LEGEND.map(l => <option key={l.type} value={l.type}>{l.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Date</label>
+            <input className="mh-input" type="date" min="2025-08-01" max="2025-08-31" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 22, paddingTop: 16, borderTop: '1px solid #f3f4f6' }}>
+        <button className="mh-btn mh-btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="mh-btn mh-btn-primary" disabled={!title.trim()} style={{ opacity: title.trim() ? 1 : 0.5 }} onClick={submit}>Add Event</button>
+      </div>
+    </MHModal>
+  );
+}
+
 function getCalendarDays(year, month) {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -27,6 +73,8 @@ function getCalendarDays(year, month) {
 
 export default function MHMarketingCalendar() {
   const toast = useMHToast();
+  const [calendarEvents, setCalendarEvents] = useState(initialCalendarEvents);
+  const [showAdd, setShowAdd] = useState(false);
   const [selectedDay, setSelectedDay] = useState(null);
   const today = new Date();
 
@@ -46,7 +94,7 @@ export default function MHMarketingCalendar() {
           <h1 style={{ fontFamily: 'var(--mh-font-display)', fontSize: 22, fontWeight: 700, color: 'var(--mh-text)', margin: 0 }}>Marketing Calendar</h1>
           <p style={{ fontSize: 13, color: 'var(--mh-text-3)', marginTop: 4 }}>Plan and schedule all marketing activities in one view</p>
         </div>
-        <button className="mh-btn mh-btn-primary" onClick={() => toast.show('Opening event creator…', 'info')}>
+        <button className="mh-btn mh-btn-primary" onClick={() => setShowAdd(true)}>
           <Plus size={15} /> Add Event
         </button>
       </div>
@@ -146,6 +194,14 @@ export default function MHMarketingCalendar() {
             ))}
           </div>
         </div>
+      )}
+
+      {showAdd && (
+        <AddEventModal
+          defaultDate={selectedDay ? `2025-08-${String(selectedDay).padStart(2, '0')}` : '2025-08-01'}
+          onClose={() => setShowAdd(false)}
+          onCreated={(ev) => { setCalendarEvents(prev => [...prev, ev]); toast.show('Event added!', 'success'); }}
+        />
       )}
     </div>
   );

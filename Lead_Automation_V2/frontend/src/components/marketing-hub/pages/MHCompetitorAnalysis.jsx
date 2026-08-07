@@ -2,7 +2,46 @@
 import { useState } from 'react';
 import { Plus, ExternalLink, Zap, TrendingUp, ShieldAlert } from 'lucide-react';
 import { useMHToast } from '../ui/MHToast';
-import { competitors } from '../mockData';
+import MHModal from '../ui/MHModal';
+import { competitors as initialCompetitors } from '../mockData';
+
+function AddCompetitorModal({ onClose, onCreated }) {
+  const [name, setName] = useState('');
+  const [domain, setDomain] = useState('');
+
+  const submit = () => {
+    if (!name.trim()) return;
+    onCreated({
+      id: String(Date.now()),
+      name: name.trim(),
+      domain: domain.trim() || '—',
+      // Metrics require an analysis pass (the row's own "Analyze" action) —
+      // left at 0 rather than invented, same rule as everywhere else here.
+      da: 0, traffic: '—', backlinks: '—', opportunity: 0, threat: 0, engagement: 0,
+    });
+    onClose();
+  };
+
+  return (
+    <MHModal title="Add Competitor" onClose={onClose} width={440}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Competitor Name <span style={{ color: '#dc2626' }}>*</span></label>
+          <input className="mh-input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Freshworks" />
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Domain</label>
+          <input className="mh-input" value={domain} onChange={e => setDomain(e.target.value)} placeholder="e.g. freshworks.com" />
+        </div>
+        <p style={{ fontSize: 11, color: '#9ca3af', margin: 0 }}>DA, traffic, and gap metrics populate once you run "Analyze" on this competitor.</p>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 22, paddingTop: 16, borderTop: '1px solid #f3f4f6' }}>
+        <button className="mh-btn mh-btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="mh-btn mh-btn-primary" disabled={!name.trim()} style={{ opacity: name.trim() ? 1 : 0.5 }} onClick={submit}>Add Competitor</button>
+      </div>
+    </MHModal>
+  );
+}
 
 const GAP_ANALYSIS = [
   { title: 'Email Automation Workflows', desc: 'HubSpot and ActiveCampaign have deep workflow builders. You lack multi-step email automation.', type: 'Feature Gap', color: '#dc2626' },
@@ -13,6 +52,8 @@ const GAP_ANALYSIS = [
 
 export default function MHCompetitorAnalysis() {
   const toast = useMHToast();
+  const [competitors, setCompetitors] = useState(initialCompetitors);
+  const [showAdd, setShowAdd] = useState(false);
   const [hoveredRow, setHoveredRow] = useState(null);
 
   return (
@@ -23,7 +64,7 @@ export default function MHCompetitorAnalysis() {
           <h1 style={{ fontFamily: 'var(--mh-font-display)', fontSize: 22, fontWeight: 700, color: 'var(--mh-text)', margin: 0 }}>Competitor Analysis</h1>
           <p style={{ fontSize: 13, color: 'var(--mh-text-3)', marginTop: 4 }}>Track competitors, identify gaps, and turn threats into opportunities</p>
         </div>
-        <button className="mh-btn mh-btn-primary" onClick={() => toast.show('Add competitor modal coming soon', 'info')}>
+        <button className="mh-btn mh-btn-primary" onClick={() => setShowAdd(true)}>
           <Plus size={15} /> Add Competitor
         </button>
       </div>
@@ -112,6 +153,13 @@ export default function MHCompetitorAnalysis() {
           ))}
         </div>
       </div>
+
+      {showAdd && (
+        <AddCompetitorModal
+          onClose={() => setShowAdd(false)}
+          onCreated={(c) => { setCompetitors(prev => [c, ...prev]); toast.show('Competitor added!', 'success'); }}
+        />
+      )}
     </div>
   );
 }
