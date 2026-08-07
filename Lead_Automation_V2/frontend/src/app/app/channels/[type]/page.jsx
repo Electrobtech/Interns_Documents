@@ -10,6 +10,14 @@ import ConversationList from '@/components/ConversationList';
 import EmailPanel from '@/components/EmailPanel';
 import SmsPanel from '@/components/SmsPanel';
 import WhatsAppConversationsView from '@/components/whatsapp/WhatsAppConversationsView';
+import ChannelConversationsView from '@/components/channels/ChannelConversationsView';
+
+// Channels that get the WhatsApp-style master-detail chat UI (left-hand
+// chat list + right-hand thread) instead of the generic connection-card +
+// plain-list view. WhatsApp uses its own dedicated component; these reuse
+// the generalized ChannelConversationsView. LinkedIn, Email, and SMS/RCS
+// are intentionally excluded — they keep their own bespoke views.
+const CHAT_STYLE_TYPES = new Set(['instagram', 'messenger', 'webchat', 'voice']);
 
 const META = {
   whatsapp:  { label: 'WhatsApp', icon: MessageCircle },
@@ -64,6 +72,13 @@ export default function ChannelPage() {
   // padding, own height calc) since it manages a two-pane layout internally.
   if (type === 'whatsapp') {
     return <WhatsAppConversationsView />;
+  }
+
+  // Instagram, Messenger, Web Chat, and Voice Call get the same
+  // QuickReply.ai-style master-detail layout as WhatsApp — see
+  // ChannelConversationsView.jsx. Like WhatsApp, it renders full-bleed.
+  if (CHAT_STYLE_TYPES.has(type)) {
+    return <ChannelConversationsView type={type} meta={meta} />;
   }
 
   return <GenericChannelPage type={type} meta={meta} call={call} />;

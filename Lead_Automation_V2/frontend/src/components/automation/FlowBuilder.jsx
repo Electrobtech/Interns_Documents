@@ -75,39 +75,62 @@ const LEVEL_GAP = 64;
 const MAX_BLOCKS = 75;
 
 /* ------------------------------------------------------------------ */
-/* Seed content — recreates the reference screenshot's shape (Greetings
-   -> menu -> Track Order / Speak with a rep / Return Request -> nested
-   Return/Replace branch) using our own copy and the 3 node types this
-   version supports: message, answer_branch, handoff.                  */
+/* Seed content — ElectroBtech Innovations' internship/training intake
+   flow (Kickstart Your Career -> opportunity type menu -> Final Year
+   Projects / Internships / Domain Specific Training, all funneling into
+   a shared domain-preference menu -> AI & ML / Full Stack Development /
+   Embedded Systems, all funneling into a shared thank-you close). This
+   is what a brand-new laptop sees before its first Deploy — kept in
+   sync with services/automation-service/src/seeds/whatsapp-default-flow.json
+   (the same flow, in flow-schema shape, loaded into Postgres by
+   `npm run seed` so the *engine* — not just this Builder screen — also
+   treats it as the active WhatsApp default on a fresh database).       */
 /* ------------------------------------------------------------------ */
 export function seedGraph() {
   const nodes = [
-    { id: "n_greet", type: "message", position: { x: 620, y: 40 }, data: { messageType: "text", body: "Welcome! I'm here to help with your order.", waitForReply: false } },
-    { id: "n_menu", type: "message", position: { x: 620, y: 190 }, data: { messageType: "interactive", body: "Choose from menu", waitForReply: true } },
-    { id: "n_menu_branch", type: "answer_branch", position: { x: 620, y: 340 }, data: { branches: [
-      { id: "b_track", label: "Track Order" },
-      { id: "b_rep", label: "Speak with a rep" },
-      { id: "b_return", label: "Return Request" },
+    { id: "n_welcome", type: "message", position: { x: 620, y: 40 }, data: {
+      messageType: "text",
+      body: "🚀 🎓 Kickstart Your Career with ElectroBtech Innovations Pvt. Ltd.!\n\nAre you ready to begin your professional journey with a company that values innovation, learning, and real-world experience?\n\nElectroBtech Innovations Pvt. Ltd. is committed to nurturing young talent by providing opportunities to work on cutting-edge technologies, live industry projects, and innovative software solutions. Our team focuses on delivering high-quality technology products while creating an environment where interns and fresh graduates can enhance their technical skills, collaborate with experienced professionals, and gain practical exposure to modern development practices.",
+      waitForReply: false,
+    } },
+    { id: "n_menu1", type: "message", position: { x: 620, y: 200 }, data: {
+      messageType: "interactive",
+      body: "📣 Exciting opportunities are now open!\n\nChoose the one you are looking for :",
+      waitForReply: true,
+    } },
+    { id: "n_branch1", type: "answer_branch", position: { x: 620, y: 360 }, data: { branches: [
+      { id: "b_final_year", label: "Final Year Projects" },
+      { id: "b_internships", label: "Internships" },
+      { id: "b_domain_training", label: "Domain Specific Training" },
     ] } },
-    { id: "n_track", type: "message", position: { x: 300, y: 560 }, data: { messageType: "text", body: "Enter your order ID", waitForReply: true } },
-    { id: "n_rep", type: "handoff", position: { x: 620, y: 560 }, data: { team: "Support Rep" } },
-    { id: "n_return_branch", type: "answer_branch", position: { x: 900, y: 560 }, data: { branches: [
-      { id: "b_return_item", label: "Return a product" },
-      { id: "b_replace_item", label: "Replace a product" },
+    { id: "n_domain_menu", type: "message", position: { x: 620, y: 520 }, data: {
+      messageType: "interactive",
+      body: "Choose your preferred domain",
+      waitForReply: true,
+    } },
+    { id: "n_branch2", type: "answer_branch", position: { x: 620, y: 680 }, data: { branches: [
+      { id: "b_ai_ml", label: "AI & ML" },
+      { id: "b_fullstack", label: "Full stack Development" },
+      { id: "b_embedded", label: "Embedded Systems" },
     ] } },
-    { id: "n_return_collect", type: "message", position: { x: 760, y: 780 }, data: { messageType: "text", body: "Enter your order ID", waitForReply: true } },
-    { id: "n_replace_collect", type: "message", position: { x: 1040, y: 780 }, data: { messageType: "text", body: "Enter your order ID", waitForReply: true } },
+    { id: "n_thankyou", type: "message", position: { x: 620, y: 840 }, data: {
+      messageType: "text",
+      body: "Thank you for your interest in *ElectroBtech Innovations Pvt. Ltd.*\n\nWe have received your inquiry. Our team will contact you shortly with more information. In the meantime, please feel free to go through the attached guidelines. If you have any questions, don't hesitate to reach out.\n\nWe look forward to connecting with you!\n\n*Team ElectroBtech Innovations Pvt. Ltd.*",
+      waitForReply: false,
+    } },
   ];
   const edges = [
-    { id: "e1", sourceNodeId: "n_greet", sourceBranchId: null, targetNodeId: "n_menu" },
-    { id: "e2", sourceNodeId: "n_menu", sourceBranchId: null, targetNodeId: "n_menu_branch" },
-    { id: "e3", sourceNodeId: "n_menu_branch", sourceBranchId: "b_track", targetNodeId: "n_track" },
-    { id: "e4", sourceNodeId: "n_menu_branch", sourceBranchId: "b_rep", targetNodeId: "n_rep" },
-    { id: "e5", sourceNodeId: "n_menu_branch", sourceBranchId: "b_return", targetNodeId: "n_return_branch" },
-    { id: "e6", sourceNodeId: "n_return_branch", sourceBranchId: "b_return_item", targetNodeId: "n_return_collect" },
-    { id: "e7", sourceNodeId: "n_return_branch", sourceBranchId: "b_replace_item", targetNodeId: "n_replace_collect" },
+    { id: "e1", sourceNodeId: "n_welcome", sourceBranchId: null, targetNodeId: "n_menu1" },
+    { id: "e2", sourceNodeId: "n_menu1", sourceBranchId: null, targetNodeId: "n_branch1" },
+    { id: "e3", sourceNodeId: "n_branch1", sourceBranchId: "b_final_year", targetNodeId: "n_domain_menu" },
+    { id: "e4", sourceNodeId: "n_branch1", sourceBranchId: "b_internships", targetNodeId: "n_domain_menu" },
+    { id: "e5", sourceNodeId: "n_branch1", sourceBranchId: "b_domain_training", targetNodeId: "n_domain_menu" },
+    { id: "e6", sourceNodeId: "n_domain_menu", sourceBranchId: null, targetNodeId: "n_branch2" },
+    { id: "e7", sourceNodeId: "n_branch2", sourceBranchId: "b_ai_ml", targetNodeId: "n_thankyou" },
+    { id: "e8", sourceNodeId: "n_branch2", sourceBranchId: "b_fullstack", targetNodeId: "n_thankyou" },
+    { id: "e9", sourceNodeId: "n_branch2", sourceBranchId: "b_embedded", targetNodeId: "n_thankyou" },
   ];
-  return { nodes, edges, entryNodeId: "n_greet" };
+  return { nodes, edges, entryNodeId: "n_welcome" };
 }
 
 /* ------------------------------------------------------------------ */
@@ -915,7 +938,7 @@ export function importFlowJson(playbook) {
 /* ------------------------------------------------------------------ */
 export default function FlowBuilder({ initialGraph, initialTitle, syncStatus = "saved", onGraphChange, onTitleChange, onTestBot, onDeploy, deployState = "idle", playbookStatus = "draft", onTogglePause, pauseState = "idle" }) {
   const [graph, setGraph] = useState(initialGraph || seedGraph);
-  const [title, setTitleState] = useState(initialTitle || "WEB — Ecommerce Customer Support");
+  const [title, setTitleState] = useState(initialTitle || "ElectroBtech — Internship & Training Enquiry Bot");
   const [viewport, setViewport] = useState({ x: -200, y: -10, zoom: 0.85 });
   const [dragState, setDragState] = useState(null); // { nodeId, offsetX, offsetY }
   const [connectState, setConnectState] = useState(null); // { sourceNodeId, sourceBranchId, start, current }
