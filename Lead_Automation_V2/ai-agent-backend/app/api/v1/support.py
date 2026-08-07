@@ -10,8 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import AuthUser, get_current_user
 from app.database.session import get_session
 from app.repositories.support_repo import SupportRepository
-from app.schemas.support import SupportRunIn, SupportRunOut, SupportRunSummary
+from app.schemas.support import CoverageAuditOut, SupportRunIn, SupportRunOut, SupportRunSummary
 from app.services.audit_service import log_audit
+from app.services.support_audit_service import SupportAuditService
 from app.services.support_service import SupportService
 
 router = APIRouter()
@@ -38,3 +39,12 @@ async def list_support_runs(
     organization_id = uuid.UUID(user.organization_id)
     runs = await SupportRepository(session).recent_runs(organization_id)
     return [SupportRunSummary.model_validate(r) for r in runs]
+
+
+@router.get("/support/coverage-audit", response_model=CoverageAuditOut)
+async def get_support_coverage_audit(
+    user: AuthUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> CoverageAuditOut:
+    organization_id = uuid.UUID(user.organization_id)
+    return await SupportAuditService(session).coverage_audit(organization_id)

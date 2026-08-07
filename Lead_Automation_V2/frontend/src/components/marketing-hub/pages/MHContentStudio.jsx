@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Sparkles, Copy, RefreshCw, ChevronDown, FileText, MessageSquare, Mail, Megaphone, Hash } from 'lucide-react';
 import { useMHToast } from '../ui/MHToast';
+import { useGenerateContent } from '@/lib/queries/marketingHub';
 
 const TABS = [
   { id: 'social', label: 'Social Post', icon: Hash },
@@ -106,6 +107,7 @@ const RECENT_GENERATIONS = [
 
 export default function MHContentStudio() {
   const toast = useMHToast();
+  const generateContent = useGenerateContent();
   const [activeTab, setActiveTab] = useState('social');
   const [campaignType, setCampaignType] = useState('Lead Generation');
   const [industry, setIndustry] = useState('EdTech');
@@ -114,13 +116,39 @@ export default function MHContentStudio() {
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(null);
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     setGenerating(true);
-    setTimeout(() => {
-      setGenerated(GENERATED_SAMPLES[activeTab]);
-      setGenerating(false);
+    try {
+      const contentMap = {
+        social: 'social_post',
+        email: 'email',
+        ad: 'ad_copy',
+        blog: 'blog_outline',
+        whatsapp: 'whatsapp_message'
+      };
+      
+      const result = await generateContent.mutateAsync({
+        content_type: contentMap[activeTab],
+        channel: activeTab === 'ad' ? 'ads' : activeTab,
+        ai_prompt: `Generate ${activeTab} content for ${campaignType} in ${industry} industry. Goal: ${goal}. Additional details: ${details}`,
+        context: {
+          campaign_type: campaignType,
+          industry: industry,
+          goal: goal,
+          details: details
+        }
+      });
+      
+      setGenerated(result.content || result.generated_content || JSON.stringify(result));
       toast.show('Content generated successfully!', 'success');
-    }, 1800);
+    } catch (error) {
+      console.error('Generation failed:', error);
+      toast.show('Failed to generate content. Please try again.', 'error');
+      // Fallback to sample on error
+      setGenerated(GENERATED_SAMPLES[activeTab]);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleCopy = () => {

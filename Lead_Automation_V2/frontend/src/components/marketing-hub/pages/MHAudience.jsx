@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Plus, Users, TrendingUp, Zap, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import MHBadge from '../ui/MHBadge';
+import MHModal from '../ui/MHModal';
 import { useMHToast } from '../ui/MHToast';
 import {
   useMarketingAudiences,
@@ -45,16 +46,23 @@ const fmtSize = (n) => {
   return String(v);
 };
 
-const AI_SUGGESTIONS = [
-  { title: 'High-Intent Lookalike', desc: 'Create a 2% lookalike of your top 500 buyers. Estimated reach: 1.8M', score: 94, color: '#6366f1' },
-  { title: 'Re-engagement Segment', desc: 'Target leads inactive for 45+ days with a win-back campaign', score: 87, color: '#f59e0b' },
-  { title: 'Cross-sell Opportunity', desc: 'Users who bought Course A but not Course B — high conversion potential', score: 91, color: '#10b981' },
-];
+// Freshness score off size_computed_at — real, derived from the audience's
+// own data, not a fabricated per-audience "quality" number.
+function freshnessScore(a) {
+  if (!a.size_computed_at) return 40;
+  const ageDays = (Date.now() - new Date(a.size_computed_at).getTime()) / 86400000;
+  if (ageDays < 1) return 96;
+  if (ageDays < 7) return 85;
+  if (ageDays < 30) return 65;
+  return 40;
+}
 
 const SOURCE_OPTIONS = ['Custom', 'Pixel', 'Lookalike', 'Import', 'CRM'];
 
 export default function MHAudience() {
   const toast = useMHToast();
+  const { data: audiences = [], isLoading, refetch } = useAudiences();
+  const [showCreate, setShowCreate] = useState(false);
   const [hovered, setHovered] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', source: 'Custom', size: '', score: '80' });
@@ -100,7 +108,7 @@ export default function MHAudience() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontFamily: 'var(--mh-font-display)', fontSize: 22, fontWeight: 700, color: 'var(--mh-text)', margin: 0 }}>Audience Manager</h1>
-          <p style={{ fontSize: 13, color: 'var(--mh-text-3)', marginTop: 4 }}>Build, segment, and grow your target audiences with AI</p>
+          <p style={{ fontSize: 13, color: 'var(--mh-text-3)', marginTop: 4 }}>Build audiences from real, tagged contacts — used directly by Campaigns and Broadcasts</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
@@ -270,6 +278,7 @@ export default function MHAudience() {
             )}
           </div>
         </div>
+      )}
 
         <div>
           <div style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, boxShadow: 'var(--mh-shadow-sm)', overflow: 'hidden' }}>

@@ -444,6 +444,14 @@ export default function MHMarketingCalendar() {
           </div>
         </MHModal>
       )}
+
+      {showAdd && (
+        <AddEventModal
+          defaultDate={selectedDay ? `2025-08-${String(selectedDay).padStart(2, '0')}` : '2025-08-01'}
+          onClose={() => setShowAdd(false)}
+          onCreated={(ev) => { setCalendarEvents(prev => [...prev, ev]); toast.show('Event added!', 'success'); }}
+        />
+      )}
     </div>
   );
 }

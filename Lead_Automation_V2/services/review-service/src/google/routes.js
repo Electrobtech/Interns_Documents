@@ -13,6 +13,17 @@ const CLIENT_ID_PATTERN = /\.apps\.googleusercontent\.com$/;
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+// Google Business Profile API access is temporarily unavailable, so the
+// selected location may be a mock one seeded straight into google_reviews
+// (see infra/db/seed.sql / migrations/033_mock_google_reviews.sql) rather
+// than synced from a real connected account. Mock location/account ids are
+// prefixed "mock-" by convention. Routes below check this to read/reply
+// against the DB directly instead of calling the real Google API — nothing
+// else about the request/response shape changes, so swapping back to the
+// real integration later needs no frontend or schema changes.
+const isMockLocation = (locationId) =>
+  typeof locationId === 'string' && locationId.startsWith('locations/mock-');
+
 // Keeps the `channels` list (Integrations > Channels tab) in sync with the
 // Google connection, so Google Reviews shows up there too instead of only
 // inside its own panel.
@@ -114,14 +125,20 @@ router.get('/google/status', async (req, res, next) => {
   try {
     const token = await tokenStore.getTokenRow(req.user.organizationId);
     const locations = await store.listLocations(req.user.organizationId);
+    const selected = locations.find((l) => l.isSelected);
+    // No real token, but the selected location is the seeded mock one —
+    // report "connected" anyway so the existing reviews UI renders without
+    // requiring an actual Google OAuth connection. See isMockLocation above.
+    const mock = !token && !!selected && isMockLocation(selected.locationId);
     res.json({
-      connected: !!token,
+      connected: !!token || mock,
+      mock,
       scope: token?.scope || null,
       lastSyncAt: token?.last_sync_at || null,
       lastSyncStatus: token?.last_sync_status || null,
       lastSyncError: token?.last_sync_error || null,
       locationsCount: locations.length,
-      selectedLocationId: locations.find((l) => l.isSelected)?.locationId || null,
+      selectedLocationId: selected?.locationId || null,
     });
   } catch (e) { next(e); }
 });
@@ -198,8 +215,18 @@ router.post('/google/reply', async (req, res, next) => {
     }
     const review = await store.getReview(req.user.organizationId, reviewId);
     const locationId = review?.location_id || bodyLocationId;
+    if (!locationId) return res.status(404).json({ error: 'Review or location not found' });
+
+    // Mock reviews (Google API unavailable) — save the reply straight to
+    // the DB. This also doubles as "edit reply": posting again with a new
+    // comment overwrites the previous one, same as the real Google flow.
+    if (isMockLocation(locationId)) {
+      const updated = await store.setReply(req.user.organizationId, reviewId, comment, new Date().toISOString());
+      return res.json(updated);
+    }
+
     const accountId = await store.getAccountForLocation(req.user.organizationId, locationId);
-    if (!locationId || !accountId) return res.status(404).json({ error: 'Review or location not found' });
+    if (!accountId) return res.status(404).json({ error: 'Review or location not found' });
 
     const accessToken = await tokenStore.getValidAccessToken(req.user.organizationId);
     const reply = await googleApi.updateReply(accessToken, accountId, locationId, reviewId, comment);
@@ -213,6 +240,12 @@ router.delete('/google/reply/:reviewId', async (req, res, next) => {
     const reviewId = req.params.reviewId;
     const review = await store.getReview(req.user.organizationId, reviewId);
     if (!review) return res.status(404).json({ error: 'Review not found' });
+
+    if (isMockLocation(review.location_id)) {
+      const updated = await store.setReply(req.user.organizationId, reviewId, null, null);
+      return res.json(updated);
+    }
+
     const accountId = await store.getAccountForLocation(req.user.organizationId, review.location_id);
 
     const accessToken = await tokenStore.getValidAccessToken(req.user.organizationId);
@@ -224,7 +257,13 @@ router.delete('/google/reply/:reviewId', async (req, res, next) => {
 
 router.post('/google/sync', async (req, res, next) => {
   try {
-    const summary = await sync.syncOrganization(req.user.organizationId, { locationId: req.body?.locationId });
+    const locationId = req.body?.locationId;
+    if (isMockLocation(locationId)) {
+      // Nothing to sync — mock reviews are seeded directly into the DB,
+      // not pulled from a real connected account.
+      return res.status(400).json({ error: 'This is mock review data — there is no live Google connection to sync from.' });
+    }
+    const summary = await sync.syncOrganization(req.user.organizationId, { locationId });
     res.json(summary);
   } catch (e) { next(e); }
 });

@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Save, Plus, Check, Link2, Zap, Users } from 'lucide-react';
 import MHBadge from '../ui/MHBadge';
+import MHModal from '../ui/MHModal';
 import { useMHToast } from '../ui/MHToast';
 import { EmptyState } from './_shared';
 import { useMarketingTeam } from '@/lib/queries/marketingHub';
@@ -68,7 +69,7 @@ function TeamTab({ toast }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div style={{ fontFamily: 'var(--mh-font-display)', fontSize: 15, fontWeight: 700, color: '#111827' }}>Team Members</div>
-        <button className="mh-btn mh-btn-primary" onClick={() => toast.show('Invite modal coming soon', 'info')}><Plus size={14} /> Invite Member</button>
+        <button className="mh-btn mh-btn-primary" onClick={() => setShowInvite(true)}><Plus size={14} /> Invite Member</button>
       </div>
       <div style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, overflow: 'hidden' }}>
         {isLoading && <div style={{ padding: 20, fontSize: 13, color: '#6b7280' }}>Loading…</div>}
@@ -116,38 +117,141 @@ function TeamTab({ toast }) {
           </table>
         )}
       </div>
+
+      {showInvite && (
+        <InviteMemberModal
+          onClose={() => setShowInvite(false)}
+          onCreated={(m) => { setTeamMembers(prev => [...prev, m]); toast.show(`Invite sent to ${m.email}`, 'success'); }}
+        />
+      )}
     </div>
   );
 }
 
+function ConnectIntegrationModal({ integration, onClose, toast }) {
+  const [apiKey, setApiKey] = useState('');
+  const connect = useConnectIntegration();
+
+  const submit = async () => {
+    if (!apiKey.trim()) return;
+    try {
+      await connect.mutateAsync({
+        provider: integration.name, service_type: 'messaging',
+        credentials: { api_key: apiKey.trim() }, status: 'active',
+      });
+      toast.show(`${integration.name} connected — saved to your workspace.`, 'success');
+      onClose();
+    } catch (err) {
+      toast.show(err.message || 'Could not save credentials', 'error');
+    }
+  };
+
+  return (
+    <MHModal title={`Connect ${integration.name}`} onClose={onClose} width={440}>
+      <p style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.6, marginBottom: 14 }}>
+        This saves a real credential record for your workspace. Actual message delivery on this
+        channel keeps running through Sandbox Mode until the corresponding provider file is wired
+        to the live {integration.name} API — this step alone doesn't change what happens when a
+        campaign sends.
+      </p>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>API Key / Access Token</label>
+      <input className="mh-input" type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Paste key…" style={{ width: '100%' }} />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 22, paddingTop: 16, borderTop: '1px solid #f3f4f6' }}>
+        <button className="mh-btn mh-btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="mh-btn mh-btn-primary" disabled={!apiKey.trim() || connect.isPending} onClick={submit}>
+          {connect.isPending ? 'Saving…' : 'Save & Connect'}
+        </button>
+      </div>
+    </MHModal>
+  );
+}
+
 function IntegrationsTab({ toast }) {
-  const [connected, setConnected] = useState(INTEGRATIONS.reduce((a, i) => ({ ...a, [i.id]: i.connected }), {}));
+  const { data: integrations = [], isLoading } = useIntegrationsList();
+  const disconnect = useDisconnectIntegration();
+  const [connecting, setConnecting] = useState(null);
+
+  const rowFor = (i) => integrations.find((r) =>
+    r.provider?.toLowerCase().includes(i.name.toLowerCase().split(' ')[0].toLowerCase())
+  );
+
   return (
     <div>
       <div style={{ fontFamily: 'var(--mh-font-display)', fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 20 }}>Integrations</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-        {INTEGRATIONS.map(i => (
-          <div key={i.id} style={{ background: '#fff', border: `1px solid ${connected[i.id] ? i.color + '40' : 'var(--mh-border)'}`, borderRadius: 14, padding: '18px', boxShadow: 'var(--mh-shadow-sm)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-              <div style={{ fontSize: 28 }}>{i.icon}</div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{i.name}</div>
-                <div style={{ fontSize: 12, color: '#6b7280' }}>{i.desc}</div>
+      {isLoading ? (
+        <p style={{ fontSize: 12, color: '#9ca3af' }}>Loading…</p>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+          {INTEGRATIONS.map((i) => {
+            const row = rowFor(i);
+            const isConnected = row?.status === 'active';
+            return (
+              <div key={i.id} style={{ background: '#fff', border: `1px solid ${isConnected ? i.color + '40' : 'var(--mh-border)'}`, borderRadius: 14, padding: '18px', boxShadow: 'var(--mh-shadow-sm)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                  <div style={{ fontSize: 28 }}>{i.icon}</div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{i.name}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280' }}>{i.desc}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  {isConnected
+                    ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: '#059669' }}><Check size={13} /> Connected</span>
+                    : <span style={{ fontSize: 12, color: '#9ca3af' }}>Not connected</span>}
+                  <button
+                    style={{ fontSize: 12, padding: '5px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, background: isConnected ? '#fee2e2' : i.color, color: isConnected ? '#dc2626' : '#fff', transition: 'opacity 0.15s' }}
+                    onClick={() => {
+                      if (isConnected) {
+                        disconnect.mutate(row.id, { onSuccess: () => toast.show(`${i.name} disconnected`, 'info') });
+                      } else {
+                        setConnecting(i);
+                      }
+                    }}>
+                    {isConnected ? 'Disconnect' : <><Link2 size={12} style={{ display: 'inline', marginRight: 4 }} />Connect</>}
+                  </button>
+                </div>
               </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              {connected[i.id]
-                ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: '#059669' }}><Check size={13} /> Connected</span>
-                : <span style={{ fontSize: 12, color: '#9ca3af' }}>Not connected</span>}
-              <button
-                style={{ fontSize: 12, padding: '5px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, background: connected[i.id] ? '#fee2e2' : i.color, color: connected[i.id] ? '#dc2626' : '#fff', transition: 'opacity 0.15s' }}
-                onClick={() => { setConnected(p => ({ ...p, [i.id]: !p[i.id] })); toast.show(`${i.name} ${connected[i.id] ? 'disconnected' : 'connected'}!`, connected[i.id] ? 'info' : 'success'); }}>
-                {connected[i.id] ? 'Disconnect' : <><Link2 size={12} style={{ display: 'inline', marginRight: 4 }} />Connect</>}
-              </button>
-            </div>
+            );
+          })}
+        </div>
+      )}
+      {connecting && <ConnectIntegrationModal integration={connecting} onClose={() => setConnecting(null)} toast={toast} />}
+    </div>
+  );
+}
+
+function SandboxBanner() {
+  const { data, isLoading } = useSandboxSetting();
+  const setSandbox = useSetSandboxSetting();
+  const enabled = data?.enabled?.value !== false; // default true (sandbox on) until explicitly turned off
+
+  const toggle = () => {
+    setSandbox.mutate({
+      key: 'enabled', value: !enabled,
+      description: 'When true, all campaign/broadcast sends use the built-in delivery simulator instead of live channel APIs.',
+    });
+  };
+
+  if (isLoading) return null;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, background: enabled ? '#eff6ff' : '#fef2f2', border: `1px solid ${enabled ? '#bfdbfe' : '#fecaca'}`, borderRadius: 12, padding: '14px 18px', marginBottom: 24 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <ShieldCheck size={16} color={enabled ? '#2563eb' : '#dc2626'} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: enabled ? '#1e3a8a' : '#7f1d1d' }}>
+            Sandbox Mode {enabled ? 'On' : 'Off'}
           </div>
-        ))}
+          <div style={{ fontSize: 12, color: enabled ? '#1e40af' : '#991b1b', lineHeight: 1.6, marginTop: 2, maxWidth: 560 }}>
+            {enabled
+              ? 'No live WhatsApp/Meta/LinkedIn/SMS credentials are connected, so every campaign and broadcast send is simulated: realistic timing, delivery/read/reply rates, and occasional failures — all written to real records in this database, nothing posted externally. Connect a channel below to move it off Sandbox.'
+              : 'Sandbox Mode is turned off. Sends will still use the simulator for any channel without connected live credentials — this flag is informational only until a real provider is wired in.'}
+          </div>
+        </div>
       </div>
+      <button className="mh-btn mh-btn-ghost" style={{ flexShrink: 0, background: '#fff', fontSize: 11 }} onClick={toggle} disabled={setSandbox.isPending}>
+        {enabled ? 'Acknowledge' : 'Re-enable'}
+      </button>
     </div>
   );
 }
@@ -252,6 +356,8 @@ export default function MHSettings() {
           </button>
         ))}
       </div>
+
+      {activeTab === 'General' && <SandboxBanner />}
 
       {/* Tab Content */}
       <div style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, padding: '24px', boxShadow: 'var(--mh-shadow-sm)' }}>

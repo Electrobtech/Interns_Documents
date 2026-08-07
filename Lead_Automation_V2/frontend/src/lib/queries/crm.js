@@ -105,6 +105,17 @@ export function useCampaignDecision() {
   });
 }
 
+// GET /campaigns/:id/recipients — per-recipient send status, powers the
+// Campaigns page's DetailsModal (frontend/src/app/app/campaigns/page.jsx).
+export function useCampaignRecipients(id) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['campaigns', id, 'recipients'],
+    queryFn: () => call(`/campaigns/${id}/recipients`),
+    enabled: !!id,
+  });
+}
+
 // POST /leads — { name, company?, email?, phone?, score?, priority?, stage?, source? }
 export function useCreateLead() {
   const { call } = useApi();

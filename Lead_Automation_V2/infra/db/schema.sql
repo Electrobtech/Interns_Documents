@@ -178,7 +178,23 @@ CREATE TABLE IF NOT EXISTS leads (
   stage           TEXT DEFAULT 'new',      -- new | qualified | active | won | lost
   priority        TEXT DEFAULT 'medium',
   score           INT DEFAULT 0,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+  -- Estimated/actual deal value (see migrations/030_lead_deal_value.sql).
+  -- Nullable with no default: unset must stay unset, not silently 0, so
+  -- Pipeline Value aggregation can tell "unknown" apart from "zero".
+  deal_value      NUMERIC(14, 2),
+  -- Leads/CRM page fields (see migrations/032_lead_crm_fields.sql).
+  -- `temperature`/`category` are intentionally separate from `stage` so
+  -- existing stage-based Pipeline/Dashboard/Analytics queries are untouched.
+  course          TEXT,
+  temperature     TEXT NOT NULL DEFAULT 'warm' CHECK (temperature IN ('hot', 'warm', 'cold')),
+  contact_status  TEXT NOT NULL DEFAULT 'no response',
+  category        TEXT NOT NULL DEFAULT 'active' CHECK (category IN ('active', 'onboarded', 'inactive')),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Last time score/stage/deal_value was written (see
+  -- migrations/031_lead_updated_at.sql). Bumped at the application layer
+  -- (contact-service's PUT /leads/:id and PUT /leads/:id/stage), not via a
+  -- trigger — same convention as conversations.last_read_at.
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ---------- Conversations & Messages ----------
@@ -393,6 +409,126 @@ CREATE INDEX IF NOT EXISTS ix_campaign_recipients_campaign_status
 
 CREATE INDEX IF NOT EXISTS ix_campaign_recipients_campaign_phone
   ON campaign_recipients (campaign_id, phone);
+
+-- ---------- Marketing Hub (030_marketing_hub.sql) ----------
+-- Backs frontend/src/components/marketing-hub/ (Campaigns/Broadcasts/Audience
+-- pages) — a separate schema from `campaigns`/`campaign_recipients` above,
+-- which back the older Bulk Messaging feature and use a simpler
+-- single-channel-blast shape. This one carries the richer marketing-campaign
+-- fields (objective, budget, per-channel ROAS-style analytics) that hub's UI
+-- needs, plus the fuller delivery-status set (queued/sending/sent/delivered/
+-- read/replied/failed) a WhatsApp/Email-style channel actually reports.
+CREATE TABLE IF NOT EXISTS mh_audiences (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name              TEXT NOT NULL,
+  source            TEXT NOT NULL DEFAULT 'custom', -- custom | pixel | lookalike | import | crm
+  filter            JSONB NOT NULL DEFAULT '{}',    -- { "tags": ["vip","q3-leads"] } — tag-based, matches what contact-service can resolve
+  size_cached       INT,
+  size_computed_at  TIMESTAMPTZ,
+  status            TEXT NOT NULL DEFAULT 'active',
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_mh_audiences_org ON mh_audiences (organization_id);
+
+CREATE TABLE IF NOT EXISTS mh_campaigns (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  kind              TEXT NOT NULL CHECK (kind IN ('campaign','broadcast')),
+  name              TEXT NOT NULL,
+  channel           TEXT NOT NULL CHECK (channel IN ('whatsapp','email','sms','messenger','instagram','linkedin')),
+  objective         TEXT,          -- campaign-only (Lead Generation, Sales, ...)
+  audience_id       UUID REFERENCES mh_audiences(id) ON DELETE SET NULL,
+  message_body      TEXT,          -- required before /publish
+  budget_amount     NUMERIC(12,2), -- campaign-only
+  status            TEXT NOT NULL DEFAULT 'draft'
+                      CHECK (status IN ('draft','scheduled','queued','processing','completed','failed','paused','archived')),
+  scheduled_at      TIMESTAMPTZ,
+  start_date        DATE,
+  end_date          DATE,
+  total_recipients  INT NOT NULL DEFAULT 0,
+  sent_count        INT NOT NULL DEFAULT 0,
+  delivered_count   INT NOT NULL DEFAULT 0,
+  read_count        INT NOT NULL DEFAULT 0,
+  replied_count     INT NOT NULL DEFAULT 0,
+  failed_count      INT NOT NULL DEFAULT 0,
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Enforced at the DB, not just the API — LinkedIn broadcasts are rejected
+  -- by the route handler too (belt and suspenders, same discipline as the
+  -- rest of this schema).
+  CONSTRAINT mh_no_linkedin_broadcast CHECK (NOT (channel = 'linkedin' AND kind = 'broadcast'))
+);
+CREATE INDEX IF NOT EXISTS ix_mh_campaigns_org_kind_status ON mh_campaigns (organization_id, kind, status);
+CREATE INDEX IF NOT EXISTS ix_mh_campaigns_audience ON mh_campaigns (audience_id) WHERE audience_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS mh_recipients (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id         UUID NOT NULL REFERENCES mh_campaigns(id) ON DELETE CASCADE,
+  contact_id          UUID REFERENCES contacts(id) ON DELETE SET NULL,
+  channel             TEXT NOT NULL,
+  destination         TEXT NOT NULL, -- phone/email/external_id, snapshotted at enqueue time
+  display_name        TEXT,
+  rendered_message    TEXT,
+  status              TEXT NOT NULL DEFAULT 'queued'
+                        CHECK (status IN ('queued','sending','sent','delivered','read','replied','failed')),
+  attempts            INT NOT NULL DEFAULT 0,
+  error               TEXT,
+  job_id              TEXT,
+  provider_message_id TEXT,
+  sent_at             TIMESTAMPTZ,
+  delivered_at        TIMESTAMPTZ,
+  read_at             TIMESTAMPTZ,
+  replied_at          TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ix_mh_recipients_campaign_status ON mh_recipients (campaign_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_mh_recipients_campaign_destination ON mh_recipients (campaign_id, destination);
+
+-- Append-only — the source future analytics/reports pages aggregate from,
+-- same rationale as orbq's own DeliveryEvent design comment: a redelivered
+-- status update or an out-of-order webhook must not silently overwrite
+-- history the way a mutable counter would.
+CREATE TABLE IF NOT EXISTS mh_delivery_events (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  recipient_id  UUID NOT NULL REFERENCES mh_recipients(id) ON DELETE CASCADE,
+  campaign_id   UUID NOT NULL REFERENCES mh_campaigns(id) ON DELETE CASCADE,
+  event_type    TEXT NOT NULL CHECK (event_type IN ('queued','sending','sent','delivered','read','replied','failed')),
+  occurred_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  payload       JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS ix_mh_delivery_events_campaign ON mh_delivery_events (campaign_id, occurred_at);
+
+-- Realtime fan-out for live recipient-status updates — mirrors
+-- notify_new_message() above exactly. mh_recipients has no organization_id
+-- column of its own (matches campaign_recipients' EXISTS-based RLS
+-- convention below), so the org id is looked up via its parent campaign.
+CREATE OR REPLACE FUNCTION notify_mh_recipient_update() RETURNS TRIGGER AS $$
+DECLARE
+  org_id UUID;
+BEGIN
+  SELECT organization_id INTO org_id FROM mh_campaigns WHERE id = NEW.campaign_id;
+  PERFORM pg_notify(
+    'marketing_hub_channel',
+    json_build_object(
+      'recipient_id', NEW.id,
+      'campaign_id', NEW.campaign_id,
+      'organization_id', org_id,
+      'status', NEW.status
+    )::text
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS mh_recipients_notify_trigger ON mh_recipients;
+CREATE TRIGGER mh_recipients_notify_trigger
+  AFTER INSERT OR UPDATE OF status ON mh_recipients
+  FOR EACH ROW EXECUTE FUNCTION notify_mh_recipient_update();
 
 -- ---------- Reviews & Social ----------
 CREATE TABLE IF NOT EXISTS reviews (
@@ -644,6 +780,281 @@ CREATE INDEX IF NOT EXISTS idx_conv_org ON conversations(organization_id, status
 CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(conversation_id, message_type);
 CREATE INDEX IF NOT EXISTS idx_contacts_org ON contacts(organization_id);
+
+-- ---------- Marketing Hub ----------
+CREATE TABLE IF NOT EXISTS mh_audiences (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  name               TEXT NOT NULL,
+  filter             JSONB NOT NULL,  -- {tags: ["tag1", "tag2"]}
+  size_cached        INTEGER DEFAULT 0,
+  size_computed_at   TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS mh_campaigns (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  name               TEXT NOT NULL,
+  kind               TEXT NOT NULL CHECK (kind IN ('campaign', 'broadcast')),
+  channel            TEXT NOT NULL CHECK (channel IN ('whatsapp', 'email', 'sms', 'messenger', 'instagram', 'linkedin')),
+  audience_id        UUID REFERENCES mh_audiences(id),
+  message_body       TEXT NOT NULL,
+  status             TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'scheduled', 'sending', 'sent', 'paused', 'failed')),
+  
+  -- Aggregate counters (re-derived from mh_recipients)
+  sent_count         INTEGER DEFAULT 0,
+  delivered_count    INTEGER DEFAULT 0,
+  read_count         INTEGER DEFAULT 0,
+  replied_count      INTEGER DEFAULT 0,
+  failed_count       INTEGER DEFAULT 0,
+  
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  
+  -- Business rule: LinkedIn broadcasts not allowed
+  CONSTRAINT mh_no_linkedin_broadcast CHECK (NOT (channel='linkedin' AND kind='broadcast'))
+);
+
+CREATE TABLE IF NOT EXISTS mh_recipients (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id          UUID REFERENCES mh_campaigns(id) ON DELETE CASCADE,
+  contact_id           UUID REFERENCES contacts(id) ON DELETE CASCADE,
+  destination          TEXT NOT NULL,  -- phone/email/handle
+  status               TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'sending', 'sent', 'delivered', 'read', 'replied', 'failed')),
+  attempts             INTEGER DEFAULT 0,
+  job_id               TEXT,
+  provider_message_id  TEXT,
+  error_message        TEXT,
+  last_attempted_at    TIMESTAMPTZ,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS mh_delivery_events (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  recipient_id       UUID REFERENCES mh_recipients(id) ON DELETE CASCADE,
+  event_type         TEXT NOT NULL CHECK (event_type IN ('sent', 'delivered', 'read', 'replied', 'failed')),
+  provider_data      JSONB,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Indexes for Marketing Hub
+CREATE INDEX IF NOT EXISTS idx_mh_campaigns_org ON mh_campaigns(organization_id);
+CREATE INDEX IF NOT EXISTS idx_mh_campaigns_kind ON mh_campaigns(kind);
+CREATE INDEX IF NOT EXISTS idx_mh_campaigns_status ON mh_campaigns(status);
+CREATE INDEX IF NOT EXISTS idx_mh_recipients_campaign ON mh_recipients(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_mh_recipients_status ON mh_recipients(status);
+CREATE INDEX IF NOT EXISTS idx_mh_delivery_events_recipient ON mh_delivery_events(recipient_id);
+
+-- Trigger for marketing hub recipient updates
+CREATE OR REPLACE FUNCTION notify_mh_recipient_update() RETURNS trigger AS $$
+BEGIN
+  PERFORM pg_notify('marketing_hub_channel', 
+    json_build_object(
+      'event', 'recipient_updated',
+      'campaign_id', NEW.campaign_id,
+      'recipient_id', NEW.id,
+      'status', NEW.status
+    )::text
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER mh_recipient_update_notify 
+AFTER UPDATE ON mh_recipients 
+FOR EACH ROW EXECUTE FUNCTION notify_mh_recipient_update();
+
+-- ---------- Content Studio & Asset Management ----------
+CREATE TABLE IF NOT EXISTS mh_assets (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  name               TEXT NOT NULL,
+  type               TEXT NOT NULL CHECK (type IN ('image', 'video', 'document', 'audio', 'template')),
+  file_path          TEXT NOT NULL,
+  file_size          INTEGER,
+  mime_type          TEXT,
+  metadata           JSONB DEFAULT '{}',
+  tags               TEXT[] DEFAULT '{}',
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS mh_templates (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  name               TEXT NOT NULL,
+  category           TEXT NOT NULL,
+  channel            TEXT NOT NULL CHECK (channel IN ('whatsapp', 'email', 'sms', 'messenger', 'instagram', 'linkedin')),
+  content            JSONB NOT NULL,  -- {subject, body, variables, assets}
+  preview_data       JSONB,
+  usage_count        INTEGER DEFAULT 0,
+  is_public          BOOLEAN DEFAULT false,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS mh_content_studio (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  name               TEXT NOT NULL,
+  type               TEXT NOT NULL CHECK (type IN ('post', 'campaign', 'template', 'asset')),
+  channel            TEXT CHECK (channel IN ('whatsapp', 'email', 'sms', 'messenger', 'instagram', 'linkedin')),
+  content            JSONB NOT NULL,
+  status             TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'review', 'approved', 'published', 'archived')),
+  scheduled_at       TIMESTAMPTZ,
+  tags               TEXT[] DEFAULT '{}',
+  performance        JSONB DEFAULT '{}',
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------- SEO & AEO Tools ----------
+CREATE TABLE IF NOT EXISTS mh_seo_keywords (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  keyword            TEXT NOT NULL,
+  search_volume      INTEGER DEFAULT 0,
+  difficulty         INTEGER DEFAULT 0,
+  current_rank       INTEGER,
+  target_rank        INTEGER,
+  url                TEXT,
+  competition        NUMERIC(3,2) DEFAULT 0.0,
+  cpc                NUMERIC(10,2) DEFAULT 0.0,
+  trend_data         JSONB DEFAULT '{}',
+  last_checked       TIMESTAMPTZ DEFAULT now(),
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS mh_seo_audits (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  url                TEXT NOT NULL,
+  audit_type         TEXT NOT NULL CHECK (audit_type IN ('technical', 'content', 'backlinks', 'performance')),
+  score              INTEGER DEFAULT 0,
+  issues             JSONB DEFAULT '[]',
+  recommendations    JSONB DEFAULT '[]',
+  audit_data         JSONB DEFAULT '{}',
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS mh_aeo_optimization (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  query              TEXT NOT NULL,
+  answer_type        TEXT CHECK (answer_type IN ('featured_snippet', 'local_pack', 'knowledge_panel', 'video', 'image')),
+  current_content    TEXT,
+  optimized_content  TEXT,
+  optimization_tips  JSONB DEFAULT '[]',
+  performance        JSONB DEFAULT '{}',
+  status             TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'optimizing', 'completed', 'monitoring')),
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------- Competitor Analysis ----------
+CREATE TABLE IF NOT EXISTS mh_competitors (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  name               TEXT NOT NULL,
+  domain             TEXT,
+  industry           TEXT,
+  channels           TEXT[] DEFAULT '{}',
+  tracking_keywords  TEXT[] DEFAULT '{}',
+  social_handles     JSONB DEFAULT '{}',
+  metadata           JSONB DEFAULT '{}',
+  is_active          BOOLEAN DEFAULT true,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS mh_competitor_analysis (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  competitor_id      UUID REFERENCES mh_competitors(id) ON DELETE CASCADE,
+  analysis_type      TEXT NOT NULL CHECK (analysis_type IN ('seo', 'content', 'social', 'ads', 'pricing', 'features')),
+  metrics            JSONB NOT NULL,
+  insights           JSONB DEFAULT '{}',
+  recommendations    TEXT[],
+  analysis_date      TIMESTAMPTZ DEFAULT now(),
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------- Marketing Calendar & Scheduling ----------
+CREATE TABLE IF NOT EXISTS mh_calendar_events (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  title              TEXT NOT NULL,
+  description        TEXT,
+  event_type         TEXT NOT NULL CHECK (event_type IN ('campaign', 'broadcast', 'content', 'meeting', 'deadline', 'launch')),
+  start_date         TIMESTAMPTZ NOT NULL,
+  end_date           TIMESTAMPTZ,
+  all_day            BOOLEAN DEFAULT false,
+  campaign_id        UUID REFERENCES mh_campaigns(id) ON DELETE CASCADE,
+  content_id         UUID REFERENCES mh_content_studio(id) ON DELETE SET NULL,
+  assignees          UUID[] DEFAULT '{}',
+  status             TEXT DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'in_progress', 'completed', 'cancelled')),
+  metadata           JSONB DEFAULT '{}',
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------- Knowledge Base ----------
+CREATE TABLE IF NOT EXISTS mh_knowledge_articles (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  title              TEXT NOT NULL,
+  content            TEXT NOT NULL,
+  category           TEXT,
+  tags               TEXT[] DEFAULT '{}',
+  author_id          UUID REFERENCES users(id),
+  status             TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
+  view_count         INTEGER DEFAULT 0,
+  helpful_count      INTEGER DEFAULT 0,
+  search_vector      TSVECTOR,
+  metadata           JSONB DEFAULT '{}',
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------- Settings & Configuration ----------
+CREATE TABLE IF NOT EXISTS mh_settings (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  category           TEXT NOT NULL,
+  key                TEXT NOT NULL,
+  value              JSONB NOT NULL,
+  description        TEXT,
+  is_public          BOOLEAN DEFAULT false,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(organization_id, category, key)
+);
+
+CREATE TABLE IF NOT EXISTS mh_integrations (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID REFERENCES organizations(id) ON DELETE CASCADE,
+  provider           TEXT NOT NULL,
+  service_type       TEXT NOT NULL CHECK (service_type IN ('seo', 'analytics', 'social', 'crm', 'email', 'storage')),
+  credentials        JSONB NOT NULL,
+  configuration      JSONB DEFAULT '{}',
+  status             TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'error')),
+  last_sync          TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Additional indexes for the new tables
+CREATE INDEX IF NOT EXISTS idx_mh_assets_org_type ON mh_assets(organization_id, type);
+CREATE INDEX IF NOT EXISTS idx_mh_templates_org_category ON mh_templates(organization_id, category);
+CREATE INDEX IF NOT EXISTS idx_mh_content_studio_org_status ON mh_content_studio(organization_id, status);
+CREATE INDEX IF NOT EXISTS idx_mh_seo_keywords_org ON mh_seo_keywords(organization_id);
+CREATE INDEX IF NOT EXISTS idx_mh_competitors_org ON mh_competitors(organization_id);
+CREATE INDEX IF NOT EXISTS idx_mh_calendar_events_org_date ON mh_calendar_events(organization_id, start_date);
+CREATE INDEX IF NOT EXISTS idx_mh_knowledge_articles_search ON mh_knowledge_articles USING gin(search_vector);
+CREATE INDEX IF NOT EXISTS idx_mh_settings_org_category ON mh_settings(organization_id, category);
 
 -- ---------- Lead Automation Module (Playbook Engine) ----------
 CREATE TABLE IF NOT EXISTS playbooks (

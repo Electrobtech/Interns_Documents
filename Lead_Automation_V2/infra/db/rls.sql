@@ -158,6 +158,48 @@ CREATE POLICY tenant_isolation ON campaign_recipients
     )
   );
 
+-- mh_recipients / mh_delivery_events (030_marketing_hub.sql) hang off
+-- mh_campaigns the same way campaign_recipients hangs off campaigns above —
+-- EXISTS check against the parent row rather than a duplicated
+-- organization_id column.
+ALTER TABLE mh_recipients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mh_recipients FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON mh_recipients;
+CREATE POLICY tenant_isolation ON mh_recipients
+  USING (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM mh_campaigns c
+       WHERE c.id = mh_recipients.campaign_id
+         AND c.organization_id = app_current_org()
+    )
+  )
+  WITH CHECK (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM mh_campaigns c
+       WHERE c.id = mh_recipients.campaign_id
+         AND c.organization_id = app_current_org()
+    )
+  );
+
+ALTER TABLE mh_delivery_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mh_delivery_events FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON mh_delivery_events;
+CREATE POLICY tenant_isolation ON mh_delivery_events
+  USING (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM mh_campaigns c
+       WHERE c.id = mh_delivery_events.campaign_id
+         AND c.organization_id = app_current_org()
+    )
+  )
+  WITH CHECK (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM mh_campaigns c
+       WHERE c.id = mh_delivery_events.campaign_id
+         AND c.organization_id = app_current_org()
+    )
+  );
+
 -- invoice_line_items (025_channel_subscription_billing.sql) hangs off
 -- invoices the same way — EXISTS check against the parent invoice row.
 ALTER TABLE invoice_line_items ENABLE ROW LEVEL SECURITY;

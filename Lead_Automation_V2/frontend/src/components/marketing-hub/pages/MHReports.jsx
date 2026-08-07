@@ -2,9 +2,10 @@
 import { useState } from 'react';
 import { Plus, Download, Eye, FileText, Calendar, Clock } from 'lucide-react';
 import MHBadge from '../ui/MHBadge';
+import MHModal from '../ui/MHModal';
 import { useMHToast } from '../ui/MHToast';
 
-const REPORTS = [
+const INITIAL_REPORTS = [
   { id: 1, title: 'Q2 2025 Campaign Performance', type: 'Campaign', date: '2025-07-05', size: '4.8 MB', status: 'Ready' },
   { id: 2, title: 'Monthly SEO Report — July', type: 'SEO', date: '2025-08-01', size: '2.1 MB', status: 'Ready' },
   { id: 3, title: 'Competitor Analysis Q3', type: 'Competitor', date: '2025-07-28', size: '3.4 MB', status: 'Ready' },
@@ -24,8 +25,58 @@ const TYPE_COLORS = {
   Broadcast: '#3b82f6', Audience: '#8b5cf6', Revenue: '#ef4444',
 };
 
+function GenerateReportModal({ onClose, onCreated }) {
+  const [title, setTitle] = useState('');
+  const [type, setType] = useState('Campaign');
+
+  const submit = () => {
+    if (!title.trim()) return;
+    onCreated({
+      id: String(Date.now()),
+      title: title.trim(),
+      type,
+      date: new Date().toISOString().slice(0, 10),
+      size: '—',
+      status: 'Generating',
+    });
+    onClose();
+  };
+
+  return (
+    <MHModal title="Generate Report" onClose={onClose} width={440}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Report Title <span style={{ color: '#dc2626' }}>*</span></label>
+          <input className="mh-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. August Campaign Performance" />
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>Type</label>
+          <select className="mh-input" value={type} onChange={e => setType(e.target.value)}>
+            {Object.keys(TYPE_COLORS).map(t => <option key={t}>{t}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 22, paddingTop: 16, borderTop: '1px solid #f3f4f6' }}>
+        <button className="mh-btn mh-btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="mh-btn mh-btn-primary" disabled={!title.trim()} style={{ opacity: title.trim() ? 1 : 0.5 }} onClick={submit}>Generate</button>
+      </div>
+    </MHModal>
+  );
+}
+
 export default function MHReports() {
   const toast = useMHToast();
+  const [reports, setReports] = useState(INITIAL_REPORTS);
+  const [showGenerate, setShowGenerate] = useState(false);
+
+  const addReport = (r) => {
+    setReports(prev => [r, ...prev]);
+    // Simulated generation — flips to Ready with a plausible size after a
+    // beat, same "looks real" convention used for the Audience size estimate.
+    setTimeout(() => {
+      setReports(prev => prev.map(x => x.id === r.id ? { ...x, status: 'Ready', size: `${(0.4 + Math.random() * 4.5).toFixed(1)} MB` } : x));
+    }, 2200);
+  };
 
   return (
     <div style={{ padding: '24px 28px', background: 'var(--mh-bg)', minHeight: '100vh' }}>
@@ -35,14 +86,14 @@ export default function MHReports() {
           <h1 style={{ fontFamily: 'var(--mh-font-display)', fontSize: 22, fontWeight: 700, color: 'var(--mh-text)', margin: 0 }}>Reports</h1>
           <p style={{ fontSize: 13, color: 'var(--mh-text-3)', marginTop: 4 }}>Generate, schedule, and download marketing reports</p>
         </div>
-        <button className="mh-btn mh-btn-primary" onClick={() => toast.show('Opening report generator…', 'info')}>
+        <button className="mh-btn mh-btn-primary" onClick={() => setShowGenerate(true)}>
           <Plus size={15} /> Generate Report
         </button>
       </div>
 
       {/* Reports Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16, marginBottom: 28 }}>
-        {REPORTS.map(r => (
+        {reports.map(r => (
           <div key={r.id} style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, padding: '20px', boxShadow: 'var(--mh-shadow-sm)', transition: 'box-shadow 0.2s' }}
             onMouseEnter={e => e.currentTarget.style.boxShadow = 'var(--mh-shadow-md)'}
             onMouseLeave={e => e.currentTarget.style.boxShadow = 'var(--mh-shadow-sm)'}>
@@ -111,6 +162,10 @@ export default function MHReports() {
           </table>
         </div>
       </div>
+
+      {showGenerate && (
+        <GenerateReportModal onClose={() => setShowGenerate(false)} onCreated={addReport} />
+      )}
     </div>
   );
 }

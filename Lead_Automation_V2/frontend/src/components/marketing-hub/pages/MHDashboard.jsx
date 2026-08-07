@@ -45,6 +45,63 @@ export default function MHDashboard({ onNavigate }) {
   const { data: audienceGrowth = [] } = useAudienceGrowth(8);
 
   const { show } = useMHToast();
+  const { data: campaigns = [], refetch } = useCampaigns();
+  const aiSuggestions = useAISuggestions();
+  const [aiSummary, setAiSummary] = useState(null);
+  const [loadingAI, setLoadingAI] = useState(false);
+
+  // Fetch AI suggestions on mount
+  useEffect(() => {
+    const fetchAISuggestions = async () => {
+      setLoadingAI(true);
+      try {
+        const context = {
+          campaigns_count: campaigns.length,
+          active_campaigns: campaigns.filter(c => c.status === 'processing' || c.status === 'scheduled').length,
+          recent_performance: campaigns.slice(0, 5).map(c => ({
+            name: c.name,
+            channel: c.channel,
+            status: c.status,
+            recipients: c.total_recipients
+          }))
+        };
+        
+        const result = await aiSuggestions.mutateAsync(context);
+        setAiSummary(result);
+      } catch (error) {
+        console.error('Failed to fetch AI suggestions:', error);
+        // Keep using mock data on error
+      } finally {
+        setLoadingAI(false);
+      }
+    };
+
+    if (campaigns.length > 0) {
+      fetchAISuggestions();
+    }
+  }, [campaigns.length]);
+
+  // Real report from real mh_campaigns rows — everything else on this page
+  // is still the mock hero/chart data (see the plan doc); this button at
+  // least reports on genuine campaigns rather than the static KPI mock.
+  const exportReport = () => {
+    if (campaigns.length === 0) return show('No campaigns yet to report on', 'error');
+    const totals = campaigns.reduce((acc, c) => {
+      acc.recipients += c.total_recipients || 0; acc.sent += c.sent_count || 0;
+      acc.delivered += c.delivered_count || 0; acc.failed += c.failed_count || 0;
+      return acc;
+    }, { recipients: 0, sent: 0, delivered: 0, failed: 0 });
+    const html = `
+      <h1>Marketing Hub Report</h1>
+      <div class="meta">Generated ${new Date().toLocaleString()} · ${campaigns.length} campaign(s)</div>
+      <div class="kpi-grid">
+        ${[['Campaigns', campaigns.length], ['Recipients', totals.recipients], ['Sent', totals.sent], ['Delivered', totals.delivered], ['Failed', totals.failed]]
+          .map(([l, v]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v.toLocaleString()}</div></div>`).join('')}
+      </div>
+      <table><thead><tr><th>Name</th><th>Channel</th><th>Status</th><th>Recipients</th><th>Sent</th></tr></thead>
+      <tbody>${campaigns.map((c) => `<tr><td>${c.name}</td><td>${c.channel}</td><td>${c.status}</td><td>${c.total_recipients || 0}</td><td>${c.sent_count || 0}</td></tr>`).join('')}</tbody></table>`;
+    if (!printReport('Marketing Hub Report', html)) show('Enable pop-ups to open the report', 'error');
+  };
 
   return (
     <div style={{ padding:'24px 28px', background:'var(--mh-bg)', minHeight:'100vh', display:'flex', flexDirection:'column', gap:24, overflowY:'auto' }}>
@@ -56,8 +113,8 @@ export default function MHDashboard({ onNavigate }) {
           <p style={{ fontSize:13, color:'#6b7280', marginTop:4, marginBottom:0 }}>Your marketing is performing well today</p>
         </div>
         <div style={{ display:'flex', gap:8 }}>
-          <button className="mh-btn mh-btn-ghost"><Download size={14} />Export Report</button>
-          <button className="mh-btn mh-btn-ghost" onClick={() => show('Refreshed','success')}><RefreshCw size={14} />Refresh</button>
+          <button className="mh-btn mh-btn-ghost" onClick={exportReport}><Download size={14} />Export Report</button>
+          <button className="mh-btn mh-btn-ghost" onClick={() => { refetch(); show('Refreshed','success'); }}><RefreshCw size={14} />Refresh</button>
         </div>
       </div>
 
@@ -77,9 +134,9 @@ export default function MHDashboard({ onNavigate }) {
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
             {[
               { label:'Revenue MTD', value:'₹52.6L', trend:'+34%', up:true },
-              { label:'Active Campaigns', value:'14', trend:'+3', up:true },
-              { label:'Leads Today', value:'284', trend:'+18%', up:true },
-              { label:'Avg ROAS', value:'29.4x', trend:'+8%', up:true },
+              { label:'Active Campaigns', value:aiSummary?.active_campaigns || campaigns.filter(c => c.status === 'processing' || c.status === 'scheduled').length.toString() || '14', trend:'+3', up:true },
+              { label:'Leads Today', value:aiSummary?.leads_today || '284', trend:'+18%', up:true },
+              { label:'Avg ROAS', value:aiSummary?.avg_roas || '29.4x', trend:'+8%', up:true },
             ].map(m => (
               <div key={m.label} style={{ background:'rgba(255,255,255,0.7)', border:'1px solid #e5e7eb', borderRadius:10, padding:'12px 14px' }}>
                 <div style={{ fontSize:10, color:'#6b7280', textTransform:'uppercase', letterSpacing:'0.06em', fontWeight:600 }}>{m.label}</div>
@@ -91,15 +148,21 @@ export default function MHDashboard({ onNavigate }) {
             ))}
           </div>
           <div style={{ background:'rgba(255,255,255,0.8)', borderRadius:10, padding:'12px 14px', fontSize:13, color:'#374151', lineHeight:1.7, marginBottom:12 }}>
-            <strong>3 campaigns need attention.</strong> CTR on Brand Awareness dropped 8% — creative refresh recommended. <strong>Increasing LinkedIn budget by 20%</strong> could generate +420 qualified leads.
+            {loadingAI ? (
+              <span>Analyzing your marketing performance...</span>
+            ) : aiSummary?.suggestions ? (
+              <span>{aiSummary.suggestions}</span>
+            ) : (
+              <span><strong>3 campaigns need attention.</strong> CTR on Brand Awareness dropped 8% — creative refresh recommended. <strong>Increasing LinkedIn budget by 20%</strong> could generate +420 qualified leads.</span>
+            )}
           </div>
           <div style={{ marginBottom:14 }}>
             <div style={{ display:'flex', justifyContent:'flex-end', fontSize:11, color:'#6b7280', marginBottom:4 }}>92% confidence</div>
             <div className="progress-track"><div className="progress-fill" style={{ width:'92%', background:'var(--mh-primary)' }} /></div>
           </div>
           <div style={{ display:'flex', gap:8 }}>
-            <button className="mh-btn mh-btn-ai"><Sparkles size={13} />Apply Suggestions</button>
-            <button className="mh-btn mh-btn-ghost">View Details →</button>
+            <button className="mh-btn mh-btn-ai" onClick={() => onNavigate?.('campaigns')}><Sparkles size={13} />Apply Suggestions</button>
+            <button className="mh-btn mh-btn-ghost" onClick={() => onNavigate?.('campaigns')}>View Details →</button>
           </div>
         </div>
 

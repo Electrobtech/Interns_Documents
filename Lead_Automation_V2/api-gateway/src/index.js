@@ -117,6 +117,13 @@ const routes = [
   // Message Templates (Template Creation module) — owned by campaign-service
   // (src/templates.js + src/templateMedia.js), not yet in this route table.
   { path: '/templates',           target: CAMPAIGN },
+  // Products/Offers (src/products.js) — router existed and is mounted in
+  // campaign-service/src/index.js, but had no gateway route at all, so
+  // every /products call from frontend/src/lib/queries/products.js 404'd
+  // before even reaching the service.
+  { path: '/products',            target: CAMPAIGN },
+  // Static header images/videos/documents templateMedia.js writes under
+  // campaign-service's public/uploads/templates (see src/index.js there).
 // Static header images/videos/documents templateMedia.js writes under
   // campaign service's public/uploads/templates (see src/index.js there).
   // The upload response hands back a GATEWAY_PUBLIC_URL-rooted URL for the
@@ -170,6 +177,12 @@ const routes = [
   // frontend/src/components/billing/*.jsx). BILLING was declared above but
   // never actually routed, so every Billing & Payments page call 404'd here.
   { path: '/billing',             target: BILLING },
+  // Marketing Hub channel-simulation backend (services/marketing-hub-service).
+  // The /socket.io sub-path MUST precede the bare /marketing-hub entry below
+  // — Express matches app.use() in registration order and the first match
+  // wins, same reasoning as the /auth/* block at the top of this table.
+  { path: '/marketing-hub/socket.io', target: MARKETING_HUB, ws: true },
+  { path: '/marketing-hub',           target: MARKETING_HUB },
 ];
 
 const wsProxies = [];
