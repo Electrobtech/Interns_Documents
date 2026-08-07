@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, ARRAY, DateTime, String, Text, func
+from sqlalchemy import JSON, ARRAY, Boolean, DateTime, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -50,6 +50,21 @@ class SalesAgentConfig(Base):
     # always-fetched-as-a-whole config blob with no independent query
     # pattern of its own, so a join buys nothing here.
     confidence_signal_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
+    # ── Settings tab (SalesWorkspace.jsx "Lead Scoring" / "Follow-up
+    # Automation" sections) — previously rendered fixed values with nothing
+    # behind them. See migration 0005 for defaults.
+    min_hot_score: Mapped[int] = mapped_column(Integer, nullable=False, default=75)
+    max_followup_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    require_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Day-offsets a follow-up should fire on relative to the lead entering
+    # the sequence, e.g. [1, 3, 7, 14] == "Day 1, 3, 7, 14".
+    followup_cadence_days: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False, default=lambda: [1, 3, 7, 14])
+
+    # Forecasting tab gap analysis: target vs. actual closed revenue this
+    # month. NULL means "not set" — kept distinct from 0, same reasoning as
+    # deal_value_field above.
+    monthly_revenue_target: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

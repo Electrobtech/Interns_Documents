@@ -66,7 +66,6 @@ services:
     build:
       context: .
       dockerfile: services/auth-service/Dockerfile
-      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -84,7 +83,6 @@ services:
     build:
       context: .
       dockerfile: services/contact-service/Dockerfile
-      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -97,7 +95,6 @@ services:
     build:
       context: .
       dockerfile: services/campaign-service/Dockerfile
-      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -234,7 +231,6 @@ services:
     build:
       context: .
       dockerfile: services/billing-service/Dockerfile
-      network: host
     env_file: .env
     environment:
       PORT: 4015
@@ -251,7 +247,6 @@ services:
     build:
       context: .
       dockerfile: services/ecommerce-service/Dockerfile
-      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -264,7 +259,6 @@ services:
     build:
       context: .
       dockerfile: services/review-service/Dockerfile
-      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -277,7 +271,6 @@ services:
     build:
       context: .
       dockerfile: services/analytics-service/Dockerfile
-      network: host
     container_name: analytics-service
     env_file: .env
     environment:
@@ -294,7 +287,6 @@ services:
     build:
       context: .
       dockerfile: services/integration-service/Dockerfile
-      network: host
     container_name: integration-service
     env_file: .env
     environment:
@@ -310,7 +302,6 @@ services:
     build:
       context: .
       dockerfile: services/linkedin-service/Dockerfile
-      network: host
     container_name: linkedin-service
     env_file: .env
     environment:
@@ -327,11 +318,11 @@ services:
       # a scope for a Product that isn't approved gets the WHOLE auth request
       # rejected, so these are split rather than one all-or-nothing flag.
       # Advertising API + Lead Sync API + Conversions API share this tier.
-      LINKEDIN_ADS_ACCESS:      ${LINKEDIN_ADS_ACCESS:-true}
+      LINKEDIN_ADS_ACCESS:       ${LINKEDIN_ADS_ACCESS:-true}
       # Community Management API (post/read/react as an ORGANIZATION page) —
       # separate review from Ads; off until that Product is approved.
-      LINKEDIN_ORG_ACCESS:      ${LINKEDIN_ORG_ACCESS:-false}
-      LINKEDIN_API_VERSION:     ${LINKEDIN_API_VERSION:-202606}
+      LINKEDIN_ORG_ACCESS:       ${LINKEDIN_ORG_ACCESS:-false}
+      LINKEDIN_API_VERSION:      ${LINKEDIN_API_VERSION:-202606}
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4009:4009"]
@@ -341,7 +332,6 @@ services:
     build:
       context: .
       dockerfile: services/team-service/Dockerfile
-      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -354,7 +344,6 @@ services:
     build:
       context: .
       dockerfile: services/automation-service/Dockerfile
-      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -364,12 +353,11 @@ services:
     volumes:
       - automation_uploads:/app/services/automation-service/public/uploads
 
-    # Notification service - handles email, SMS, and push notifications
+  # Notification service - handles email, SMS, and push notifications
   notification-service:
     build:
       context: .
       dockerfile: services/notification-service/Dockerfile
-      network: host
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
@@ -382,7 +370,6 @@ services:
     build:
       context: .
       dockerfile: services/email-service/Dockerfile
-      network: host
     container_name: email-service
     env_file: .env
     environment:
@@ -404,7 +391,6 @@ services:
     build:
       context: .
       dockerfile: services/calendar-service/Dockerfile
-      network: host
     container_name: calendar-service
     env_file: .env
     environment:
@@ -419,7 +405,6 @@ services:
     build:
       context: .
       dockerfile: services/inbox-service/Dockerfile
-      network: host
     container_name: inbox-service
     env_file: .env
     environment:
@@ -444,7 +429,6 @@ services:
     build:
       context: .
       dockerfile: api-gateway/Dockerfile
-      network: host
     env_file: .env
     environment:
       # These target names/ports match each service's own container_name
@@ -467,9 +451,9 @@ services:
       TEAM_SERVICE_URL:        http://team-service:4010
       AUTOMATION_SERVICE_URL:  http://automation-service:4011
       NOTIFICATION_SERVICE_URL: http://notification-service:4012
-      EMAIL_SERVICE_URL:       http://email-service:4013
-      CALENDAR_SERVICE_URL:    http://calendar-service:4014
-      BILLING_SERVICE_URL:     http://billing-service:4015
+      EMAIL_SERVICE_URL:        http://email-service:4013
+      CALENDAR_SERVICE_URL:     http://calendar-service:4014
+      BILLING_SERVICE_URL:      http://billing-service:4015
     depends_on:
       - auth-service
       - inbox-service
@@ -501,7 +485,6 @@ services:
     build:
       context: ./frontend
       dockerfile: frontend.Dockerfile
-      network: host
       args:
         # NEXT_PUBLIC_API_URL below is a *runtime* env var, but Next.js inlines
         # NEXT_PUBLIC_* at build time, so it must also be passed as a build arg.

@@ -12,11 +12,15 @@ from app.database.session import get_session
 from app.ml.lead_scoring_model import predict_fit_score
 from app.repositories.sales_repo import SalesRepository
 from app.schemas.sales import (
+    DraftFollowupIn,
+    DraftFollowupOut,
     FitScoreIn,
     FitScoreOut,
     SalesAgentConfigIn,
     SalesAgentConfigOut,
+    SalesAnalyticsOut,
     SalesExportOut,
+    SalesForecastOut,
     SalesQueueOut,
     SalesRunIn,
     SalesRunOut,
@@ -108,10 +112,16 @@ async def update_sales_config(
         organization_id,
         deal_value_field=sent.get("deal_value_field", ...),
         confidence_signals=body.confidence_signals if "confidence_signals" in sent else ...,
+        min_hot_score=sent.get("min_hot_score", ...),
+        max_followup_attempts=sent.get("max_followup_attempts", ...),
+        require_approval=sent.get("require_approval", ...),
+        followup_cadence_days=body.followup_cadence_days if "followup_cadence_days" in sent else ...,
+        monthly_revenue_target=sent.get("monthly_revenue_target", ...),
     )
     await log_audit(
         session, organization_id, user.user_id, "ai_agents.sales.config_update",
-        {"deal_value_field": body.deal_value_field, "confidence_signals_set": body.confidence_signals is not None},
+        {"deal_value_field": body.deal_value_field, "confidence_signals_set": body.confidence_signals is not None,
+         "settings_fields_set": [k for k in sent if k not in ("deal_value_field", "confidence_signals")]},
     )
     await session.commit()
     return result
@@ -139,5 +149,55 @@ async def export_sales_data(
     organization_id = uuid.UUID(user.organization_id)
     result = await SalesService(session).get_export(organization_id)
     await log_audit(session, organization_id, user.user_id, "ai_agents.sales.export", {"lead_count": len(result.leads)})
+    await session.commit()
+    return result
+
+
+# ── Forecasting & Analytics tabs ─────────────────────────────────────────────
+# Both read-only, both computed live from real leads (contact-service) +
+# this org's own config/runs — no writes, so no audit row, same as
+# /sales/fit-score above.
+
+@router.get("/sales/forecast", response_model=SalesForecastOut)
+async def get_sales_forecast(
+    user: AuthUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> SalesForecastOut:
+    """Pipeline value by stage, a heuristically weighted quarterly
+    prediction, a real monthly-revenue trend, and target-vs-actual gap
+    analysis against this org's configured monthly revenue target."""
+    organization_id = uuid.UUID(user.organization_id)
+    return await SalesService(session).get_forecast(organization_id)
+
+
+@router.get("/sales/analytics", response_model=SalesAnalyticsOut)
+async def get_sales_analytics(
+    user: AuthUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> SalesAnalyticsOut:
+    """MTD closed deals, avg deal size, sales-cycle length, and agent
+    productivity — all derived from real leads + sales_agent_runs, not
+    hardcoded chart data."""
+    organization_id = uuid.UUID(user.organization_id)
+    return await SalesService(session).get_analytics(organization_id)
+
+
+# ── Follow-up draft generation (Follow-ups tab) ──────────────────────────────
+
+@router.post("/sales/draft-followup", response_model=DraftFollowupOut)
+async def draft_followup(
+    body: DraftFollowupIn,
+    user: AuthUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DraftFollowupOut:
+    """Generates email/WhatsApp/call-script drafts for one lead, grounded in
+    the org's sales knowledge base. Read-only — this never sends anything;
+    the frontend's Approve & Send button calls the existing
+    POST /conversations/:id/reply once a human signs off."""
+    organization_id = uuid.UUID(user.organization_id)
+    result = await SalesService(session).draft_followup(organization_id, body)
+    await log_audit(session, organization_id, user.user_id, "ai_agents.sales.draft_followup", {
+        "lead_id": body.lead_id, "lead_name": result.lead_name, "channel": body.channel,
+    })
     await session.commit()
     return result

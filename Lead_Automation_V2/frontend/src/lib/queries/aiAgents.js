@@ -400,6 +400,51 @@ export function useExportSalesData() {
   });
 }
 
+/* ─── Forecasting & Analytics tabs ───────────────────────────────────────── */
+
+/**
+ * GET /ai-agents/sales/forecast — pipeline value by stage, weighted
+ * quarterly prediction, monthly revenue trend, and target-vs-actual gap
+ * analysis. Backs the Forecasting tab, replacing its hardcoded numbers.
+ */
+export function useSalesForecast() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['ai-agents', 'sales', 'forecast'],
+    queryFn: () => call(`${AI}/sales/forecast`),
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * GET /ai-agents/sales/analytics — MTD closed deals, avg deal size, sales
+ * cycle length, weekly deals-won, and agent productivity. Backs the
+ * Analytics tab, replacing its hardcoded metrics/charts.
+ */
+export function useSalesAnalytics() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['ai-agents', 'sales', 'analytics'],
+    queryFn: () => call(`${AI}/sales/analytics`),
+    staleTime: 30_000,
+  });
+}
+
+/* ─── Follow-up draft generation (Follow-ups tab) ────────────────────────── */
+
+/**
+ * POST /ai-agents/sales/draft-followup — { lead_id?, lead_name?, company?,
+ * stage?, score?, channel?, notes? } -> { email, whatsapp, call_script,
+ * knowledge_sources_used }. Read-only: never sends anything. Approve & Send
+ * in the UI calls useSendReply (crm.js) separately once a human signs off.
+ */
+export function useDraftFollowup() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: (body) => call(`${AI}/sales/draft-followup`, { method: 'POST', body }),
+  });
+}
+
 /* ─── Display helpers ────────────────────────────────────────────────────── */
 
 /**

@@ -19,3 +19,6 @@ aiofiles==24.1.0
 # --- lead scoring (random forest) ---
 numpy==2.1.2
 scikit-learn==1.5.2
+# --- tests (tests/) ---
+pytest==8.3.3
+pytest-asyncio==0.24.0

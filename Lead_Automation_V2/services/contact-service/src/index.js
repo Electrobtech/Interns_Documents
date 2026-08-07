@@ -117,7 +117,11 @@ app.post('/contacts/bulk-tag', canWrite, async (req, res) => {
 // Leads
 app.get('/leads', async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT l.*, c.name FROM leads l JOIN contacts c ON c.id=l.contact_id
+    // c.source is the lead's real inbound channel (email/whatsapp/linkedin/
+    // etc — see contacts.source) — joined in so the Sales Agent workspace
+    // has a real channel to show/default the Fit Scorer's pills to, instead
+    // of guessing one.
+    `SELECT l.*, c.name, c.source FROM leads l JOIN contacts c ON c.id=l.contact_id
       WHERE l.organization_id=$1 ORDER BY l.created_at DESC`,
     [req.user.organizationId]
   );
@@ -137,7 +141,7 @@ app.get('/leads/fields', (_req, res) => {
 
 app.put('/leads/:id/stage', async (req, res) => {
   const { rows } = await pool.query(
-    `UPDATE leads SET stage=$1 WHERE id=$2 AND organization_id=$3 RETURNING *`,
+    `UPDATE leads SET stage=$1, updated_at=now() WHERE id=$2 AND organization_id=$3 RETURNING *`,
     [req.body.stage, req.params.id, req.user.organizationId]
   );
   res.json(rows[0] || {});
@@ -152,9 +156,10 @@ app.put('/leads/:id', canWrite, async (req, res) => {
   const { score, stage, deal_value } = req.body;
   const { rows } = await pool.query(
     `UPDATE leads SET score=COALESCE($1, score), stage=COALESCE($2, stage),
-            deal_value=COALESCE($3, deal_value)
+            deal_value=COALESCE($3, deal_value), updated_at=now()
       WHERE id=$4 AND organization_id=$5
-      RETURNING *, (SELECT name FROM contacts WHERE id=leads.contact_id) as name`,
+      RETURNING *, (SELECT name FROM contacts WHERE id=leads.contact_id) as name,
+                   (SELECT source FROM contacts WHERE id=leads.contact_id) as source`,
     [score ?? null, stage ?? null, deal_value ?? null, req.params.id, req.user.organizationId]
   );
   if (!rows[0]) return res.status(404).json({ error: 'lead not found' });
@@ -189,7 +194,8 @@ app.post('/leads', canWrite, async (req, res) => {
   const { rows } = await pool.query(
     `INSERT INTO leads (organization_id, contact_id, stage, priority, score, deal_value)
      VALUES ($1,$2,COALESCE($3,'new'),COALESCE($4,'medium'),COALESCE($5,0),$6)
-     RETURNING *, (SELECT name FROM contacts WHERE id=$2) as name`,
+     RETURNING *, (SELECT name FROM contacts WHERE id=$2) as name,
+                  (SELECT source FROM contacts WHERE id=$2) as source`,
     [req.user.organizationId, contact.id, stage, priority, score, deal_value ?? null]
   );
   logAudit(req, 'lead.create', { id: rows[0].id, contact_id: contact.id, score, deal_value });

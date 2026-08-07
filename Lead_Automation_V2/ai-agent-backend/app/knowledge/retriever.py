@@ -131,8 +131,23 @@ class KnowledgeRetriever:
         caller should ask a clarifying question rather than trust the answer."""
         settings = get_settings()
 
-        embedder = get_embedding_provider()
-        [query_embedding] = await embedder.embed([query])
+        try:
+            embedder = get_embedding_provider()
+            [query_embedding] = await embedder.embed([query])
+        except Exception:
+            # The embedding provider (e.g. Ollama) being unreachable is an
+            # infrastructure failure, not a "we don't know the answer"
+            # failure — but from the caller's perspective the safe response
+            # is the same: no chunks, low confidence, let the agent fall
+            # back to answering without retrieved context (or asking a
+            # clarifying question) instead of a raw 500. This mirrors the
+            # LLM-generation step's malformed-JSON fallback elsewhere in
+            # the pipeline — degrade, don't crash.
+            logger.warning(
+                "rag_retrieve_embedding_provider_unreachable org=%s agent=%s",
+                organization_id, agent_type, exc_info=True,
+            )
+            return [], True
 
         candidates = await self._repo.hybrid_search(
             organization_id, agent_type, query_embedding, query, top_k=top_k,
