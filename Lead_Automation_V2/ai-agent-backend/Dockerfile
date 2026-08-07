@@ -23,10 +23,14 @@ COPY ai-agent-backend/app ./app
 COPY ai-agent-backend/alembic ./alembic
 COPY ai-agent-backend/alembic.ini ./alembic.ini
 
-# Copy entrypoint script
+# Copy entrypoint scripts
 COPY ai-agent-backend/entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
+COPY ai-agent-backend/entrypoint-overview.sh ./entrypoint-overview.sh
+COPY ai-agent-backend/entrypoint-marketing.sh ./entrypoint-marketing.sh
+COPY ai-agent-backend/entrypoint-sales.sh ./entrypoint-sales.sh
+COPY ai-agent-backend/entrypoint-support.sh ./entrypoint-support.sh
+RUN chmod +x ./entrypoint.sh ./entrypoint-overview.sh ./entrypoint-marketing.sh ./entrypoint-sales.sh ./entrypoint-support.sh
 
-EXPOSE 4005
+EXPOSE 4020 4021 4022 4023
 
 ENTRYPOINT ["./entrypoint.sh"]

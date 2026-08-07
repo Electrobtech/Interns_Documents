@@ -24,11 +24,15 @@ export default function AIAgentsPage() {
     }
   }, [searchParams]);
 
+  // Marketing hub takes full control of its own layout/height
+  if (view === 'marketing') {
+    return <MarketingHub onBack={() => setView('dashboard')} />;
+  }
+
   return (
     <div className="flex-1 overflow-y-auto bg-[#F4F6FA] min-h-screen text-[#0F1929] selection:bg-blue-100" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
       <div className="animate-fade-up">
         {view === 'dashboard' && <AIDashboard onNavigate={setView} />}
-        {view === 'marketing' && <MarketingHub onBack={() => setView('dashboard')} />}
         {view === 'sales' && <SalesWorkspace />}
         {view === 'support' && <SupportWorkspace />}
       </div>
