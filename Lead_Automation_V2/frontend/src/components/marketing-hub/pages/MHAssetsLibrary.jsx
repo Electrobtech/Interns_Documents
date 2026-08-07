@@ -196,7 +196,7 @@ export default function MHAssetsLibrary() {
                 {/* Thumbnail */}
                 <div style={{ width: '100%', height: 140, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                   {a.type === 'image' && a.file_path ? (
-                    <img src={`/marketing-hub/assets/${a.id}/file`} alt={a.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={`${process.env.NEXT_PUBLIC_API_URL}/marketing-hub/assets/${a.id}/file`} alt={a.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
                     <Icon size={36} style={{ color: '#d1d5db' }} />
                   )}

@@ -37,7 +37,12 @@ FROM (VALUES
   ('broadcast', 'New Course Launch Alert', 'sms', 'New Course: DevOps Engineering! Launch offer: 30% off. Visit electrobtech.com for details.', 'sent', 950, 890, 545, 42, 60),
   ('campaign', 'Women in Tech Scholarship', 'instagram', '💪 Women in Tech Scholarship Program! 50% scholarship for female candidates in all courses. Apply now!', 'sending', 0, 0, 0, 0, 0),
   ('campaign', 'Advanced React Workshop', 'email', '⚛️ Advanced React Workshop: Hooks, Context, Performance Optimization. Weekend batch. Prerequisites: Basic React knowledge.', 'draft', 0, 0, 0, 0, 0),
-  ('campaign', 'Cybersecurity Basics', 'whatsapp', '🔒 Cybersecurity Basics Course! Learn network security, ethical hacking, and data protection. 6-week program.', 'scheduled', 0, 0, 0, 0, 0)
+  ('campaign', 'Cybersecurity Basics', 'whatsapp', '🔒 Cybersecurity Basics Course! Learn network security, ethical hacking, and data protection. 6-week program.', 'scheduled', 0, 0, 0, 0, 0),
+  ('campaign', 'Spring Boot Workshop', 'email', '☕ Master Spring Boot! Build enterprise Java applications. 8-week intensive program with real projects.', 'draft', 0, 0, 0, 0, 0),
+  ('campaign', 'Flutter Mobile Development', 'whatsapp', '📱 Flutter Masterclass! Build cross-platform mobile apps. 10-week program with certification.', 'sending', 350, 330, 180, 22, 18),
+  ('broadcast', 'Weekend Batch Reminder', 'sms', '📅 Reminder: Weekend batch starts this Saturday! Confirm your slot by replying YES.', 'sent', 420, 400, 280, 35, 25),
+  ('campaign', 'Data Analytics with Python', 'email', '📊 Data Analytics with Python! Learn pandas, numpy, matplotlib. 6-week practical course.', 'sent', 560, 540, 320, 28, 32),
+  ('campaign', 'Kubernetes Orchestration', 'linkedin', '☸️ Kubernetes Deep Dive! Container orchestration mastery. 4-week advanced course.', 'draft', 0, 0, 0, 0, 0)
 ) AS v(kind, name, channel, message_body, status, sent_count, delivered_count, read_count, replied_count, failed_count)
 ON CONFLICT DO NOTHING;
 
@@ -66,11 +71,16 @@ FROM (VALUES
   ('Business Analysts', '{"tags": ["business", "analytics"], "experience_years": {"min": 1}}', 65),
   ('Startup Founders', '{"tags": ["startup", "founder"], "company_size": {"max": 10}}', 35),
   ('Government Employees', '{"tags": ["government", "public_sector"]}', 45),
-  ('Academic Institutions', '{"tags": ["academic", "university", "college"]}', 28)
+  ('Academic Institutions', '{"tags": ["academic", "university", "college"]}', 28),
+  ('Java Developers', '{"tags": ["java", "spring", "springboot"], "skill_level": ["intermediate"]}', 180),
+  ('Blockchain Enthusiasts', '{"tags": ["blockchain", "web3", "crypto"], "skill_level": ["beginner", "intermediate"]}', 55),
+  ('IoT Developers', '{"tags": ["iot", "embedded", "hardware"], "course_interest": ["embedded_systems"]}', 70),
+  ('Game Developers', '{"tags": ["gaming", "unity", "unreal"], "skill_level": ["intermediate"]}', 40),
+  ('UI/UX Designers', '{"tags": ["design", "ui", "ux"], "skill_level": ["beginner", "intermediate"]}', 125)
 ) AS v(name, filter, size_cached)
 ON CONFLICT DO NOTHING;
 
--- ---------- Marketing Hub Recipients (50 records) ----------
+-- ---------- Marketing Hub Recipients (80 records) ----------
 INSERT INTO mh_recipients (campaign_id, contact_id, destination, status, attempts, job_id, provider_message_id, error_message, last_attempted_at)
 SELECT 
   c.id,
@@ -82,19 +92,23 @@ SELECT
   v.provider_message_id,
   v.error_message,
   CASE WHEN v.attempts > 0 THEN now() - (v.last_attempted_mins || ' minutes')::interval ELSE NULL END
-FROM (SELECT id FROM mh_campaigns WHERE status IN ('sent', 'sending', 'completed') LIMIT 5) c
-CROSS JOIN (SELECT id, phone FROM contacts WHERE organization_id = '11111111-1111-1111-1111-111111111111' LIMIT 8) ct
+FROM (SELECT id FROM mh_campaigns WHERE status IN ('sent', 'sending', 'completed') LIMIT 8) c
+CROSS JOIN (SELECT id, phone FROM contacts WHERE organization_id = '11111111-1111-1111-1111-111111111111' LIMIT 10) ct
 CROSS JOIN (VALUES
   ('sent', 1, 'job_001', 'msg_123', NULL, 5),
   ('delivered', 1, 'job_002', 'msg_124', NULL, 8),
   ('read', 1, 'job_003', 'msg_125', NULL, 12),
   ('replied', 1, 'job_004', 'msg_126', NULL, 15),
   ('failed', 2, 'job_005', NULL, 'Invalid phone number', 3),
-  ('queued', 0, NULL, NULL, NULL, NULL)
+  ('queued', 0, NULL, NULL, NULL, NULL),
+  ('sent', 1, 'job_006', 'msg_127', NULL, 7),
+  ('delivered', 1, 'job_007', 'msg_128', NULL, 10),
+  ('read', 1, 'job_008', 'msg_129', NULL, 14),
+  ('replied', 1, 'job_009', 'msg_130', NULL, 18)
 ) AS v(status, attempts, job_id, provider_message_id, error_message, last_attempted_mins)
 ON CONFLICT DO NOTHING;
 
--- ---------- Marketing Hub Delivery Events (100 records) ----------
+-- ---------- Marketing Hub Delivery Events (150 records) ----------
 INSERT INTO mh_delivery_events (recipient_id, event_type, provider_data)
 SELECT 
   r.id,

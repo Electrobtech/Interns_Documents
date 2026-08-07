@@ -26,6 +26,7 @@ const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4
 const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4013';
 const CALENDAR    = process.env.CALENDAR_SERVICE_URL    || 'http://localhost:4014';
 const BILLING      = process.env.BILLING_SERVICE_URL     || 'http://localhost:4015';
+const MARKETING_HUB = process.env.MARKETING_HUB_SERVICE_URL || 'http://localhost:4016';
 
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
 
@@ -170,6 +171,12 @@ const routes = [
   // frontend/src/components/billing/*.jsx). BILLING was declared above but
   // never actually routed, so every Billing & Payments page call 404'd here.
   { path: '/billing',             target: BILLING },
+  // Marketing Hub channel-simulation backend (services/marketing-hub-service).
+  // The /socket.io sub-path MUST precede the bare /marketing-hub entry below
+  // — Express matches app.use() in registration order and the first match
+  // wins, same reasoning as the /auth/* block at the top of this table.
+  { path: '/marketing-hub/socket.io', target: MARKETING_HUB, ws: true },
+  { path: '/marketing-hub',           target: MARKETING_HUB },
 ];
 
 const wsProxies = [];

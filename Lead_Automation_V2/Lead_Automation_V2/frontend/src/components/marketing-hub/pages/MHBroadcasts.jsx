@@ -53,31 +53,15 @@ function CreateBroadcastModal({ onClose, toast, initialChannel }) {
     audience_id: form.audience_id || null, message_body: form.message_body || null,
   });
 
-  const saveDraft = async () => {
-    try {
-      setError('');
-      const result = await createBroadcast.mutateAsync(payload());
-      console.log('Broadcast saved successfully:', result);
-      toast.show('Broadcast saved as draft.', 'success');
-      onClose();
-    } catch (err) {
-      console.error('Failed to save broadcast:', err);
-      setError(err.message || 'Could not save broadcast.');
-    }
-  };
-
   const publish = async () => {
     if (!form.audience_id) { setError("Select an audience — a broadcast can't send without one."); return; }
     if (!form.message_body.trim()) { setError('Write a message before sending.'); return; }
     try {
-      setError('');
       const broadcast = await createBroadcast.mutateAsync(payload());
-      console.log('Broadcast created successfully:', broadcast);
       await publishBroadcast.mutateAsync(broadcast.id);
       toast.show('Broadcast sent — delivery is in progress.', 'success');
       onClose();
     } catch (err) {
-      console.error('Failed to send broadcast:', err);
       setError(err.message || 'Could not send broadcast.');
     }
   };
@@ -113,11 +97,11 @@ function CreateBroadcastModal({ onClose, toast, initialChannel }) {
           <Field label="Audience" required>
             <select className="mh-input" value={form.audience_id} onChange={(e) => { set('audience_id', e.target.value); setError(''); }}>
               <option value="">Select audience…</option>
-              {audiences && audiences.length > 0 ? audiences.map((a) => <option key={a.id} value={a.id}>{a.name}{a.size_cached != null ? ` (~${a.size_cached})` : ''}</option>) : null}
+              {audiences.map((a) => <option key={a.id} value={a.id}>{a.name}{a.size_cached != null ? ` (~${a.size_cached})` : ''}</option>)}
             </select>
-            {!audiences || audiences.length === 0 ? (
+            {audiences.length === 0 && (
               <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>No audiences yet — create one on the Audience page first.</p>
-            ) : null}
+            )}
           </Field>
         </div>
       )}
@@ -149,12 +133,9 @@ function CreateBroadcastModal({ onClose, toast, initialChannel }) {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTop: '1px solid #f3f4f6' }}>
         <div>{step > 0 && <button className="mh-btn mh-btn-ghost" disabled={busy} onClick={() => setStep((s) => s - 1)}>Back</button>}</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="mh-btn mh-btn-ghost" disabled={busy || !form.name.trim()} onClick={saveDraft}>{createBroadcast.isPending ? 'Saving…' : 'Save as Draft'}</button>
-          {step < STEPS.length - 1
-            ? <button className="mh-btn mh-btn-primary" disabled={!canNext()} style={{ opacity: canNext() ? 1 : 0.5 }} onClick={() => setStep((s) => s + 1)}>Next</button>
-            : <button className="mh-btn mh-btn-primary" disabled={busy} onClick={publish}>{busy ? 'Sending…' : 'Send Broadcast'}</button>}
-        </div>
+        {step < STEPS.length - 1
+          ? <button className="mh-btn mh-btn-primary" disabled={!canNext()} style={{ opacity: canNext() ? 1 : 0.5 }} onClick={() => setStep((s) => s + 1)}>Next</button>
+          : <button className="mh-btn mh-btn-primary" disabled={busy} onClick={publish}>{busy ? 'Sending…' : 'Send Broadcast'}</button>}
       </div>
     </MHModal>
   );
