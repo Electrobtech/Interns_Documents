@@ -26,11 +26,13 @@ services:
       #        to exist and be used by services for RLS to do anything)
       #   01 - base schema (tables, including organization_id columns)
       #   02 - seed data (loaded as the owner, before RLS is enabled below)
-      #   03 - enable + force RLS and create the tenant_isolation policies
+      #   03 - marketing hub seed data
+      #   04 - enable + force RLS and create the tenant_isolation policies
       - ./infra/db/00-app-role.sh:/docker-entrypoint-initdb.d/00-app-role.sh
       - ./infra/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./infra/db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
-      - ./infra/db/rls.sql:/docker-entrypoint-initdb.d/03-rls.sql
+      - ./infra/db/marketing_hub_seed.sql:/docker-entrypoint-initdb.d/03-marketing-hub-seed.sql
+      - ./infra/db/rls.sql:/docker-entrypoint-initdb.d/04-rls.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lead} -d ${POSTGRES_DB:-lead_automation}"]
       interval: 5s
@@ -106,6 +108,32 @@ services:
       redis:    { condition: service_healthy }
     ports: ["4004:4004"]
 
+  # Marketing Hub service - campaigns/broadcasts/audiences backend for
+  # frontend/src/components/marketing-hub/, with a channel-simulation layer
+  # (WhatsApp/Email/SMS/Messenger/Instagram/LinkedIn) behind a BullMQ queue.
+  # No new datastore — reuses the shared postgres/redis below.
+  marketing-hub-service:
+    build:
+      context: .
+      dockerfile: services/marketing-hub-service/Dockerfile
+      network: host
+    env_file: .env
+    environment:
+      MARKETING_HUB_PORT: 4016
+      DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      REDIS_URL: redis://redis:6379
+      CONTACT_SERVICE_URL: http://contact-service:4003
+      AI_OVERVIEW_SERVICE_URL: http://ai-overview-service:4020
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+      ai-overview-service: { condition: service_started }
+    ports: ["4016:4016"]
+
   # AI Agent Overview service - Python/FastAPI for Overview and orchestration
   ai-overview-service:
     build:
@@ -132,6 +160,7 @@ services:
       EMBEDDING_MODEL:       ${EMBEDDING_MODEL:-nomic-embed-text}
       CONTACT_SERVICE_URL:   http://contact-service:4003
       CAMPAIGN_SERVICE_URL:  http://campaign-service:4004
+      MARKETING_HUB_PORT:    4016
     depends_on:
       postgres: { condition: service_healthy }
       ollama:   { condition: service_started }
@@ -470,11 +499,13 @@ services:
       EMAIL_SERVICE_URL:       http://email-service:4013
       CALENDAR_SERVICE_URL:    http://calendar-service:4014
       BILLING_SERVICE_URL:     http://billing-service:4015
+      MARKETING_HUB_SERVICE_URL: http://marketing-hub-service:4016
     depends_on:
       - auth-service
       - inbox-service
       - contact-service
       - campaign-service
+      - marketing-hub-service
       - ai-overview-service
       - ai-marketing-service
       - ai-sales-service
