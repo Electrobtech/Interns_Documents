@@ -27,8 +27,10 @@ app.use(importRoutes);
 // call out to automation-service).
 app.use(followUpRoutes);
 
-// Google Sheets import preview (Support Agent "Import" tab) — public-CSV-
-// export only, display-only, no CRM writes. See sheetsRoutes.js.
+// Google Sheets import (Support Agent "Import" tab) — preview + write to
+// contacts/leads, same mapping/dedupe pipeline as the CSV/XLSX importer
+// above. Supports private sheets via a service account (falls back to the
+// public CSV export if unconfigured). See sheetsRoutes.js.
 app.use(sheetsRoutes);
 
 app.get('/contacts', async (req, res) => {

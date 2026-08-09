@@ -24,6 +24,13 @@ class ChannelType(str, Enum):
     LINKEDIN = "linkedin"
 
 
+class ChannelStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    ERROR = "error"
+    CONNECTING = "connecting"
+
+
 class CampaignStatus(str, Enum):
     DRAFT = "draft"
     SCHEDULED = "scheduled"
@@ -35,6 +42,18 @@ class CampaignStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+class CampaignType(str, Enum):
+    CAMPAIGN = "campaign"
+    BROADCAST = "broadcast"
+
+
+class CampaignObjective(str, Enum):
+    LEAD_GENERATION = "lead_generation"
+    BRAND_AWARENESS = "brand_awareness"
+    SALES = "sales"
+    TRAFFIC = "traffic"
+
+
 class BroadcastStatus(str, Enum):
     DRAFT = "draft"
     SCHEDULED = "scheduled"
@@ -42,6 +61,17 @@ class BroadcastStatus(str, Enum):
     SENT = "sent"
     PAUSED = "paused"
     FAILED = "failed"
+
+
+class BroadcastType(str, Enum):
+    ONE_OFF = "one_off"
+    RECURRING = "recurring"
+
+
+class ContentStatus(str, Enum):
+    DRAFT = "draft"
+    SCHEDULED = "scheduled"
+    PUBLISHED = "published"
 
 
 class AssetType(str, Enum):
@@ -179,7 +209,7 @@ class MarketingAsset(Base):
     asset_type: Mapped[AssetType] = mapped_column(SQLEnum(AssetType), nullable=False)
     file_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     tags: Mapped[List[str]] = mapped_column(ARRAY(String), default=[])
-    metadata: Mapped[dict] = mapped_column(JSONB, default={})
+    metadata_dict: Mapped[dict] = mapped_column("metadata", JSONB, default={})
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -238,7 +268,7 @@ class MarketingCalendarEvent(Base):
     campaign_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     assignees: Mapped[List[str]] = mapped_column(ARRAY(String), default=[])
     tags: Mapped[List[str]] = mapped_column(ARRAY(String), default=[])
-    metadata: Mapped[dict] = mapped_column(JSONB, default={})
+    metadata_dict: Mapped[dict] = mapped_column("metadata", JSONB, default={})
     created_by: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

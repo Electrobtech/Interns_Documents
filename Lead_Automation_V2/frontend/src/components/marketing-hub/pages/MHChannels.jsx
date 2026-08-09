@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Plus, Filter, Calendar, ChevronDown, Info, Settings as SettingsIcon,
   Ban, Send, Radio, Mail, MessageCircle, MessageSquare, Instagram, Linkedin,
@@ -7,8 +7,37 @@ import {
 import MHBadge from '../ui/MHBadge';
 import { useMHToast } from '../ui/MHToast';
 import { channels } from '../mockData';
-import { useChannelStats, useIntegrationsList } from '@/lib/queries/marketingHub';
+import {
+  useIntegrationsList,
+  useMarketingCampaigns,
+  useMarketingBroadcasts,
+} from '@/lib/queries/marketingHub';
 import { setPrefillChannel } from '../prefill';
+
+// `channels` (id/name/description/color/platformKey) is static config, not
+// mock data — it's fine to keep importing that from mockData.js. The
+// per-channel campaign/broadcast COUNTS below used to come from a mock
+// dataset (and, briefly, from a `/marketing-hub/channels/stats` endpoint
+// that was never actually implemented in marketing-hub-service). Both are
+// gone now — counts are derived client-side from the real, already-working
+// GET /marketing-hub/campaigns and GET /marketing-hub/broadcasts endpoints.
+function useChannelCounts() {
+  const { data: campaigns = [] } = useMarketingCampaigns();
+  const { data: broadcasts = [] } = useMarketingBroadcasts();
+
+  return useMemo(() => {
+    return channels.reduce((acc, ch) => {
+      const campaignCount = campaigns.filter(
+        (c) => (c.platform || '').toLowerCase() === (ch.platformKey || '').toLowerCase()
+      ).length;
+      const broadcastCount = broadcasts.filter(
+        (b) => (b.channel || '').toLowerCase() === ch.id.toLowerCase()
+      ).length;
+      acc[ch.id] = { campaigns: campaignCount, broadcasts: broadcastCount };
+      return acc;
+    }, {});
+  }, [campaigns, broadcasts]);
+}
 
 const CHANNEL_ICONS = {
   whatsapp: MessageCircle,
@@ -125,7 +154,7 @@ function ChannelCard({ ch, toast, stats, integrations, onNavigate }) {
 export default function MHChannels({ onNavigate }) {
   const toast = useMHToast();
   const [dateOpen, setDateOpen] = useState(false);
-  const { data: stats } = useChannelStats();
+  const stats = useChannelCounts();
   const { data: integrations = [] } = useIntegrationsList();
 
   return (

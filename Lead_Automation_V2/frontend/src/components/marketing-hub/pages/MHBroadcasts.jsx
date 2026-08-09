@@ -10,6 +10,8 @@ import {
   useCreateMarketingBroadcast,
   useSendMarketingBroadcast,
   useMarketingAudiences,
+  CHANNELS,
+  OBJECTIVES,
 } from '@/lib/queries/marketingHub';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -267,7 +269,6 @@ function BroadcastDrawer({ broadcast: b }) {
 
 export default function MHBroadcasts({ onNavigate }) {
   const toast = useMHToast();
-  const { data: broadcasts = [], isLoading, refetch } = useBroadcasts();
   const [showCreate, setShowCreate] = useState(false);
   const [initialChannel, setInitialChannel] = useState('');
   const [search, setSearch] = useState('');

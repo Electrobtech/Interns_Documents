@@ -267,6 +267,49 @@ export function useDeleteMarketingCampaign() {
 
 
 // ---------------------------------------------------------------------------
+// Channels — GET /marketing-hub/channels/stats
+// Real per-channel campaign/broadcast counts, replacing the client-side
+// .filter() over mock arrays MHChannels.jsx used before this backend existed.
+// ---------------------------------------------------------------------------
+
+// Mirrors mh_campaigns.channel's CHECK constraint exactly, so the UI can
+// never submit a value the DB would reject.
+export const CHANNELS = [
+  { value: 'whatsapp', label: 'WhatsApp Business', broadcastsSupported: true },
+  { value: 'email', label: 'Email', broadcastsSupported: true },
+  { value: 'sms', label: 'SMS', broadcastsSupported: true },
+  { value: 'messenger', label: 'Facebook Messenger', broadcastsSupported: true },
+  { value: 'instagram', label: 'Instagram', broadcastsSupported: 'limited' },
+  { value: 'linkedin', label: 'LinkedIn', broadcastsSupported: false },
+];
+
+// Mirrors mh_recipients.status's CHECK constraint, in funnel order.
+export const RECIPIENT_STATUSES = ['queued', 'sending', 'sent', 'delivered', 'read', 'replied', 'failed'];
+
+export const OBJECTIVES = [
+  'Lead Generation', 'Website Traffic', 'Sales', 'Engagement', 'Brand Awareness',
+  'Event Registration', 'Webinar', 'Course Registration', 'Remarketing', 'Conversion',
+];
+
+export function useChannelStats() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing-hub', 'channels', 'stats'],
+    queryFn: () => call('/marketing-hub/channels/stats'),
+  });
+}
+
+// Real per-channel connection status from mh_integrations — replaces any
+// hardcoded connected:true/false map.
+export function useIntegrationsList() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing-hub', 'settings', 'integrations'],
+    queryFn: () => call('/marketing-hub/settings/integrations/list'),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Broadcasts — GET/POST/PATCH/DELETE /marketing-hub/broadcasts
 // + POST /marketing-hub/broadcasts/:id/send
 // (marketing-hub-service; Postgres marketing_broadcasts table)
@@ -381,5 +424,20 @@ export function useDeleteMarketingCalendarEvent() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['marketing-hub', 'calendar'] });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Content Studio — POST /ai-agents/content/generate
+// (ai-agent-backend's app/api/v1/marketing_content.py, generate_ai_content)
+// ---------------------------------------------------------------------------
+
+export function useGenerateContent() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    // body: { content_type, channel, ai_prompt, context }
+    mutationFn: (body) => call('/ai-agents/content/generate', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing-hub', 'content'] }),
   });
 }

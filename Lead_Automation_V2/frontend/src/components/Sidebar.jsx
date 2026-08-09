@@ -202,9 +202,9 @@ function UnreadBadge({ count }) {
 // for channels that have a Playbook Studio flow builder.
 function ExpandableNavItem({ item, pathname, isActive, unread = 0, collapsed = false }) {
   const { label, icon: Icon, href, sub } = item;
-  const subItems = sub || [['Conversations', href]];
   const searchParams = useSearchParams();
   const agentParam = searchParams.get('agent');
+  const subItems = sub || [['Conversations', href]];
   const open = (pathname.startsWith(href) && !pathname.startsWith(href + '/automation'))
     || subItems.some(([, h]) => {
       const baseH = h.split('?')[0];

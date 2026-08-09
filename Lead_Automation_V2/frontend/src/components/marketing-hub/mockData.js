@@ -1,3 +1,37 @@
+// Static channel metadata (icon color/background, description, and whether
+// bulk broadcasts are supported) for the Channels grid. Real per-channel
+// campaign/broadcast counts and connection status come from the backend via
+// useChannelStats()/useIntegrationsList() — this array is display-only.
+export const channels = [
+  { id: 'whatsapp', name: 'WhatsApp Business', description: 'Reach contacts directly with template and session messages.', color: '#25D366', bg: '#e7faf0', broadcastsSupported: true },
+  { id: 'email', name: 'Email', description: 'Newsletters, drip sequences, and transactional campaigns.', color: '#6366f1', bg: '#eef2ff', broadcastsSupported: true },
+  { id: 'sms', name: 'SMS', description: 'Short, high-open-rate text messages for time-sensitive offers.', color: '#f59e0b', bg: '#fffbeb', broadcastsSupported: true },
+  { id: 'messenger', name: 'Facebook Messenger', description: 'Conversational campaigns through Messenger threads.', color: '#0084ff', bg: '#eaf5ff', broadcastsSupported: true },
+  { id: 'instagram', name: 'Instagram', description: 'DMs and story replies; broadcast sends are rate-limited by Meta.', color: '#e1306c', bg: '#fdf0f4', broadcastsSupported: 'limited' },
+  { id: 'linkedin', name: 'LinkedIn', description: 'Connection requests and InMail — one-to-one outreach only.', color: '#0a66c2', bg: '#eaf3fb', broadcastsSupported: false },
+];
+
+// Demo campaigns/broadcasts, keyed by platform/channel so MHChannels.jsx can
+// derive non-zero per-channel counts as a fallback when useChannelStats()
+// returns no real data yet (new orgs with no campaigns created).
+export const campaigns = [
+  { id: 'c1', name: 'Q3 Lead Gen Push', platform: 'whatsapp', status: 'running' },
+  { id: 'c2', name: 'Newsletter Relaunch', platform: 'email', status: 'running' },
+  { id: 'c3', name: 'Flash Sale SMS', platform: 'sms', status: 'scheduled' },
+  { id: 'c4', name: 'Messenger Reactivation', platform: 'messenger', status: 'draft' },
+  { id: 'c5', name: 'Instagram Story Ads', platform: 'instagram', status: 'running' },
+  { id: 'c6', name: 'LinkedIn ABM Outreach', platform: 'linkedin', status: 'running' },
+  { id: 'c7', name: 'Webinar Reminder Emails', platform: 'email', status: 'scheduled' },
+];
+
+export const broadcasts = [
+  { id: 'b1', name: 'Order Confirmation Blast', channel: 'whatsapp', status: 'sent' },
+  { id: 'b2', name: 'Weekly Digest', channel: 'email', status: 'sent' },
+  { id: 'b3', name: 'Flash Sale Alert', channel: 'sms', status: 'sent' },
+  { id: 'b4', name: 'Cart Abandonment Ping', channel: 'messenger', status: 'scheduled' },
+  { id: 'b5', name: 'New Feature Announcement', channel: 'instagram', status: 'sent' },
+];
+
 export const audiences = [
   { id:'1', name:'High-Intent Leads Q3', size:4820, source:'Custom', score:92, lastUpdated:'2025-07-30', status:'Active' },
   { id:'2', name:'Website Visitors 30d', size:18400, source:'Pixel', score:74, lastUpdated:'2025-07-31', status:'Active' },

@@ -16,6 +16,8 @@ import {
   useCreateMarketingCampaign,
   useUpdateMarketingCampaign,
   useDeleteMarketingCampaign,
+  CHANNELS,
+  OBJECTIVES,
 } from '@/lib/queries/marketingHub';
 
 /** Map API row (snake_case / numeric strings from Postgres) → UI shape. */

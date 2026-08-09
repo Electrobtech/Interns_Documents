@@ -105,35 +105,6 @@ services:
       redis:    { condition: service_healthy }
     ports: ["4004:4004"]
 
-  # Marketing Hub service - campaigns/broadcasts/audiences backend for
-  # frontend/src/components/marketing-hub/, with a channel-simulation layer
-  # (WhatsApp/Email/SMS/Messenger/Instagram/LinkedIn) behind a BullMQ queue.
-  # No new datastore — reuses the shared postgres/redis below.
-  marketing-hub-service:
-    build:
-      context: .
-      dockerfile: services/marketing-hub-service/Dockerfile
-      network: host
-    env_file: .env
-    environment:
-      MARKETING_HUB_PORT: 4016
-      DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
-      REDIS_URL: redis://redis:6379
-      CONTACT_SERVICE_URL: http://contact-service:4003
-      AI_OVERVIEW_SERVICE_URL: http://ai-overview-service:4020
-      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
-      GROQ_API_KEY: ${GROQ_API_KEY}
-      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
-      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
-      MAX_FILE_SIZE: 300MB
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis:    { condition: service_healthy }
-      ai-overview-service: { condition: service_started }
-    ports: ["4016:4016"]
-    volumes:
-      - marketing_uploads:/app/uploads
-
   # AI Agent Overview service - Python/FastAPI for Overview and orchestration
   ai-overview-service:
     build:
@@ -522,7 +493,6 @@ services:
       - ai-sales-service
       - ai-support-service
       - billing-service
-      - marketing-hub-service
       - ecommerce-service
       - review-service
       - analytics-service
