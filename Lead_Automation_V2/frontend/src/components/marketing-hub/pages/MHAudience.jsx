@@ -61,10 +61,8 @@ const SOURCE_OPTIONS = ['Custom', 'Pixel', 'Lookalike', 'Import', 'CRM'];
 
 export default function MHAudience() {
   const toast = useMHToast();
-  const { data: audiences = [], isLoading, refetch } = useAudiences();
   const [showCreate, setShowCreate] = useState(false);
   const [hovered, setHovered] = useState(null);
-  const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: '', source: 'Custom', size: '', score: '80' });
 
   const { data: audiences = [], isLoading, isError, error, refetch, isFetching } = useMarketingAudiences();
@@ -278,7 +276,6 @@ export default function MHAudience() {
             )}
           </div>
         </div>
-      )}
 
         <div>
           <div style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, boxShadow: 'var(--mh-shadow-sm)', overflow: 'hidden' }}>

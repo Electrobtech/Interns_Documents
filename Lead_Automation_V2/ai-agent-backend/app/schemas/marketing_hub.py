@@ -169,6 +169,12 @@ class AudienceSegmentOut(AudienceSegmentBase):
         from_attributes = True
 
 
+AudienceBase = AudienceSegmentBase
+AudienceCreate = AudienceSegmentCreate
+AudienceUpdate = AudienceSegmentUpdate
+AudienceOut = AudienceSegmentOut
+
+
 # ── Broadcast Schemas ────────────────────────────────────────────────────────
 
 

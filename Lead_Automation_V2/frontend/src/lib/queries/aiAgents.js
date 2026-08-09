@@ -476,17 +476,3 @@ export function fmt(value, { suffix = '', prefix = '', fallback = '—' } = {}) 
   if (value === null || value === undefined || Number.isNaN(value)) return fallback;
   return `${prefix}${typeof value === 'number' ? value.toLocaleString() : value}${suffix}`;
 }
-
-
-/**
- * GET /ai-agents/support/coverage-audit
- * RAG coverage gaps + per-source citation/staleness for the Knowledge tab.
- */
-export function useSupportCoverageAudit() {
-  const { call } = useApi();
-  return useQuery({
-    queryKey: ['ai-agents', 'support', 'coverage-audit'],
-    queryFn: () => call(`${AI}/support/coverage-audit`),
-    retry: 1,
-  });
-}

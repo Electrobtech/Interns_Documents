@@ -177,16 +177,6 @@ export default function MHAssetsLibrary() {
     }
   };
 
-  const handleDelete = async (assetId, assetName) => {
-    try {
-      await deleteAsset.mutateAsync(assetId);
-      toast.show(`Deleted ${assetName}`, 'success');
-    } catch (error) {
-      console.error('Delete failed:', error);
-      toast.show('Failed to delete asset', 'error');
-    }
-  };
-
   return (
     <div style={{ padding: '24px 28px', background: 'var(--mh-bg)', minHeight: '100vh' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>

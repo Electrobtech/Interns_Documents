@@ -9,7 +9,7 @@ from sqlalchemy import select, func, and_, or_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.marketing_hub import (
-    MarketingCampaign, MarketingBroadcast, MarketingChannel, 
+    MarketingCampaign, MarketingChannel, 
     MarketingAudience, ChannelType, CampaignStatus, BroadcastStatus
 )
 
@@ -298,18 +298,19 @@ class MarketingAnalyticsService:
     ) -> Dict[str, Any]:
         """Get broadcast performance analytics"""
         
-        query = select(MarketingBroadcast).where(
-            MarketingBroadcast.organization_id == organization_id
+        query = select(MarketingCampaign).where(
+            MarketingCampaign.organization_id == organization_id,
+            MarketingCampaign.kind == "broadcast"
         )
         
         if broadcast_id:
-            query = query.where(MarketingBroadcast.id == broadcast_id)
+            query = query.where(MarketingCampaign.id == broadcast_id)
         
         if start_date:
-            query = query.where(MarketingBroadcast.created_at >= datetime.combine(start_date, datetime.min.time()))
+            query = query.where(MarketingCampaign.created_at >= datetime.combine(start_date, datetime.min.time()))
         
         if end_date:
-            query = query.where(MarketingBroadcast.created_at <= datetime.combine(end_date, datetime.max.time()))
+            query = query.where(MarketingCampaign.created_at <= datetime.combine(end_date, datetime.max.time()))
         
         result = await self.session.execute(query)
         broadcasts = result.scalars().all()

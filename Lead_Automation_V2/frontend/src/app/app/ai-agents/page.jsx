@@ -1,13 +1,13 @@
 'use client';
 export const dynamic = 'force-dynamic';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AIDashboard from './components/AIDashboard';
 import MarketingHub from './components/marketing/MarketingHub';
 import SalesWorkspace from './components/SalesWorkspace';
 import SupportWorkspace from '@/components/ai-agents/SupportWorkspace';
 
-export default function AIAgentsPage() {
+function AIAgentsPageContent() {
   const searchParams = useSearchParams();
   const [view, setView] = useState('dashboard');
 
@@ -37,5 +37,13 @@ export default function AIAgentsPage() {
         {view === 'support' && <SupportWorkspace />}
       </div>
     </div>
+  );
+}
+
+export default function AIAgentsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AIAgentsPageContent />
+    </Suspense>
   );
 }

@@ -21,6 +21,7 @@ const { pool, requirePermission, logAudit } = require('@lead/shared');
 const {
   inspectWorkbook, buildRecords, markInFileDuplicates, cellToText,
 } = require('./importer');
+const { writeContacts, countExisting: countExistingShared } = require('./contactWriter');
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_ROWS_PER_IMPORT = 20000;
@@ -151,24 +152,7 @@ router.post('/contacts/import/preview', canWrite, handleUpload, async (req, res)
 
 /** Counts how many candidate records already exist, matched on phone or email. */
 async function countExisting(organizationId, records) {
-  const phones = records.map((r) => r.phone).filter(Boolean);
-  const emails = records.map((r) => r.email).filter(Boolean);
-  if (!phones.length && !emails.length) return { matched: 0, phones: new Set(), emails: new Set() };
-
-  const { rows } = await pool.query(
-    `SELECT phone, lower(email) AS email FROM contacts
-      WHERE organization_id = $1
-        AND (phone = ANY($2::text[]) OR lower(email) = ANY($3::text[]))`,
-    [organizationId, phones, emails.map((e) => e.toLowerCase())]
-  );
-  const existingPhones = new Set(rows.map((r) => r.phone).filter(Boolean));
-  const existingEmails = new Set(rows.map((r) => r.email).filter(Boolean));
-
-  let matched = 0;
-  for (const r of records) {
-    if ((r.phone && existingPhones.has(r.phone)) || (r.email && existingEmails.has(r.email.toLowerCase()))) matched++;
-  }
-  return { matched, phones: existingPhones, emails: existingEmails };
+  return countExistingShared(pool, organizationId, records);
 }
 
 /**
@@ -209,67 +193,9 @@ router.post('/contacts/import', canWrite, handleUpload, async (req, res) => {
     });
     const { unique, duplicates } = markInFileDuplicates(records);
 
-    const result = { inserted: 0, updated: 0, skipped: stats.skipped + duplicates.length, failed: 0 };
-    const failures = [];
-
     await client.query('BEGIN');
-    for (const rec of unique) {
-      try {
-        // Match an existing contact on either reachable identity.
-        // Phone/email are the real identities. For rows that carry neither,
-        // fall back to name+source so re-running the same import does not
-        // duplicate them on every pass.
-        const { rows: found } = rec.phone || rec.email
-          ? await client.query(
-            `SELECT id FROM contacts
-              WHERE organization_id = $1
-                AND ( ($2::text IS NOT NULL AND phone = $2)
-                   OR ($3::text IS NOT NULL AND lower(email) = lower($3)) )
-              LIMIT 1`,
-            [req.user.organizationId, rec.phone, rec.email]
-          )
-          : await client.query(
-            `SELECT id FROM contacts
-              WHERE organization_id = $1 AND name IS NOT DISTINCT FROM $2
-                AND source IS NOT DISTINCT FROM $3
-              LIMIT 1`,
-            [req.user.organizationId, rec.name, rec.source]
-          );
-
-        if (found.length) {
-          if (onDuplicate === 'update') {
-            // COALESCE so an empty cell in the sheet never blanks existing data.
-            await client.query(
-              `UPDATE contacts SET
-                 name   = COALESCE($2, name),
-                 email  = COALESCE($3, email),
-                 phone  = COALESCE($4, phone),
-                 source = COALESCE($5, source),
-                 notes  = COALESCE($6, notes),
-                 tags   = (SELECT ARRAY(SELECT DISTINCT unnest(tags || $7::text[])))
-               WHERE id = $1`,
-              [found[0].id, rec.name, rec.email, rec.phone, rec.source, rec.notes, rec.tags]
-            );
-            result.updated++;
-          } else {
-            result.skipped++;
-          }
-          continue;
-        }
-
-        await client.query(
-          `INSERT INTO contacts (organization_id, name, email, phone, source, notes, tags)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [req.user.organizationId, rec.name, rec.email, rec.phone, rec.source, rec.notes, rec.tags]
-        );
-        result.inserted++;
-      } catch (rowErr) {
-        // One malformed row must not lose the rest of the import.
-        result.failed++;
-        failures.push({ rowNumber: rec.rowNumber, level: 'error', message: rowErr.message });
-        console.error('[contact-import] row failed', { row: rec.rowNumber, err: rowErr.message });
-      }
-    }
+    const { result, failures } = await writeContacts(client, req.user.organizationId, unique, onDuplicate);
+    result.skipped += stats.skipped + duplicates.length;
     await client.query('COMMIT');
 
     logAudit(req, 'contact.import', {

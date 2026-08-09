@@ -112,7 +112,7 @@ const routes = [
   { path: '/contacts',            target: CONTACT },
   { path: '/leads',               target: CONTACT },
   { path: '/follow-ups',          target: CONTACT }, // Follow-ups feature: services/contact-service/src/followUpRoutes.js
-  { path: '/sheets',              target: CONTACT }, // Google Sheets import preview: services/contact-service/src/sheetsRoutes.js
+  { path: '/sheets',              target: CONTACT }, // Google Sheets -> CRM import: services/contact-service/src/sheetsRoutes.js
   { path: '/campaigns',           target: CAMPAIGN },
   // Message Templates (Template Creation module) — owned by campaign-service
   // (src/templates.js + src/templateMedia.js), not yet in this route table.
@@ -134,8 +134,6 @@ const routes = [
   // path MUST precede the generic /uploads -> CAMPAIGN entry or it is swallowed.
   { path: '/uploads/marketing-assets', target: MARKETING_HUB },
   { path: '/uploads', target: CAMPAIGN },
-  // Marketing Hub Assets Library (list/upload/delete) — marketing-hub-service
-  { path: '/marketing-hub', target: MARKETING_HUB },
   { path: '/ai-agents/status', target: AI_OVERVIEW },
   { path: '/ai-agents/analytics', target: AI_OVERVIEW },
   { path: '/ai-agents/health', target: AI_OVERVIEW },
@@ -177,21 +175,28 @@ const routes = [
   // frontend/src/components/billing/*.jsx). BILLING was declared above but
   // never actually routed, so every Billing & Payments page call 404'd here.
   { path: '/billing',             target: BILLING },
-  // Marketing Hub channel-simulation backend (services/marketing-hub-service).
+  // Marketing Hub backend (services/marketing-hub-service) — Assets Library,
+  // Audiences, Campaigns, Broadcasts, Calendar, and the realtime socket all
+  // live behind this one bare prefix.
   // The /socket.io sub-path MUST precede the bare /marketing-hub entry below
   // — Express matches app.use() in registration order and the first match
   // wins, same reasoning as the /auth/* block at the top of this table.
+  // NOTE: this must be the ONLY place '/marketing-hub' is registered — an
+  // earlier duplicate bare entry used to sit up near the /uploads routes,
+  // which silently swallowed /marketing-hub/socket.io before it ever reached
+  // this ws:true entry, breaking realtime updates. Don't reintroduce it.
   { path: '/marketing-hub/socket.io', target: MARKETING_HUB, ws: true },
   { path: '/marketing-hub',           target: MARKETING_HUB },
 ];
 
 const wsProxies = [];
 for (const r of routes) {
+  const isMarketingHub = r.path.startsWith('/marketing-hub');
   const proxy = createProxyMiddleware(r.path, {
     target: r.target,
     changeOrigin: true,
     ws: r.ws || false,
-    // keep the original path (e.g. /auth/login -> AUTH/auth/login)
+    pathRewrite: isMarketingHub ? { '^/marketing-hub': '' } : undefined,
   });
   app.use(r.path, proxy);
   if (r.ws) wsProxies.push(proxy);
