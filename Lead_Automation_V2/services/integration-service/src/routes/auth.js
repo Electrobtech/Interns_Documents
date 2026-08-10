@@ -366,4 +366,20 @@ router.post('/unlock', authenticate, requireRole('admin'), async (req, res) => {
   }
 });
 
+/**
+ * POST /auth/verify-publish-password  (protected, any logged-in user + password)
+ * Gate for the Integrations & APIs page once Instagram, Facebook or
+ * WhatsApp is connected — reachable by anyone in the org, but the page
+ * itself must not render the connection cards/composers until the correct
+ * password is supplied here. Reuses the same password as /auth/unlock
+ * (see verifyUnlockPassword) — this only checks the password, it does not
+ * unlock or change anything.
+ */
+router.post('/verify-publish-password', authenticate, (req, res) => {
+  if (!verifyUnlockPassword(req.body?.password)) {
+    return res.status(401).json({ error: 'Incorrect password.' });
+  }
+  res.json({ ok: true });
+});
+
 module.exports = router;
