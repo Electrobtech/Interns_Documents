@@ -1,0 +1,181 @@
+# Orbq — AI layer. Four services + their datastores.
+#
+# Ports 4020-4023 sit above the existing Node platform's 4001-4013, and the
+# datastores use non-default host ports, so this stack can run alongside the
+# main docker-compose.yml without collisions.
+services:
+
+  # ─────────────────────────────────────────────────────────────
+  # Datastores
+  # ─────────────────────────────────────────────────────────────
+
+  orbq-postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${ORBQ_DB_USER:-orbq}
+      POSTGRES_PASSWORD: ${ORBQ_DB_PASSWORD:-orbqpass}
+      # One cluster, four databases, no cross-schema grants (ADR-007).
+      POSTGRES_MULTIPLE_DATABASES: orbq_agents,orbq_marketing,orbq_sales,orbq_support
+    ports: ["5436:5432"]
+    volumes:
+      - orbq_pgdata:/var/lib/postgresql/data
+      - ./infra/init-databases.sh:/docker-entrypoint-initdb.d/00-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ORBQ_DB_USER:-orbq}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  orbq-redis:
+    image: redis:7-alpine
+    ports: ["6381:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  orbq-rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-orbq}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-orbqpass}
+    ports: ["5673:5672", "15673:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  orbq-mongo:
+    image: mongo:7
+    # ADR-004 tripwire: if the four justified uses have not materialized by
+    # Phase 12, delete this service rather than letting it spread by default.
+    ports: ["27018:27017"]
+    volumes:
+      - orbq_mongodata:/data/db
+
+  # ─────────────────────────────────────────────────────────────
+  # Platform core — orchestrator, RAG, memory, workflow, governance, analytics
+  # ─────────────────────────────────────────────────────────────
+
+  orbq-ai-agents:
+    build:
+      context: .
+      dockerfile: services/ai-agents/Dockerfile
+    env_file: .env
+    environment:
+      SERVICE_NAME: orbq-ai-agents
+      DATABASE_URL: postgresql+asyncpg://${ORBQ_DB_USER:-orbq}:${ORBQ_DB_PASSWORD:-orbqpass}@orbq-postgres:5432/orbq_agents
+      REDIS_URL: redis://orbq-redis:6379/0
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-orbq}:${RABBITMQ_PASSWORD:-orbqpass}@orbq-rabbitmq:5672//
+      MONGO_URL: mongodb://orbq-mongo:27017/orbq
+      # Must match the Node auth-service's secret — Orbq verifies, never issues.
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
+      INTERNAL_SIGNING_KEY: ${INTERNAL_SIGNING_KEY:-dev-internal-key}
+      MARKETING_SERVICE_URL: http://orbq-marketing:4021
+      SALES_SERVICE_URL: http://orbq-sales:4022
+      SUPPORT_SERVICE_URL: http://orbq-support:4023
+      # Anti-corruption layer targets on the existing Node platform.
+      CONTACT_SERVICE_URL: ${CONTACT_SERVICE_URL:-http://contact-service:4003}
+      CAMPAIGN_SERVICE_URL: ${CAMPAIGN_SERVICE_URL:-http://campaign-service:4004}
+      AUTOMATION_SERVICE_URL: ${AUTOMATION_SERVICE_URL:-http://automation-service:4011}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:4012}
+      MEDIA_ROOT: /app/uploads
+    depends_on:
+      orbq-postgres: { condition: service_healthy }
+      orbq-redis: { condition: service_healthy }
+      orbq-rabbitmq: { condition: service_healthy }
+    ports: ["4020:4020"]
+    volumes:
+      # Assets Library bytes. Local disk, single replica — see assets.py.
+      - orbq_media:/app/uploads
+    # Joined to the Node platform's network so api-gateway can resolve
+    # `orbq-ai-agents`. Declared here rather than via `docker network connect`,
+    # which does not survive a container recreate.
+    networks:
+      default:
+      orbq-shared:
+        aliases: [orbq-ai-agents]
+
+  # Ingestion runs on its own worker deployment, not its own service.
+  # A 500-page PDF ingest consumes these pods and cannot touch API latency —
+  # which is the isolation benefit a separate knowledge service would have
+  # bought, at none of the cost (§4.3).
+  orbq-ai-agents-worker:
+    build:
+      context: .
+      dockerfile: services/ai-agents/Dockerfile
+    command: celery -A app.workers.celery_app worker -Q ingestion,agent,workflow,events -c 4 --loglevel=info
+    env_file: .env
+    environment:
+      SERVICE_NAME: orbq-ai-agents-worker
+      DATABASE_URL: postgresql+asyncpg://${ORBQ_DB_USER:-orbq}:${ORBQ_DB_PASSWORD:-orbqpass}@orbq-postgres:5432/orbq_agents
+      REDIS_URL: redis://orbq-redis:6379/0
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-orbq}:${RABBITMQ_PASSWORD:-orbqpass}@orbq-rabbitmq:5672//
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
+      INTERNAL_SIGNING_KEY: ${INTERNAL_SIGNING_KEY:-dev-internal-key}
+    depends_on:
+      orbq-postgres: { condition: service_healthy }
+      orbq-rabbitmq: { condition: service_healthy }
+
+  # ─────────────────────────────────────────────────────────────
+  # Agent tier — network-restricted, never gateway-routed (§9.3)
+  # ─────────────────────────────────────────────────────────────
+
+  orbq-marketing:
+    build:
+      context: .
+      dockerfile: services/marketing/Dockerfile
+    env_file: .env
+    environment:
+      SERVICE_NAME: orbq-marketing
+      DATABASE_URL: postgresql+asyncpg://${ORBQ_DB_USER:-orbq}:${ORBQ_DB_PASSWORD:-orbqpass}@orbq-postgres:5432/orbq_marketing
+      REDIS_URL: redis://orbq-redis:6379/1
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
+      INTERNAL_SIGNING_KEY: ${INTERNAL_SIGNING_KEY:-dev-internal-key}
+      AI_AGENTS_SERVICE_URL: http://orbq-ai-agents:4020
+    depends_on:
+      orbq-postgres: { condition: service_healthy }
+    expose: ["4021"]
+
+  orbq-sales:
+    build:
+      context: .
+      dockerfile: services/sales/Dockerfile
+    env_file: .env
+    environment:
+      SERVICE_NAME: orbq-sales
+      DATABASE_URL: postgresql+asyncpg://${ORBQ_DB_USER:-orbq}:${ORBQ_DB_PASSWORD:-orbqpass}@orbq-postgres:5432/orbq_sales
+      REDIS_URL: redis://orbq-redis:6379/2
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
+      INTERNAL_SIGNING_KEY: ${INTERNAL_SIGNING_KEY:-dev-internal-key}
+      AI_AGENTS_SERVICE_URL: http://orbq-ai-agents:4020
+    depends_on:
+      orbq-postgres: { condition: service_healthy }
+    expose: ["4022"]
+
+  orbq-support:
+    build:
+      context: .
+      dockerfile: services/support/Dockerfile
+    env_file: .env
+    environment:
+      SERVICE_NAME: orbq-support
+      DATABASE_URL: postgresql+asyncpg://${ORBQ_DB_USER:-orbq}:${ORBQ_DB_PASSWORD:-orbqpass}@orbq-postgres:5432/orbq_support
+      REDIS_URL: redis://orbq-redis:6379/3
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
+      INTERNAL_SIGNING_KEY: ${INTERNAL_SIGNING_KEY:-dev-internal-key}
+      AI_AGENTS_SERVICE_URL: http://orbq-ai-agents:4020
+    depends_on:
+      orbq-postgres: { condition: service_healthy }
+    expose: ["4023"]
+
+networks:
+  orbq-shared:
+    external: true
+
+volumes:
+  orbq_pgdata:
+  orbq_mongodata:
+  orbq_media:

@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
       "port": 3000
+    },
+    {
+      "name": "marketing-frontend",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "C:\\Users\\DAKSHI\\Downloads\\marketing_agent_extracted", "run", "dev"],
+      "port": 8443
     }
   ]
 }

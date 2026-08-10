@@ -26,11 +26,13 @@ services:
       #        to exist and be used by services for RLS to do anything)
       #   01 - base schema (tables, including organization_id columns)
       #   02 - seed data (loaded as the owner, before RLS is enabled below)
-      #   03 - enable + force RLS and create the tenant_isolation policies
+      #   03 - marketing hub seed data
+      #   04 - enable + force RLS and create the tenant_isolation policies
       - ./infra/db/00-app-role.sh:/docker-entrypoint-initdb.d/00-app-role.sh
       - ./infra/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./infra/db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
-      - ./infra/db/rls.sql:/docker-entrypoint-initdb.d/03-rls.sql
+      - ./infra/db/marketing_hub_seed.sql:/docker-entrypoint-initdb.d/03-marketing-hub-seed.sql
+      - ./infra/db/rls.sql:/docker-entrypoint-initdb.d/04-rls.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lead} -d ${POSTGRES_DB:-lead_automation}"]
       interval: 5s
@@ -106,13 +108,13 @@ services:
       redis:    { condition: service_healthy }
     ports: ["4004:4004"]
 
-  # AI Agent service - Python/FastAPI for Marketing + Sales + Support agents
-  ai-agent-service:
+  # AI Agent Overview service - Python/FastAPI for Overview and orchestration
+  ai-overview-service:
     build:
       context: .
       dockerfile: ai-agent-backend/Dockerfile
       network: host
-    container_name: ai-agent-service
+    container_name: ai-overview-service
     env_file: .env
     environment:
       # RLS is now wired up (docs/MULTI_TENANT_RLS.md §3.1, closed): the
@@ -134,10 +136,101 @@ services:
       EMBEDDING_MODEL:       ${EMBEDDING_MODEL:-nomic-embed-text}
       CONTACT_SERVICE_URL:   http://contact-service:4003
       CAMPAIGN_SERVICE_URL:  http://campaign-service:4004
+      MARKETING_HUB_PORT:    4016
     depends_on:
       postgres: { condition: service_healthy }
       ollama:   { condition: service_started }
-    ports: ["4005:4005"]
+    ports: ["4020:4020"]
+    volumes:
+      - ./ai-agent-backend/entrypoint-overview.sh:/app/entrypoint-overview.sh
+    entrypoint: ["./entrypoint-overview.sh"]
+
+  # AI Agent Marketing service - Python/FastAPI for Marketing agent
+  ai-marketing-service:
+    build:
+      context: .
+      dockerfile: ai-agent-backend/Dockerfile
+      network: host
+    container_name: ai-marketing-service
+    env_file: .env
+    environment:
+      DATABASE_URL:          postgresql+asyncpg://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      JWT_SECRET:            ${JWT_SECRET:-change-me-in-prod}
+      LLM_PROVIDER:          ${LLM_PROVIDER:-groq}
+      LLM_FALLBACK_PROVIDER: ${LLM_FALLBACK_PROVIDER:-ollama}
+      GROQ_API_KEY:          ${GROQ_API_KEY}
+      GROQ_BASE_URL:         ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL:            ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      OLLAMA_HOST:           http://ollama:11434
+      OLLAMA_MODEL:          ${OLLAMA_MODEL:-qwen3:8b}
+      EMBEDDING_MODEL:       ${EMBEDDING_MODEL:-nomic-embed-text}
+      CONTACT_SERVICE_URL:   http://contact-service:4003
+      CAMPAIGN_SERVICE_URL:  http://campaign-service:4004
+    depends_on:
+      postgres: { condition: service_healthy }
+      ollama:   { condition: service_started }
+    ports: ["4021:4021"]
+    volumes:
+      - ./ai-agent-backend/entrypoint-marketing.sh:/app/entrypoint-marketing.sh
+    entrypoint: ["./entrypoint-marketing.sh"]
+
+  # AI Agent Sales service - Python/FastAPI for Sales agent
+  ai-sales-service:
+    build:
+      context: .
+      dockerfile: ai-agent-backend/Dockerfile
+      network: host
+    container_name: ai-sales-service
+    env_file: .env
+    environment:
+      DATABASE_URL:          postgresql+asyncpg://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      JWT_SECRET:            ${JWT_SECRET:-change-me-in-prod}
+      LLM_PROVIDER:          ${LLM_PROVIDER:-groq}
+      LLM_FALLBACK_PROVIDER: ${LLM_FALLBACK_PROVIDER:-ollama}
+      GROQ_API_KEY:          ${GROQ_API_KEY}
+      GROQ_BASE_URL:         ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL:            ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      OLLAMA_HOST:           http://ollama:11434
+      OLLAMA_MODEL:          ${OLLAMA_MODEL:-qwen3:8b}
+      EMBEDDING_MODEL:       ${EMBEDDING_MODEL:-nomic-embed-text}
+      CONTACT_SERVICE_URL:   http://contact-service:4003
+      CAMPAIGN_SERVICE_URL:  http://campaign-service:4004
+    depends_on:
+      postgres: { condition: service_healthy }
+      ollama:   { condition: service_started }
+    ports: ["4022:4022"]
+    volumes:
+      - ./ai-agent-backend/entrypoint-sales.sh:/app/entrypoint-sales.sh
+    entrypoint: ["./entrypoint-sales.sh"]
+
+  # AI Agent Support service - Python/FastAPI for Support agent
+  ai-support-service:
+    build:
+      context: .
+      dockerfile: ai-agent-backend/Dockerfile
+      network: host
+    container_name: ai-support-service
+    env_file: .env
+    environment:
+      DATABASE_URL:          postgresql+asyncpg://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      JWT_SECRET:            ${JWT_SECRET:-change-me-in-prod}
+      LLM_PROVIDER:          ${LLM_PROVIDER:-groq}
+      LLM_FALLBACK_PROVIDER: ${LLM_FALLBACK_PROVIDER:-ollama}
+      GROQ_API_KEY:          ${GROQ_API_KEY}
+      GROQ_BASE_URL:         ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GROQ_MODEL:            ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      OLLAMA_HOST:           http://ollama:11434
+      OLLAMA_MODEL:          ${OLLAMA_MODEL:-qwen3:8b}
+      EMBEDDING_MODEL:       ${EMBEDDING_MODEL:-nomic-embed-text}
+      CONTACT_SERVICE_URL:   http://contact-service:4003
+      CAMPAIGN_SERVICE_URL:  http://campaign-service:4004
+    depends_on:
+      postgres: { condition: service_healthy }
+      ollama:   { condition: service_started }
+    ports: ["4023:4023"]
+    volumes:
+      - ./ai-agent-backend/entrypoint-support.sh:/app/entrypoint-support.sh
+    entrypoint: ["./entrypoint-support.sh"]
 
   # Billing service - Razorpay payment gateway: wallet recharge
   # (campaigns/broadcasts), product-platform checkout, and walk-in POS
@@ -158,6 +251,7 @@ services:
       postgres: { condition: service_healthy }
     ports: ["4015:4015"]
 
+
   # Finances & Accounting — tenant's own course-revenue/expense ledger +
   # GST invoicing. Separate service from billing-service (platform-bills-
   # tenant), same DB.
@@ -173,6 +267,26 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4016:4016"]
+  # Marketing Hub service - Assets Library (upload/list/delete) and future
+  # Marketing Hub backend routes. Files land under public/uploads/marketing-assets;
+  # GATEWAY_PUBLIC_URL is used so returned storage_url resolves via the gateway.
+  marketing-hub-service:
+    build:
+      context: .
+      dockerfile: services/marketing-hub-service/Dockerfile
+      network: host
+    env_file: .env
+    environment:
+      MARKETING_HUB_PORT: "4017"
+      DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      GATEWAY_PUBLIC_URL: ${GATEWAY_PUBLIC_URL:-http://localhost:8080}
+      GATEWAY_PORT: ${GATEWAY_PORT:-8080}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4017:4017"]
+    volumes:
+      - marketing_hub_uploads:/app/services/marketing-hub-service/public/uploads
+
 
   # E-commerce service - integrates with e-commerce platforms
   ecommerce-service:
@@ -301,8 +415,12 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      # Container-to-container call the follow-up-due poller makes to pull
+      # today's/overdue follow-ups — see src/followUpPoller.js.
+      CONTACT_SERVICE_URL: http://contact-service:4003
     depends_on:
       postgres: { condition: service_healthy }
+      contact-service: { condition: service_started }
     ports: ["4012:4012"]
 
   # Email service - Gmail integration (OAuth, sync, send/reply, attachments)
@@ -395,13 +513,21 @@ services:
       EMAIL_SERVICE_URL:       http://email-service:4013
       CALENDAR_SERVICE_URL:    http://calendar-service:4014
       BILLING_SERVICE_URL:     http://billing-service:4015
+
       FINANCE_SERVICE_URL:     http://finance-service:4016
+
+      MARKETING_HUB_SERVICE_URL: http://marketing-hub-service:4017
+
     depends_on:
       - auth-service
       - inbox-service
       - contact-service
       - campaign-service
-      - ai-agent-service
+      - marketing-hub-service
+      - ai-overview-service
+      - ai-marketing-service
+      - ai-sales-service
+      - ai-support-service
       - billing-service
       - finance-service
       - ecommerce-service
@@ -448,4 +574,5 @@ volumes:
   automation_uploads:
   auth_uploads:
   email_uploads:
+  marketing_hub_uploads:
   ollama:

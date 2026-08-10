@@ -73,7 +73,15 @@ BEGIN
     'organization_channel_subscriptions', 'whatsapp_billing_ledger',
     'meta_usage_charges', 'sms_usage_charges',
     'products',
-    'finance_transactions', 'course_invoices', 'finance_invoice_counters'
+    'finance_transactions', 'course_invoices', 'finance_invoice_counters' ,
+    'message_templates',
+    'marketing_assets',
+    'marketing_audiences',
+    'marketing_campaigns',
+    'marketing_broadcasts',
+    'marketing_calendar_events',
+    'imported_sheets'
+
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
@@ -87,6 +95,26 @@ BEGIN
     );
   END LOOP;
 END $$;
+
+-- marketing_audience_snapshots hangs off marketing_audiences
+ALTER TABLE marketing_audience_snapshots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE marketing_audience_snapshots FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON marketing_audience_snapshots;
+CREATE POLICY tenant_isolation ON marketing_audience_snapshots
+  USING (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM marketing_audiences a
+       WHERE a.id = marketing_audience_snapshots.audience_id
+         AND a.organization_id = app_current_org()
+    )
+  )
+  WITH CHECK (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM marketing_audiences a
+       WHERE a.id = marketing_audience_snapshots.audience_id
+         AND a.organization_id = app_current_org()
+    )
+  );
 
 -- ---------- Indirectly-scoped tables (no organization_id column) ----------
 -- campaign_audiences / campaign_logs hang off campaigns, which is itself
@@ -129,6 +157,48 @@ CREATE POLICY tenant_isolation ON campaign_recipients
     app_rls_bypass() OR EXISTS (
       SELECT 1 FROM campaigns c
        WHERE c.id = campaign_recipients.campaign_id
+         AND c.organization_id = app_current_org()
+    )
+  );
+
+-- mh_recipients / mh_delivery_events (030_marketing_hub.sql) hang off
+-- mh_campaigns the same way campaign_recipients hangs off campaigns above —
+-- EXISTS check against the parent row rather than a duplicated
+-- organization_id column.
+ALTER TABLE mh_recipients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mh_recipients FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON mh_recipients;
+CREATE POLICY tenant_isolation ON mh_recipients
+  USING (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM mh_campaigns c
+       WHERE c.id = mh_recipients.campaign_id
+         AND c.organization_id = app_current_org()
+    )
+  )
+  WITH CHECK (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM mh_campaigns c
+       WHERE c.id = mh_recipients.campaign_id
+         AND c.organization_id = app_current_org()
+    )
+  );
+
+ALTER TABLE mh_delivery_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mh_delivery_events FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON mh_delivery_events;
+CREATE POLICY tenant_isolation ON mh_delivery_events
+  USING (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM mh_campaigns c
+       WHERE c.id = mh_delivery_events.campaign_id
+         AND c.organization_id = app_current_org()
+    )
+  )
+  WITH CHECK (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM mh_campaigns c
+       WHERE c.id = mh_delivery_events.campaign_id
          AND c.organization_id = app_current_org()
     )
   );

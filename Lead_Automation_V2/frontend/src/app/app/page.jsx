@@ -11,8 +11,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, Tooltip } from 'recharts';
 import { useApi } from '@/lib/useApi';
 import { useAgentStatus, useMarketingRuns, useSalesRuns, useSupportRuns } from '@/lib/queries/aiAgents';
 import { useSetHandledBy } from '@/lib/queries/crm';
-import Switch from '@/components/ui/Switch';
-
+import Switch from '@/components/ui/Switch.jsx';
 const inr = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
 // Renders "1.2s", "3.4m" etc. from a raw seconds value (or an em dash while

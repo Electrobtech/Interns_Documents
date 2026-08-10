@@ -3,6 +3,8 @@ const cors = require('cors');
 const { pool, authenticate, requirePermission, logAudit } = require('@lead/shared');
 const importRoutes = require('./importRoutes');
 const followUpRoutes = require('./followUpRoutes');
+const sheetsRoutes = require('./sheetsRoutes');
+const spreadsheetsRoutes = require('./spreadsheetsRoutes');
 
 const app = express();
 app.use(cors());
@@ -25,6 +27,17 @@ app.use(importRoutes);
 // follow_ups table — see followUpRepository.js — so nothing here needs to
 // call out to automation-service).
 app.use(followUpRoutes);
+
+// Google Sheets import (Support Agent "Import" tab) — preview + write to
+// contacts/leads, same mapping/dedupe pipeline as the CSV/XLSX importer
+// above. Supports private sheets via a service account (falls back to the
+// public CSV export if unconfigured). See sheetsRoutes.js.
+app.use(sheetsRoutes);
+
+// Saved, editable spreadsheets (Support Agent "Import" tab) — upload a
+// file or fetch a Google Sheet, then view/edit the grid in-app and import
+// into contacts/leads whenever ready. See spreadsheetsRoutes.js.
+app.use(spreadsheetsRoutes);
 
 app.get('/contacts', async (req, res) => {
   // ?tag=vip lets the Bulk Campaign tab's "Contact Segment" dropdown
@@ -115,24 +128,46 @@ app.post('/contacts/bulk-tag', canWrite, async (req, res) => {
 });
 
 // Leads
+//
+// ?created_after / ?created_before (ISO datetimes) — added for the Support
+// Agent's Daily Report tab, which scopes "all leads" to a single day/week.
+// Optional and additive: existing callers with no date params get exactly
+// the same rows/order as before.
+//
+// Also left-joins in `source` (from contacts — leads itself has no source
+// column) and a best-effort `assigned_to`/`last_activity` derived from the
+// most recent conversation for that contact, since the leads table itself
+// has neither column. Per this codebase's convention (see
+// frontend/src/lib/queries/aiAgents.js's fmt() helper), a lead whose
+// contact has no conversation yet gets NULL for these — the frontend
+// renders that as "—" rather than fabricating a value.
 app.get('/leads', async (req, res) => {
+  const { created_after, created_before } = req.query;
+  const where = ['l.organization_id = $1'];
+  const params = [req.user.organizationId];
+
+  if (created_after) {
+    params.push(created_after);
+    where.push(`l.created_at >= $${params.length}`);
+  }
+  if (created_before) {
+    params.push(created_before);
+    where.push(`l.created_at <= $${params.length}`);
+  }
+
   const { rows } = await pool.query(
-    // c.source is the lead's real inbound channel (email/whatsapp/linkedin/
-    // etc — see contacts.source) — joined in so the Sales Agent workspace
-    // has a real channel to show/default the Fit Scorer's pills to, instead
-    // of guessing one. p.name/p.category are joined in from products (see
-    // migrations/032_lead_product_id.sql) so per-product forecasting has a
-    // real label to show without a second round-trip.
     `SELECT l.*, c.name, c.source, p.name AS product_name, p.category AS product_category
-       FROM leads l
-       JOIN contacts c ON c.id=l.contact_id
-       LEFT JOIN products p ON p.id=l.product_id
-      WHERE l.organization_id=$1 ORDER BY l.created_at DESC`,
-    [req.user.organizationId]
+     FROM leads l
+     JOIN contacts c ON c.id = l.contact_id
+     LEFT JOIN products p ON p.id = l.product_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY l.created_at DESC`,
+    params
   );
+
   res.json(rows);
 });
-
+  
 // GET /leads/fields — the real numeric columns on `leads` a dashboard could
 // aggregate into a dollar figure. Backs the "Configure Deal Field" modal's
 // dropdown so it only ever offers a field that actually exists on the

@@ -15,7 +15,7 @@ from app.repositories.provider_log_repo import ProviderLogRepository
 
 router = APIRouter()
 
-_RANGE_TO_DAYS = {"24h": 1, "7d": 7, "30d": 30, "90d": 90}
+_RANGE_TO_DAYS = {"24h": 1, "7d": 7, "30d": 30, "90d": 90, "all": 36_500}
 
 
 @router.get("/analytics")

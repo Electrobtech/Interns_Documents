@@ -18,6 +18,44 @@ if (!KEY_ID || !KEY_SECRET) {
 
 const razorpay = new Razorpay({ key_id: KEY_ID || 'missing', key_secret: KEY_SECRET || 'missing' });
 
+// The razorpay SDK's own error handling has a bug: its internal
+// normalizeError() unconditionally reads `err.response.status`, assuming
+// Razorpay always sends back an HTTP response. When the request never gets
+// a response at all — no outbound internet from this container, DNS
+// failure, proxy/firewall blocking it, a timeout — `err.response` is
+// undefined and the SDK throws a bare
+// "TypeError: Cannot read properties of undefined (reading 'status')"
+// instead of a real error. That's indistinguishable from a JS bug unless
+// you already know this, so every SDK call in the routes goes through this
+// wrapper to translate it into a message that actually says what's wrong.
+async function callRazorpay(fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    if (e instanceof TypeError && /reading 'status'/.test(e.message)) {
+      const reachErr = new Error(
+        "Could not reach Razorpay's API (no response received) — check that this " +
+        'container has outbound internet/DNS access to api.razorpay.com. This is ' +
+        'almost always a network/firewall issue, not invalid keys (an invalid key ' +
+        'would come back as an auth error, not this).'
+      );
+      reachErr.cause = e;
+      throw reachErr;
+    }
+    throw e;
+  }
+}
+
+function createOrder(opts) {
+  return callRazorpay(() => razorpay.orders.create(opts));
+}
+function createPaymentLink(opts) {
+  return callRazorpay(() => razorpay.paymentLink.create(opts));
+}
+function cancelPaymentLink(id) {
+  return callRazorpay(() => razorpay.paymentLink.cancel(id));
+}
+
 // Convert a rupee amount (e.g. 499.50) to paise (49950) the way Razorpay's
 // API requires — always an integer, always round to the nearest paisa.
 function toPaise(rupeeAmount) {
@@ -64,4 +102,14 @@ function timingSafeEqual(a, b) {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-module.exports = { razorpay, toPaise, toRupees, verifyCheckoutSignature, verifyWebhookSignature, KEY_ID };
+module.exports = {
+  razorpay,
+  createOrder,
+  createPaymentLink,
+  cancelPaymentLink,
+  toPaise,
+  toRupees,
+  verifyCheckoutSignature,
+  verifyWebhookSignature,
+  KEY_ID,
+};

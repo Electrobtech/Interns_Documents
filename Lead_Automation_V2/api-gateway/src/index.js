@@ -9,7 +9,10 @@ const AUTH        = process.env.AUTH_SERVICE_URL        || 'http://localhost:400
 const INBOX       = process.env.INBOX_SERVICE_URL       || 'http://localhost:4002';
 const CONTACT     = process.env.CONTACT_SERVICE_URL     || 'http://localhost:4003';
 const CAMPAIGN    = process.env.CAMPAIGN_SERVICE_URL    || 'http://localhost:4004';
-const AI          = process.env.AI_SERVICE_URL          || 'http://localhost:4005';
+const AI_OVERVIEW    = process.env.AI_OVERVIEW_SERVICE_URL    || 'http://localhost:4020';
+const AI_MARKETING   = process.env.AI_MARKETING_SERVICE_URL   || 'http://localhost:4021';
+const AI_SALES       = process.env.AI_SALES_SERVICE_URL       || 'http://localhost:4022';
+const AI_SUPPORT     = process.env.AI_SUPPORT_SERVICE_URL     || 'http://localhost:4023';
 const ECOMMERCE   = process.env.ECOMMERCE_SERVICE_URL   || 'http://localhost:4006';
 const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:4007';
 const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
@@ -23,10 +26,14 @@ const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4
 const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4013';
 const CALENDAR    = process.env.CALENDAR_SERVICE_URL    || 'http://localhost:4014';
 const BILLING      = process.env.BILLING_SERVICE_URL     || 'http://localhost:4015';
+
 // Finances & Accounting module — the tenant's own income/expense ledger +
 // course GST invoices. Deliberately a separate service/port from BILLING
 // (4015), which is platform-subscription billing, not this.
 const FINANCE      = process.env.FINANCE_SERVICE_URL     || 'http://localhost:4016';
+
+const MARKETING_HUB = process.env.MARKETING_HUB_SERVICE_URL || 'http://localhost:4017';
+
 
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
 
@@ -96,6 +103,7 @@ const routes = [
   { path: '/auth/deauthorize',    target: INTEGRATION },
   { path: '/auth/data-deletion',  target: INTEGRATION }, // covers /auth/data-deletion and /auth/data-deletion-status
   { path: '/auth/unlock',         target: INTEGRATION }, // admin-only: lifts the lock on the Instagram/Facebook connection
+  { path: '/auth/verify-publish-password', target: INTEGRATION }, // password gate for the Integrations & APIs page (Meta/WhatsApp connections)
   { path: '/instagram',           target: INTEGRATION },
   { path: '/facebook',            target: INTEGRATION },
   { path: '/whatsapp',            target: INTEGRATION },
@@ -112,6 +120,8 @@ const routes = [
   { path: '/contacts',            target: CONTACT },
   { path: '/leads',               target: CONTACT },
   { path: '/follow-ups',          target: CONTACT }, // Follow-ups feature: services/contact-service/src/followUpRoutes.js
+  { path: '/sheets',              target: CONTACT }, // Google Sheets -> CRM import: services/contact-service/src/sheetsRoutes.js
+  { path: '/spreadsheets',        target: CONTACT }, // saved, editable spreadsheets: services/contact-service/src/spreadsheetsRoutes.js
   { path: '/campaigns',           target: CAMPAIGN },
   // Message Templates (Template Creation module) — owned by campaign-service
   // (src/templates.js + src/templateMedia.js), not yet in this route table.
@@ -123,12 +133,31 @@ const routes = [
   { path: '/products',            target: CAMPAIGN },
   // Static header images/videos/documents templateMedia.js writes under
   // campaign-service's public/uploads/templates (see src/index.js there).
+// Static header images/videos/documents templateMedia.js writes under
+  // campaign service's public/uploads/templates (see src/index.js there).
   // The upload response hands back a GATEWAY_PUBLIC_URL-rooted URL for the
-  // Live Preview's <img> tag to load directly — this route is what makes
+  // Live Preview's <img> tag to load directly - this route is what makes
   // that URL actually resolve, since the browser only ever talks to this
   // gateway, never to campaign-service's own port.
-  { path: '/uploads',             target: CAMPAIGN },
-  { path: '/ai-agents',           target: AI },
+  // marketing-hub-service owns /uploads/marketing-assets — more specific
+  // path MUST precede the generic /uploads -> CAMPAIGN entry or it is swallowed.
+  { path: '/uploads/marketing-assets', target: MARKETING_HUB },
+  { path: '/uploads', target: CAMPAIGN },
+  { path: '/ai-agents/status', target: AI_OVERVIEW },
+  { path: '/ai-agents/analytics', target: AI_OVERVIEW },
+  { path: '/ai-agents/health', target: AI_OVERVIEW },
+  { path: '/ai-agents/knowledge', target: AI_OVERVIEW },
+  { path: '/ai-agents/sessions', target: AI_OVERVIEW },
+  { path: '/ai-agents/runs', target: AI_OVERVIEW },
+  { path: '/ai-agents/orchestrate', target: AI_OVERVIEW },
+  { path: '/ai-agents/marketing', target: AI_MARKETING },
+  { path: '/ai-agents/sales', target: AI_SALES },
+  { path: '/ai-agents/support', target: AI_SUPPORT },
+  { path: '/ai-agents', target: AI_OVERVIEW },
+  { path: '/agents/marketing', target: AI_MARKETING },
+  { path: '/agents/sales', target: AI_SALES },
+  { path: '/agents/support', target: AI_SUPPORT },
+  { path: '/sessions', target: AI_OVERVIEW },
   { path: '/orders',              target: ECOMMERCE },
   { path: '/carts',               target: ECOMMERCE },
   { path: '/recovery-flows',      target: ECOMMERCE },
@@ -155,19 +184,35 @@ const routes = [
   // frontend/src/components/billing/*.jsx). BILLING was declared above but
   // never actually routed, so every Billing & Payments page call 404'd here.
   { path: '/billing',             target: BILLING },
+
   // finance-service mounts everything under /finances/* (transactions,
   // course invoices, summary — see services/finance-service/src/index.js
   // and frontend/src/components/finances/*.jsx).
   { path: '/finances',            target: FINANCE },
+
+  // Marketing Hub backend (services/marketing-hub-service) — Assets Library,
+  // Audiences, Campaigns, Broadcasts, Calendar, and the realtime socket all
+  // live behind this one bare prefix.
+  // The /socket.io sub-path MUST precede the bare /marketing-hub entry below
+  // — Express matches app.use() in registration order and the first match
+  // wins, same reasoning as the /auth/* block at the top of this table.
+  // NOTE: this must be the ONLY place '/marketing-hub' is registered — an
+  // earlier duplicate bare entry used to sit up near the /uploads routes,
+  // which silently swallowed /marketing-hub/socket.io before it ever reached
+  // this ws:true entry, breaking realtime updates. Don't reintroduce it.
+  { path: '/marketing-hub/socket.io', target: MARKETING_HUB, ws: true },
+  { path: '/marketing-hub',           target: MARKETING_HUB },
+
 ];
 
 const wsProxies = [];
 for (const r of routes) {
+  const isMarketingHub = r.path.startsWith('/marketing-hub');
   const proxy = createProxyMiddleware(r.path, {
     target: r.target,
     changeOrigin: true,
     ws: r.ws || false,
-    // keep the original path (e.g. /auth/login -> AUTH/auth/login)
+    pathRewrite: isMarketingHub ? { '^/marketing-hub': '' } : undefined,
   });
   app.use(r.path, proxy);
   if (r.ws) wsProxies.push(proxy);
