@@ -308,6 +308,56 @@ const FACEBOOK_POST_TYPES = [
   { value: 'video', label: 'Video' },
 ];
 
+// ---------- Connection gate for the Publish composers ----------
+// Instagram, Facebook and WhatsApp composers below must not be usable
+// until that platform is actually connected (see StatusCard /
+// WhatsAppCard in Integrations & APIs). This hook checks the same
+// /{platform}/status endpoint those cards use.
+
+function useConnectionStatus(platform) {
+  const { call } = useApi();
+  const [status, setStatus] = useState({ loading: true, connected: false, data: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    call(`/${platform}/status`)
+      .then((data) => {
+        if (!cancelled) setStatus({ loading: false, connected: Boolean(data.connected), data });
+      })
+      .catch((err) => {
+        // /instagram/status and /facebook/status return a 400 with
+        // {connected: false} when nothing is connected yet.
+        if (!cancelled) setStatus({ loading: false, connected: false, data: err.data || null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [call, platform]);
+
+  return status;
+}
+
+function NotConnectedNotice({ icon: Icon, label }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Icon size={18} className="text-slate-300" />
+        <h3 className="font-semibold text-sm">Publish to {label}</h3>
+      </div>
+      <p className="text-sm text-slate-500 mt-2 flex items-start gap-1.5">
+        <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+        <span>
+          {label} isn&apos;t connected yet. Connect it under{' '}
+          <a href="/app/integrations" className="text-brand font-medium hover:underline">
+            Integrations &amp; APIs
+          </a>{' '}
+          before you can publish here.
+        </span>
+      </p>
+    </div>
+  );
+}
+
 function ComposerResultRow({ label, result }) {
   if (!result) return null;
   const isSuccess = result.success;
@@ -351,6 +401,7 @@ function ComposerResultRow({ label, result }) {
 
 function InstagramComposer() {
   const { call } = useApi();
+  const { loading: statusLoading, connected } = useConnectionStatus('instagram');
   const [postType, setPostType] = useState('image');
   const [mediaUrl, setMediaUrl] = useState('');
   const [caption, setCaption] = useState('');
@@ -391,6 +442,18 @@ function InstagramComposer() {
     e.preventDefault();
     run();
   };
+
+  if (statusLoading) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 flex items-center gap-2 text-sm text-slate-400">
+        <Loader2 size={14} className="animate-spin" /> Checking Instagram connection…
+      </div>
+    );
+  }
+
+  if (!connected) {
+    return <NotConnectedNotice icon={Instagram} label="Instagram" />;
+  }
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5">
@@ -487,6 +550,7 @@ function InstagramComposer() {
 
 function FacebookComposer() {
   const { call } = useApi();
+  const { loading: statusLoading, connected } = useConnectionStatus('facebook');
   const [postType, setPostType] = useState('text');
   const [mediaUrl, setMediaUrl] = useState('');
   const [caption, setCaption] = useState('');
@@ -539,6 +603,18 @@ function FacebookComposer() {
     e.preventDefault();
     run();
   };
+
+  if (statusLoading) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 flex items-center gap-2 text-sm text-slate-400">
+        <Loader2 size={14} className="animate-spin" /> Checking Facebook connection…
+      </div>
+    );
+  }
+
+  if (!connected) {
+    return <NotConnectedNotice icon={Facebook} label="Facebook" />;
+  }
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5">
@@ -714,6 +790,7 @@ function WhatsAppConnectForm({ onConnected, locked, isAdmin }) {
 
 function WhatsAppSendTest() {
   const { call } = useApi();
+  const { loading: statusLoading, connected } = useConnectionStatus('whatsapp');
   const [to, setTo] = useState('');
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -735,6 +812,29 @@ function WhatsAppSendTest() {
       setSending(false);
     }
   };
+
+  if (statusLoading) {
+    return (
+      <p className="flex items-center gap-2 text-sm text-slate-400 border-t border-slate-100 pt-3 mt-1">
+        <Loader2 size={14} className="animate-spin" /> Checking WhatsApp connection…
+      </p>
+    );
+  }
+
+  if (!connected) {
+    return (
+      <p className="text-sm text-slate-500 border-t border-slate-100 pt-3 mt-1 flex items-start gap-1.5">
+        <AlertCircle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+        <span>
+          WhatsApp isn&apos;t connected yet. Connect it under{' '}
+          <a href="/app/integrations" className="text-brand font-medium hover:underline">
+            Integrations &amp; APIs
+          </a>{' '}
+          before sending a test message.
+        </span>
+      </p>
+    );
+  }
 
   return (
     <form onSubmit={handleSend} className="space-y-2 text-sm border-t border-slate-100 pt-3 mt-1">
@@ -990,4 +1090,4 @@ export default function ConnectionsPanel() {
 // Facebook") and WhatsAppSendTest ("Send a test message") live in Reviews &
 // Social now, not here — Integrations & APIs is credentials-only.
 // Re-exported so that page can render them directly, each as its own block.
-export { InstagramComposer, FacebookComposer, WhatsAppSendTest };
+export { InstagramComposer, FacebookComposer, WhatsAppSendTest, useConnectionStatus };

@@ -96,6 +96,7 @@ const routes = [
   { path: '/auth/deauthorize',    target: INTEGRATION },
   { path: '/auth/data-deletion',  target: INTEGRATION }, // covers /auth/data-deletion and /auth/data-deletion-status
   { path: '/auth/unlock',         target: INTEGRATION }, // admin-only: lifts the lock on the Instagram/Facebook connection
+  { path: '/auth/verify-publish-password', target: INTEGRATION }, // password gate for the Integrations & APIs page (Meta/WhatsApp connections)
   { path: '/instagram',           target: INTEGRATION },
   { path: '/facebook',            target: INTEGRATION },
   { path: '/whatsapp',            target: INTEGRATION },
