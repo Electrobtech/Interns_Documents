@@ -184,6 +184,28 @@ CREATE POLICY tenant_isolation ON mh_recipients
     )
   );
 
+-- mh_competitor_analysis (complete_marketing_hub_schema.sql) has no
+-- organization_id column of its own — it hangs off mh_competitors, which
+-- is itself organization_id-scoped in the loop above.
+ALTER TABLE mh_competitor_analysis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mh_competitor_analysis FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON mh_competitor_analysis;
+CREATE POLICY tenant_isolation ON mh_competitor_analysis
+  USING (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM mh_competitors c
+       WHERE c.id = mh_competitor_analysis.competitor_id
+         AND c.organization_id = app_current_org()
+    )
+  )
+  WITH CHECK (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM mh_competitors c
+       WHERE c.id = mh_competitor_analysis.competitor_id
+         AND c.organization_id = app_current_org()
+    )
+  );
+
 ALTER TABLE mh_delivery_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mh_delivery_events FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS tenant_isolation ON mh_delivery_events;

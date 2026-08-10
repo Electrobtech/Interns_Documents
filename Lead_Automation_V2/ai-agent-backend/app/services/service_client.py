@@ -118,17 +118,41 @@ async def get_follow_ups(organization_id: uuid.UUID, bucket: str | None = None) 
 
 async def create_campaign(organization_id: uuid.UUID, *, name: str, type_: str, channel_type: str, message_body: str, status: str = "draft") -> dict:
     """Not best-effort — the caller (convert-plan-item route) needs a real
-    result or a real error to show the user."""
+    result or a real error to show the user.
+
+    Points at marketing-hub-service, not the older campaign-service. The
+    two used to run as separate, non-connected systems: a campaign created
+    here from an AI-generated plan landed in campaign-service's own table
+    and never showed up in the Marketing Hub UI (Campaigns/Broadcasts/
+    Channels all read from marketing-hub-service's mh_campaigns table).
+    marketing-hub-service is now the single source of truth for campaigns
+    everywhere in the product, so this call was redirected to it instead of
+    campaign-service. `type_` has no direct equivalent in mh_campaigns'
+    schema (which has `objective`, not `type`) so it's passed through as
+    the objective — mh_campaigns doesn't constrain objective to an enum,
+    unlike channel, so this is safe.
+    """
     settings = get_settings()
     token = sign_service_token(organization_id)
     async with httpx.AsyncClient(timeout=8.0) as client:
         resp = await client.post(
-            f"{settings.CAMPAIGN_SERVICE_URL}/campaigns",
+            f"{settings.MARKETING_HUB_SERVICE_URL}/campaigns",
             headers={"Authorization": f"Bearer {token}"},
-            json={"name": name, "type": type_, "channel_type": channel_type, "message_body": message_body, "status": status},
+            json={"name": name, "objective": type_, "channel": channel_type, "message_body": message_body},
         )
         resp.raise_for_status()
-        return resp.json()
+        campaign = resp.json()
+        if status == "draft":
+            return campaign
+        # Any non-draft status from the caller means "launch it" — publish
+        # is a separate call in marketing-hub-service's API (create, then
+        # publish), unlike campaign-service's old single-call create.
+        publish_resp = await client.post(
+            f"{settings.MARKETING_HUB_SERVICE_URL}/campaigns/{campaign['id']}/publish",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        publish_resp.raise_for_status()
+        return publish_resp.json()
 
 
 async def get_customer_context(organization_id: uuid.UUID, contact_id: str) -> dict | None:

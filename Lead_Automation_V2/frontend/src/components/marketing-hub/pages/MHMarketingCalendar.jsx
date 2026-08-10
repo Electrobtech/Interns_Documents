@@ -13,12 +13,14 @@ import {
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const LEGEND = [
-  { type: 'campaign', label: 'Campaign', color: '#6366f1' },
-  { type: 'webinar', label: 'Webinar', color: '#f59e0b' },
+  { type: 'campaign',  label: 'Campaign',  color: '#6366f1' },
   { type: 'broadcast', label: 'Broadcast', color: '#10b981' },
-  { type: 'meeting', label: 'Meeting', color: '#3b82f6' },
-  { type: 'reminder', label: 'Reminder', color: '#8b5cf6' },
+  { type: 'content',   label: 'Content',   color: '#8b5cf6' },
+  { type: 'meeting',   label: 'Meeting',   color: '#3b82f6' },
+  { type: 'deadline',  label: 'Deadline',  color: '#f59e0b' },
+  { type: 'launch',    label: 'Launch',    color: '#ec4899' },
 ];
+const colorFor = (type) => (LEGEND.find((l) => l.type === type) || LEGEND[0]).color;
 
 const TYPE_COLORS = {
   campaign: '#6366f1',
@@ -169,7 +171,7 @@ export default function MHMarketingCalendar() {
       </div>
 
       {/* Month Nav */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button className="mh-btn mh-btn-ghost" style={{ padding: '6px 8px' }} onClick={goPrev}>
             <ChevronLeft size={16} />
@@ -445,13 +447,7 @@ export default function MHMarketingCalendar() {
         </MHModal>
       )}
 
-      {showAdd && (
-        <AddEventModal
-          defaultDate={selectedDay ? `2025-08-${String(selectedDay).padStart(2, '0')}` : '2025-08-01'}
-          onClose={() => setShowAdd(false)}
-          onCreated={(ev) => { setCalendarEvents(prev => [...prev, ev]); toast.show('Event added!', 'success'); }}
-        />
-      )}
+      {showAdd && <AddEventModal toast={toast} defaultDate={dateForDay(selectedDay)} onClose={() => setShowAdd(false)} />}
     </div>
   );
 }

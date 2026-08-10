@@ -415,7 +415,7 @@ export default function Dashboard() {
                   </div>
                   {c.id && (
                     <div className="flex flex-col items-center gap-0.5" title="Human takeover — pause the bot and reply yourself">
-                      <Switch checked={c.handledBy === 'human'} onChange={() => toggleHandledBy(c)} label="Human takeover" />
+                      <Switch checked={c.handledBy === 'human'} onCheckedChange={() => toggleHandledBy(c)} />
                       <span className="text-[9px] text-slate-400">{c.handledBy === 'human' ? 'Human' : 'Bot'}</span>
                     </div>
                   )}

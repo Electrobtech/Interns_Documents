@@ -8,7 +8,8 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 import httpx
-from app.config.settings import settings
+from app.config.settings import get_settings
+settings = get_settings()
 
 
 class AIContentGenerator:
