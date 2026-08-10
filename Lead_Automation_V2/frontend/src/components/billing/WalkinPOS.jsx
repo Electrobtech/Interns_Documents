@@ -1,10 +1,22 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { Banknote, QrCode, CheckCircle2, Loader2, X } from 'lucide-react';
+import { Banknote, QrCode, CheckCircle2, Loader2, X, IndianRupee, User, Phone, Mail } from 'lucide-react';
 import { useApi } from '@/lib/useApi';
 import { inr } from '@/lib/billing';
 
-const input = 'w-full border border-slate-300 rounded-lg px-3 py-2 text-sm';
+const input =
+  'w-full border border-slate-300 rounded-lg pl-9 pr-3 py-2.5 text-sm bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand';
+const inputError = 'border-rose-400 focus:ring-rose-100 focus:border-rose-400';
+
+// A 10-digit Indian mobile number, optionally prefixed with +91 / 91 / 0.
+const PHONE_RE = /^(?:\+?91[\-\s]?|0)?[6-9]\d{9}$/;
+// Standard, pragmatic email shape check (not exhaustive RFC 5322, but
+// catches the mistakes people actually make while typing).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizePhone(v) {
+  return v.replace(/[^\d+]/g, '');
+}
 
 export default function WalkinPOS() {
   const { call } = useApi();
@@ -15,6 +27,7 @@ export default function WalkinPOS() {
   const [method, setMethod] = useState('cash'); // 'cash' | 'qr'
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [success, setSuccess] = useState(null); // { order } after a cash sale
   const [qr, setQr] = useState(null); // { paymentId, shortUrl, qrImageUrl }
   const pollRef = useRef(null);
@@ -23,18 +36,39 @@ export default function WalkinPOS() {
 
   function reset() {
     setAmount(''); setCustomerName(''); setCustomerPhone(''); setCustomerEmail('');
-    setSuccess(null); setQr(null); setError('');
+    setSuccess(null); setQr(null); setError(''); setFieldErrors({});
     clearInterval(pollRef.current);
   }
 
-  async function submit() {
+  function validate() {
     const value = Number(amount);
-    if (!(value > 0)) { setError('Enter a valid amount'); return; }
-    if (!customerName.trim()) { setError('Enter the customer name'); return; }
-    if (!customerPhone.trim()) { setError('Enter the customer mobile number'); return; }
-    if (!customerEmail.trim()) { setError('Enter the customer email'); return; }
-    setBusy(true);
+    const errors = {};
+    if (!(value > 0)) errors.amount = 'Enter a valid amount';
+    if (!customerName.trim()) errors.customerName = 'Enter the customer name';
+
+    const phone = normalizePhone(customerPhone);
+    if (!phone) errors.customerPhone = 'Enter the customer mobile number';
+    else if (!PHONE_RE.test(phone)) errors.customerPhone = 'Enter a valid 10-digit mobile number';
+
+    const email = customerEmail.trim();
+    if (!email) errors.customerEmail = 'Enter the customer email';
+    else if (!EMAIL_RE.test(email)) errors.customerEmail = 'Enter a valid email address';
+
+    setFieldErrors(errors);
+    return errors;
+  }
+
+  async function submit() {
+    const errors = validate();
+    if (Object.keys(errors).length > 0) {
+      setError(Object.values(errors)[0]);
+      return;
+    }
+    const value = Number(amount);
+    const phone = normalizePhone(customerPhone);
+    const email = customerEmail.trim();
     setError('');
+    setBusy(true);
     try {
       if (method === 'cash') {
         const res = await call('/billing/walkin/cash', {
@@ -43,8 +77,8 @@ export default function WalkinPOS() {
             amount: value,
             description: `Walk-in — ${customerName}`,
             customerName,
-            customerPhone,
-            customerEmail,
+            customerPhone: phone,
+            customerEmail: email,
           },
         });
         setSuccess(res);
@@ -54,8 +88,8 @@ export default function WalkinPOS() {
           body: {
             amount: value,
             customerName,
-            customerPhone,
-            customerEmail,
+            customerPhone: phone,
+            customerEmail: email,
           },
         });
         setQr(res);
@@ -90,11 +124,16 @@ export default function WalkinPOS() {
 
   if (success) {
     return (
-      <div className="max-w-sm mx-auto text-center py-10 space-y-3">
-        <CheckCircle2 className="mx-auto text-emerald-500" size={48} />
-        <p className="text-lg font-semibold">Payment received</p>
+      <div className="max-w-sm mx-auto text-center py-10 space-y-3 bg-white rounded-2xl border border-slate-200/80 shadow-card px-6">
+        <div className="mx-auto w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center">
+          <CheckCircle2 className="text-emerald-500" size={32} />
+        </div>
+        <p className="text-lg font-bold text-slate-800">Payment received</p>
         <p className="text-slate-500 text-sm">{inr(success.order?.amount ?? amount)} collected</p>
-        <button onClick={reset} className="mt-4 bg-brand text-white rounded-lg px-4 py-2 text-sm font-medium">
+        <button
+          onClick={reset}
+          className="mt-4 bg-gradient-brand text-white rounded-xl px-5 py-2.5 text-sm font-semibold shadow-brand hover:shadow-brand-lg transition-shadow"
+        >
           New sale
         </button>
       </div>
@@ -103,17 +142,17 @@ export default function WalkinPOS() {
 
   if (qr) {
     return (
-      <div className="max-w-sm mx-auto text-center py-6 space-y-4">
-        <p className="text-sm text-slate-500">Ask the customer to scan to pay {inr(amount)}</p>
+      <div className="max-w-sm mx-auto text-center py-6 space-y-4 bg-white rounded-2xl border border-slate-200/80 shadow-card px-6">
+        <p className="text-sm text-slate-500">Ask the customer to scan to pay <span className="font-semibold text-slate-700">{inr(amount)}</span></p>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={qr.qrImageUrl} alt="Scan to pay" className="mx-auto rounded-xl border border-slate-200" width={220} height={220} />
-        <a href={qr.shortUrl} target="_blank" rel="noreferrer" className="text-xs text-brand underline block">
+        <img src={qr.qrImageUrl} alt="Scan to pay" className="mx-auto rounded-xl border border-slate-200 p-2" width={220} height={220} />
+        <a href={qr.shortUrl} target="_blank" rel="noreferrer" className="text-xs text-brand font-medium underline block">
           Or open payment link
         </a>
         <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
           <Loader2 size={12} className="animate-spin" /> Waiting for payment…
         </div>
-        <button onClick={cancelQr} className="flex items-center gap-1.5 mx-auto text-xs text-slate-500 hover:text-red-600">
+        <button onClick={cancelQr} className="flex items-center gap-1.5 mx-auto text-xs text-slate-500 hover:text-rose-600 transition-colors">
           <X size={13} /> Cancel
         </button>
       </div>
@@ -121,61 +160,95 @@ export default function WalkinPOS() {
   }
 
   return (
-    <div className="max-w-sm mx-auto space-y-4">
+    <div className="max-w-sm mx-auto space-y-4 bg-white rounded-2xl border border-slate-200/80 shadow-card p-6">
       <div>
         <label className="block text-xs font-medium text-slate-600 mb-1">Amount (₹)</label>
-        <input type="number" min="1" className={input} placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        <div className="relative">
+          <IndianRupee size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="number"
+            min="1"
+            step="0.01"
+            className={`${input} ${fieldErrors.amount ? inputError : ''}`}
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        </div>
+        {fieldErrors.amount && <p className="text-[11px] text-rose-600 mt-1">{fieldErrors.amount}</p>}
       </div>
       <div>
         <label className="block text-xs font-medium text-slate-600 mb-1">Customer name</label>
-        <input className={input} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Full name" />
+        <div className="relative">
+          <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            className={`${input} ${fieldErrors.customerName ? inputError : ''}`}
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+            placeholder="Full name"
+          />
+        </div>
+        {fieldErrors.customerName && <p className="text-[11px] text-rose-600 mt-1">{fieldErrors.customerName}</p>}
       </div>
       <div>
         <label className="block text-xs font-medium text-slate-600 mb-1">Customer mobile number</label>
-        <input
-          type="tel"
-          className={input}
-          value={customerPhone}
-          onChange={(e) => setCustomerPhone(e.target.value)}
-          placeholder="10-digit mobile number"
-        />
+        <div className="relative">
+          <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="tel"
+            inputMode="tel"
+            className={`${input} ${fieldErrors.customerPhone ? inputError : ''}`}
+            value={customerPhone}
+            onChange={(e) => setCustomerPhone(e.target.value)}
+            placeholder="10-digit mobile number"
+            maxLength={16}
+          />
+        </div>
+        {fieldErrors.customerPhone && <p className="text-[11px] text-rose-600 mt-1">{fieldErrors.customerPhone}</p>}
       </div>
       <div>
         <label className="block text-xs font-medium text-slate-600 mb-1">Customer email</label>
-        <input
-          type="email"
-          className={input}
-          value={customerEmail}
-          onChange={(e) => setCustomerEmail(e.target.value)}
-          placeholder="name@example.com"
-        />
+        <div className="relative">
+          <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="email"
+            inputMode="email"
+            className={`${input} ${fieldErrors.customerEmail ? inputError : ''}`}
+            value={customerEmail}
+            onChange={(e) => setCustomerEmail(e.target.value)}
+            placeholder="name@example.com"
+          />
+        </div>
+        {fieldErrors.customerEmail && <p className="text-[11px] text-rose-600 mt-1">{fieldErrors.customerEmail}</p>}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2 pt-1">
         <button
           onClick={() => setMethod('cash')}
-          className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium ${
-            method === 'cash' ? 'border-brand bg-brand/5 text-brand' : 'border-slate-300 text-slate-600'
+          className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+            method === 'cash' ? 'border-brand bg-brand/5 text-brand' : 'border-slate-200 text-slate-600 hover:border-slate-300'
           }`}
         >
           <Banknote size={15} /> Cash
         </button>
         <button
           onClick={() => setMethod('qr')}
-          className={`flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium ${
-            method === 'qr' ? 'border-brand bg-brand/5 text-brand' : 'border-slate-300 text-slate-600'
+          className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+            method === 'qr' ? 'border-brand bg-brand/5 text-brand' : 'border-slate-200 text-slate-600 hover:border-slate-300'
           }`}
         >
           <QrCode size={15} /> QR / UPI / Card
         </button>
       </div>
 
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && (
+        <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">{error}</p>
+      )}
 
       <button
         onClick={submit}
         disabled={busy}
-        className="w-full flex items-center justify-center gap-2 bg-brand text-white rounded-lg py-2.5 text-sm font-medium disabled:opacity-60"
+        className="w-full flex items-center justify-center gap-2 bg-gradient-brand text-white rounded-xl py-2.5 text-sm font-semibold shadow-brand hover:shadow-brand-lg transition-shadow disabled:opacity-60 disabled:shadow-none"
       >
         {busy && <Loader2 size={14} className="animate-spin" />}
         {method === 'cash' ? 'Record cash sale' : 'Generate QR code'}

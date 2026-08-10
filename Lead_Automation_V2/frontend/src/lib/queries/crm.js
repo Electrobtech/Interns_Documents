@@ -5,14 +5,20 @@ import { useApi } from '@/lib/useApi';
 // Real platform CRM data, reused by the agent dashboards — one source of
 // truth, no mocked metrics.
 
-// GET /leads — { id, contact_id, name, source, stage, priority, score,
-// deal_value, created_at, updated_at }. `name` and `source` are joined in
-// from the backing contact; `updated_at` is bumped by contact-service on
-// every PUT /leads/:id or PUT /leads/:id/stage (see
-// infra/db/migrations/031_lead_updated_at.sql).
-export function useLeads() {
+// GET /leads — { id, contact_id, name, stage, priority, score, created_at }
+// GET /leads?created_after=ISO&created_before=ISO — day/week-scoped, used
+// by the Support Agent's Daily Report tab. Omitting `range` keeps the
+// original unfiltered call (and its query key) exactly as before.
+export function useLeads(range) {
   const { call } = useApi();
-  return useQuery({ queryKey: ['leads', 'list'], queryFn: () => call('/leads') });
+  const qs = new URLSearchParams();
+  if (range?.created_after) qs.set('created_after', range.created_after);
+  if (range?.created_before) qs.set('created_before', range.created_before);
+  const query = qs.toString();
+  return useQuery({
+    queryKey: ['leads', 'list', range?.created_after || null, range?.created_before || null],
+    queryFn: () => call(`/leads${query ? `?${query}` : ''}`),
+  });
 }
 
 // GET /leads/fields — real numeric leads.* columns a dashboard could

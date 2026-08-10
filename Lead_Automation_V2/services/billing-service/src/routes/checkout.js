@@ -4,7 +4,7 @@
 // against an order that already exists, and flips it to paid on success.
 const express = require('express');
 const { pool, paymentModel } = require('@lead/shared');
-const { razorpay, toPaise, verifyCheckoutSignature, KEY_ID } = require('../lib/razorpay');
+const { razorpay, createOrder, toPaise, verifyCheckoutSignature, KEY_ID } = require('../lib/razorpay');
 
 const router = express.Router();
 
@@ -26,7 +26,7 @@ router.post('/:orderId/checkout', async (req, res) => {
   if (!(amount > 0)) return res.status(400).json({ error: 'Order has no payable amount' });
 
   try {
-    const rpOrder = await razorpay.orders.create({
+    const rpOrder = await createOrder({
       amount: toPaise(amount),
       currency: 'INR',
       notes: { organization_id: req.user.organizationId, order_id: order.id, purpose: 'ECOMMERCE_ORDER' },
