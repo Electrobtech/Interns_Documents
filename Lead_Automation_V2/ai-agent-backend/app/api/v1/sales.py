@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rbac import require_permission
 from app.core.security import AuthUser, get_current_user
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.ml.lead_scoring_model import predict_fit_score
 from app.repositories.sales_repo import SalesRepository
 from app.schemas.sales import (
@@ -36,7 +36,7 @@ router = APIRouter()
 async def run_sales_agent(
     body: SalesRunIn,
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> SalesRunOut:
     organization_id = uuid.UUID(user.organization_id)
     result = await SalesService(session).run(organization_id, body)
@@ -48,7 +48,7 @@ async def run_sales_agent(
 @router.get("/sales/runs", response_model=list[SalesRunSummary])
 async def list_sales_runs(
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> list[SalesRunSummary]:
     organization_id = uuid.UUID(user.organization_id)
     runs = await SalesRepository(session).recent_runs(organization_id)
@@ -90,7 +90,7 @@ async def score_lead_fit(
 @router.get("/sales/config", response_model=SalesAgentConfigOut)
 async def get_sales_config(
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> SalesAgentConfigOut:
     organization_id = uuid.UUID(user.organization_id)
     return await SalesService(session).get_config(organization_id)
@@ -100,7 +100,7 @@ async def get_sales_config(
 async def update_sales_config(
     body: SalesAgentConfigIn,
     user: AuthUser = Depends(require_permission("ai_agents:manage")),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> SalesAgentConfigOut:
     organization_id = uuid.UUID(user.organization_id)
     # `exclude_unset` so a PATCH that only sends one field doesn't clear the
@@ -117,6 +117,7 @@ async def update_sales_config(
         require_approval=sent.get("require_approval", ...),
         followup_cadence_days=body.followup_cadence_days if "followup_cadence_days" in sent else ...,
         monthly_revenue_target=sent.get("monthly_revenue_target", ...),
+        product_targets=sent.get("product_targets", ...),
     )
     await log_audit(
         session, organization_id, user.user_id, "ai_agents.sales.config_update",
@@ -130,7 +131,7 @@ async def update_sales_config(
 @router.get("/sales/queue", response_model=SalesQueueOut)
 async def get_sales_queue(
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> SalesQueueOut:
     """Real queued work (overdue/today follow-ups + pending handoffs) —
     backs the header badge and its click-to-expand drawer, replacing the
@@ -142,7 +143,7 @@ async def get_sales_queue(
 @router.get("/sales/export", response_model=SalesExportOut)
 async def export_sales_data(
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> SalesExportOut:
     """Export payload for the header's Export button. Returns JSON; the
     frontend renders it as a downloadable .json or .csv client-side."""
@@ -161,7 +162,7 @@ async def export_sales_data(
 @router.get("/sales/forecast", response_model=SalesForecastOut)
 async def get_sales_forecast(
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> SalesForecastOut:
     """Pipeline value by stage, a heuristically weighted quarterly
     prediction, a real monthly-revenue trend, and target-vs-actual gap
@@ -173,7 +174,7 @@ async def get_sales_forecast(
 @router.get("/sales/analytics", response_model=SalesAnalyticsOut)
 async def get_sales_analytics(
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> SalesAnalyticsOut:
     """MTD closed deals, avg deal size, sales-cycle length, and agent
     productivity — all derived from real leads + sales_agent_runs, not
@@ -188,7 +189,7 @@ async def get_sales_analytics(
 async def draft_followup(
     body: DraftFollowupIn,
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> DraftFollowupOut:
     """Generates email/WhatsApp/call-script drafts for one lead, grounded in
     the org's sales knowledge base. Read-only — this never sends anything;

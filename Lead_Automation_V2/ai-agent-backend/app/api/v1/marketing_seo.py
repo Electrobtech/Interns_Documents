@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rbac import require_permission
 from app.core.security import AuthUser
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.schemas.marketing_extras import SeoBriefIn, SeoBriefOut, SeoBriefSummary
 from app.services.audit_service import log_audit
 from app.services.seo_service import SeoService
@@ -23,7 +23,7 @@ _can_manage = require_permission("ai_agents:manage")
 async def generate_seo_brief(
     body: SeoBriefIn,
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> SeoBriefOut:
     organization_id = uuid.UUID(user.organization_id)
     result = await SeoService(session).generate(organization_id, body.topic)
@@ -35,7 +35,7 @@ async def generate_seo_brief(
 @router.get("/marketing/seo/briefs", response_model=list[SeoBriefSummary])
 async def list_seo_briefs(
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> list[SeoBriefSummary]:
     organization_id = uuid.UUID(user.organization_id)
     rows = await SeoService(session).list_recent(organization_id)

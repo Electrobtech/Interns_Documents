@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rbac import require_permission
 from app.core.security import AuthUser
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.schemas.marketing_extras import CompetitorIntelIn, CompetitorIntelOut, CompetitorReportSummary
 from app.services.audit_service import log_audit
 from app.services.competitor_service import CompetitorService
@@ -23,7 +23,7 @@ _can_manage = require_permission("ai_agents:manage")
 async def generate_competitor_intel(
     body: CompetitorIntelIn,
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> CompetitorIntelOut:
     organization_id = uuid.UUID(user.organization_id)
     result = await CompetitorService(session).generate(organization_id, body.subject)
@@ -35,7 +35,7 @@ async def generate_competitor_intel(
 @router.get("/marketing/competitor-reports", response_model=list[CompetitorReportSummary])
 async def list_competitor_reports(
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> list[CompetitorReportSummary]:
     organization_id = uuid.UUID(user.organization_id)
     rows = await CompetitorService(session).list_recent(organization_id)

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rbac import require_permission
 from app.core.security import AuthUser, get_current_user
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.knowledge.loaders import SUPPORTED_EXTENSIONS
 from app.repositories.knowledge_repo import KnowledgeRepository
 from app.schemas.knowledge import KnowledgeSourceOut
@@ -46,7 +46,7 @@ async def upload_knowledge(
     agent_type: str = Form(...),
     file: UploadFile = File(...),
     user: AuthUser = Depends(require_permission("ai_agents:manage")),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> KnowledgeSourceOut:
     source_type = _source_type_from_filename(file.filename)
     if not source_type:
@@ -87,7 +87,7 @@ async def batch_upload_knowledge(
     agent_type: str = Form(...),
     files: list[UploadFile] = File(...),
     user: AuthUser = Depends(require_permission("ai_agents:manage")),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> BatchIngestResult:
     """Ingest multiple files in a single request. Each file is processed
     independently — a failure on one does not abort the others."""
@@ -140,7 +140,7 @@ class WebIngestIn(BaseModel):
 async def ingest_web(
     body: WebIngestIn,
     user: AuthUser = Depends(require_permission("ai_agents:manage")),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> KnowledgeSourceOut:
     """Fetch a web page and ingest its text content into the knowledge base."""
     organization_id = uuid.UUID(user.organization_id)
@@ -176,7 +176,7 @@ class NoteIngestIn(BaseModel):
 async def ingest_note(
     body: NoteIngestIn,
     user: AuthUser = Depends(require_permission("ai_agents:manage")),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> KnowledgeSourceOut:
     """Ingest a freeform text note directly (no file needed)."""
     organization_id = uuid.UUID(user.organization_id)
@@ -203,7 +203,7 @@ async def ingest_note(
 async def list_knowledge(
     agent_type: str | None = None,
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> list[KnowledgeSourceOut]:
     organization_id = uuid.UUID(user.organization_id)
     sources = await KnowledgeRepository(session).list_sources(organization_id, agent_type)
@@ -219,7 +219,7 @@ async def reindex_knowledge(
     source_id: uuid.UUID,
     file: UploadFile = File(...),
     user: AuthUser = Depends(require_permission("ai_agents:manage")),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> KnowledgeSourceOut:
     source_type = _source_type_from_filename(file.filename)
     if not source_type:
@@ -257,7 +257,7 @@ async def reindex_knowledge(
 async def delete_knowledge(
     source_id: uuid.UUID,
     user: AuthUser = Depends(require_permission("ai_agents:manage")),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> dict:
     organization_id = uuid.UUID(user.organization_id)
     await KnowledgeRepository(session).delete_source(organization_id, source_id)

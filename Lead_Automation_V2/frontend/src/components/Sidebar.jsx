@@ -8,7 +8,7 @@ import {
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
   MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown, Bell,
   Zap, FileText, Linkedin, PanelLeftClose, PanelLeftOpen, CreditCard,
-  LayoutTemplate, Workflow, CalendarClock,
+  LayoutTemplate, Workflow, CalendarClock, Package,
 } from 'lucide-react';
 import { useUnreadCounts } from '@/lib/useUnreadCounts';
 
@@ -22,7 +22,7 @@ function channelKey(href) {
 const PLATFORM = [
   { label: 'Dashboard',               icon: LayoutDashboard, href: '/app'                  },
   { label: 'Unified Inbox',           icon: Inbox,           href: '/app/inbox'              },
-  { label: 'Leads / CRM',             icon: Users,           href: '/app/contacts'           },
+  { label: 'Contacts & Leads',        icon: Users,           href: '/app/contacts'           },
   { label: 'Follow-ups',              icon: CalendarClock,   href: '/app/follow-ups'         },
   { 
     label: 'AI Agents & Automation',  
@@ -36,6 +36,7 @@ const PLATFORM = [
       ['Support Agent', '/app/ai-agents?agent=support']
     ]
   },
+  { label: 'Products & Offers',       icon: Package,         href: '/app/products'           },
   { label: 'Campaigns & Broadcasts',  icon: Megaphone,       href: '/app/campaigns'          },
   { label: 'Ecommerce & Revenue',    icon: ShoppingCart,    href: '/app/ecommerce'          },
   { label: 'Reviews & Social',        icon: Star,            href: '/app/reviews'            },

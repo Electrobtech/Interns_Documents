@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config.settings import get_settings
 from app.core.security import AuthUser, get_current_user
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.main import app
 
 pytestmark = pytest.mark.asyncio
@@ -47,6 +47,18 @@ async def engine():
     # another. Recreating the engine per test costs a little connection
     # overhead but is what actually works without pinning a custom
     # session-wide event loop policy.
+    #
+    # Uses get_settings().DATABASE_URL directly (not the app_user role that
+    # is now the *production* default as of 0007_enable_rls/RLS wiring) --
+    # this fixture does raw admin-style setup (INSERT INTO organizations
+    # directly, bypassing the app layer entirely), not a real tenant
+    # request, so it needs the owner/superuser role to avoid tripping the
+    # very RLS policies this session enabled. Run this suite with
+    # DATABASE_URL pointed at the owner role (`lead`), same as
+    # MIGRATION_DATABASE_URL elsewhere -- e.g.:
+    #   DATABASE_URL=postgresql+asyncpg://lead:leadpass@localhost:5432/lead_automation pytest
+    # Tenant-scoped RLS behavior itself is exercised live (see
+    # docs/MULTI_TENANT_RLS.md §4), not by this suite.
     eng = create_async_engine(get_settings().DATABASE_URL, pool_pre_ping=True)
     yield eng
     await eng.dispose()
@@ -117,7 +129,13 @@ async def org(engine) -> AsyncIterator[TestOrg]:
 def _make_client(engine, organization_id: uuid.UUID, user_id: uuid.UUID) -> AsyncClient:
     Session = async_sessionmaker(bind=engine, expire_on_commit=False)
 
-    async def _override_session() -> AsyncIterator[AsyncSession]:
+    async def _override_scoped_session() -> AsyncIterator[AsyncSession]:
+        # Test double for get_scoped_session (app/database/tenant_scope.py).
+        # No SET LOCAL/set_config needed here: `engine` (see fixture above)
+        # connects as the owner/superuser role for this suite, which RLS
+        # never applies to regardless of GUCs -- the override only needs to
+        # hand routes a working session bound to the test org's data, same
+        # as it did pre-RLS when this overrode get_session directly.
         async with Session() as session:
             yield session
 
@@ -129,7 +147,7 @@ def _make_client(engine, organization_id: uuid.UUID, user_id: uuid.UUID) -> Asyn
             permissions=["ai_agents:manage"],
         )
 
-    app.dependency_overrides[get_session] = _override_session
+    app.dependency_overrides[get_scoped_session] = _override_scoped_session
     app.dependency_overrides[get_current_user] = _override_user
     transport = ASGITransport(app=app)
     return AsyncClient(transport=transport, base_url="http://test")
