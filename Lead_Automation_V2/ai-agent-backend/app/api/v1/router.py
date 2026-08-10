@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     analytics,
+    finance_agent,
     handoff,
     knowledge,
     marketing,
@@ -41,6 +42,7 @@ router.include_router(marketing_growth.router, tags=["marketing"])
 router.include_router(marketing_handoff.router, tags=["marketing"])
 router.include_router(marketing_performance.router, tags=["marketing"])
 router.include_router(sales.router, tags=["sales"])
+router.include_router(finance_agent.router, tags=["sales"])
 router.include_router(support.router, tags=["support"])
 router.include_router(orchestrator.router, tags=["orchestrator"])
 router.include_router(handoff.router, tags=["handoff"])

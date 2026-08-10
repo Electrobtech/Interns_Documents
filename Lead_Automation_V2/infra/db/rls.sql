@@ -72,7 +72,8 @@ BEGIN
     'calendar_accounts', 'calendar_events',
     'organization_channel_subscriptions', 'whatsapp_billing_ledger',
     'meta_usage_charges', 'sms_usage_charges',
-    'products'
+    'products',
+    'finance_transactions', 'course_invoices', 'finance_invoice_counters'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);

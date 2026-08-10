@@ -39,6 +39,11 @@ class Settings(BaseSettings):
 
     CONTACT_SERVICE_URL: str = "http://contact-service:4003"
     CAMPAIGN_SERVICE_URL: str = "http://campaign-service:4004"
+    # Finances & Accounting module (services/finance-service) — used by the
+    # Sales Agent's finance tools (see services/service_client.py:
+    # generate_course_invoice/record_expense/get_financial_summary and
+    # api/v1/finance_agent.py's propose/confirm routes).
+    FINANCE_SERVICE_URL: str = "http://finance-service:4016"
 
     # ── RAG retrieval ──────────────────────────────────────────────────────────
     # Cross-encoder rerank costs one extra LLM call per retrieval, so it is

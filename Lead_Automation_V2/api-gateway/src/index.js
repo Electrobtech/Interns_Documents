@@ -23,6 +23,10 @@ const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4
 const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4013';
 const CALENDAR    = process.env.CALENDAR_SERVICE_URL    || 'http://localhost:4014';
 const BILLING      = process.env.BILLING_SERVICE_URL     || 'http://localhost:4015';
+// Finances & Accounting module — the tenant's own income/expense ledger +
+// course GST invoices. Deliberately a separate service/port from BILLING
+// (4015), which is platform-subscription billing, not this.
+const FINANCE      = process.env.FINANCE_SERVICE_URL     || 'http://localhost:4016';
 
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
 
@@ -151,6 +155,10 @@ const routes = [
   // frontend/src/components/billing/*.jsx). BILLING was declared above but
   // never actually routed, so every Billing & Payments page call 404'd here.
   { path: '/billing',             target: BILLING },
+  // finance-service mounts everything under /finances/* (transactions,
+  // course invoices, summary — see services/finance-service/src/index.js
+  // and frontend/src/components/finances/*.jsx).
+  { path: '/finances',            target: FINANCE },
 ];
 
 const wsProxies = [];

@@ -1350,3 +1350,91 @@ DROP TRIGGER IF EXISTS trg_create_wallet_for_new_org ON organizations;
 CREATE TRIGGER trg_create_wallet_for_new_org
   AFTER INSERT ON organizations
   FOR EACH ROW EXECUTE FUNCTION create_wallet_for_new_org();
+
+-- =====================================================================
+-- Finances & Accounting
+-- Tenant's own business ledger and course invoices.
+-- Added from infra/db/migrations/034_finance_accounting.sql so the
+-- Docker database initialization creates these tables before 03-rls.sql.
+-- RLS policies are intentionally NOT defined here; 03-rls.sql handles
+-- RLS for these tables after this schema file has been executed.
+-- =====================================================================
+
+-- ---------- finance_transactions ----------
+CREATE TABLE IF NOT EXISTS finance_transactions (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  type              TEXT NOT NULL CHECK (type IN ('INCOME', 'EXPENSE')),
+  category          TEXT NOT NULL,
+  amount            NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+  currency          TEXT NOT NULL DEFAULT 'INR',
+  payment_method    TEXT,
+  reference_id      TEXT,
+  description       TEXT,
+  tds_notes         TEXT,
+  transaction_date  DATE NOT NULL DEFAULT CURRENT_DATE,
+  invoice_id        UUID,
+  source            TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'ai_agent')),
+  created_by_user   UUID REFERENCES users(id),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_finance_transactions_org_date
+  ON finance_transactions (organization_id, transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_finance_transactions_org_type
+  ON finance_transactions (organization_id, type);
+
+-- ---------- course_invoices ----------
+CREATE TABLE IF NOT EXISTS course_invoices (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  invoice_number        TEXT NOT NULL,
+  financial_year        TEXT NOT NULL,
+
+  seller_legal_name     TEXT NOT NULL,
+  seller_gstin          TEXT,
+  seller_address        TEXT,
+  seller_state          TEXT,
+  seller_state_code     TEXT,
+
+  student_name          TEXT NOT NULL,
+  student_gstin         TEXT,
+  student_address       TEXT,
+  student_state         TEXT NOT NULL,
+  student_state_code    TEXT NOT NULL,
+  place_of_supply       TEXT NOT NULL,
+
+  sac_code              TEXT NOT NULL DEFAULT '9992',
+  course_name           TEXT,
+
+  base_amount           NUMERIC(12,2) NOT NULL,
+  gst_rate              NUMERIC(5,2) NOT NULL DEFAULT 18,
+  cgst_rate             NUMERIC(5,2) NOT NULL DEFAULT 0,
+  cgst_amount           NUMERIC(12,2) NOT NULL DEFAULT 0,
+  sgst_rate             NUMERIC(5,2) NOT NULL DEFAULT 0,
+  sgst_amount           NUMERIC(12,2) NOT NULL DEFAULT 0,
+  igst_rate             NUMERIC(5,2) NOT NULL DEFAULT 0,
+  igst_amount           NUMERIC(12,2) NOT NULL DEFAULT 0,
+  intra_state           BOOLEAN NOT NULL,
+  total_amount          NUMERIC(12,2) NOT NULL,
+
+  status                TEXT NOT NULL DEFAULT 'issued' CHECK (status IN ('issued', 'void')),
+  pdf_generated_at      TIMESTAMPTZ,
+  source                TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'ai_agent')),
+  created_by_user       UUID REFERENCES users(id),
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  UNIQUE (organization_id, invoice_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_course_invoices_org_created
+  ON course_invoices (organization_id, created_at DESC);
+
+-- ---------- finance_invoice_counters ----------
+CREATE TABLE IF NOT EXISTS finance_invoice_counters (
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  financial_year    TEXT NOT NULL,
+  last_number       INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (organization_id, financial_year)
+);

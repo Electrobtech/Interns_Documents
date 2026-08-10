@@ -158,6 +158,22 @@ services:
       postgres: { condition: service_healthy }
     ports: ["4015:4015"]
 
+  # Finances & Accounting — tenant's own course-revenue/expense ledger +
+  # GST invoicing. Separate service from billing-service (platform-bills-
+  # tenant), same DB.
+  finance-service:
+    build:
+      context: .
+      dockerfile: services/finance-service/Dockerfile
+      network: host
+    env_file: .env
+    environment:
+      PORT: 4016
+      DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4016:4016"]
+
   # E-commerce service - integrates with e-commerce platforms
   ecommerce-service:
     build:
@@ -379,6 +395,7 @@ services:
       EMAIL_SERVICE_URL:       http://email-service:4013
       CALENDAR_SERVICE_URL:    http://calendar-service:4014
       BILLING_SERVICE_URL:     http://billing-service:4015
+      FINANCE_SERVICE_URL:     http://finance-service:4016
     depends_on:
       - auth-service
       - inbox-service
@@ -386,6 +403,7 @@ services:
       - campaign-service
       - ai-agent-service
       - billing-service
+      - finance-service
       - ecommerce-service
       - review-service
       - analytics-service
