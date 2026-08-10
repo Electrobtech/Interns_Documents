@@ -4,6 +4,7 @@ const { pool, authenticate, requirePermission, logAudit } = require('@lead/share
 const importRoutes = require('./importRoutes');
 const followUpRoutes = require('./followUpRoutes');
 const sheetsRoutes = require('./sheetsRoutes');
+const spreadsheetsRoutes = require('./spreadsheetsRoutes');
 
 const app = express();
 app.use(cors());
@@ -32,6 +33,11 @@ app.use(followUpRoutes);
 // above. Supports private sheets via a service account (falls back to the
 // public CSV export if unconfigured). See sheetsRoutes.js.
 app.use(sheetsRoutes);
+
+// Saved, editable spreadsheets (Support Agent "Import" tab) — upload a
+// file or fetch a Google Sheet, then view/edit the grid in-app and import
+// into contacts/leads whenever ready. See spreadsheetsRoutes.js.
+app.use(spreadsheetsRoutes);
 
 app.get('/contacts', async (req, res) => {
   // ?tag=vip lets the Bulk Campaign tab's "Contact Segment" dropdown

@@ -114,6 +114,7 @@ const routes = [
   { path: '/leads',               target: CONTACT },
   { path: '/follow-ups',          target: CONTACT }, // Follow-ups feature: services/contact-service/src/followUpRoutes.js
   { path: '/sheets',              target: CONTACT }, // Google Sheets -> CRM import: services/contact-service/src/sheetsRoutes.js
+  { path: '/spreadsheets',        target: CONTACT }, // saved, editable spreadsheets: services/contact-service/src/spreadsheetsRoutes.js
   { path: '/campaigns',           target: CAMPAIGN },
   // Message Templates (Template Creation module) — owned by campaign-service
   // (src/templates.js + src/templateMedia.js), not yet in this route table.

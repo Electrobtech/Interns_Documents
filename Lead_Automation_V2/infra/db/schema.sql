@@ -1943,3 +1943,29 @@ CREATE INDEX IF NOT EXISTS ix_marketing_calendar_events_org
   ON marketing_calendar_events (organization_id);
 CREATE INDEX IF NOT EXISTS ix_marketing_calendar_events_org_date
   ON marketing_calendar_events (organization_id, date);
+
+-- ---------- Imported Sheets (Support Agent Import tab: saved, editable spreadsheets) ----------
+-- See migrations/037_imported_sheets.sql for full column notes.
+CREATE TABLE IF NOT EXISTS imported_sheets (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  name              TEXT NOT NULL,
+  source            TEXT NOT NULL
+                      CHECK (source IN ('upload', 'google_sheets')),
+  source_ref        TEXT,
+
+  headers           JSONB NOT NULL DEFAULT '[]'::jsonb,
+  rows              JSONB NOT NULL DEFAULT '[]'::jsonb,
+
+  last_imported_at  TIMESTAMPTZ,
+
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_imported_sheets_org
+  ON imported_sheets (organization_id);
+CREATE INDEX IF NOT EXISTS ix_imported_sheets_org_updated
+  ON imported_sheets (organization_id, updated_at DESC);

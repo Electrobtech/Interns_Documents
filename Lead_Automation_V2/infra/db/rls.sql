@@ -78,7 +78,8 @@ BEGIN
     'marketing_audiences',
     'marketing_campaigns',
     'marketing_broadcasts',
-    'marketing_calendar_events'
+    'marketing_calendar_events',
+    'imported_sheets'
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
