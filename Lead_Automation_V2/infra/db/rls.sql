@@ -73,6 +73,7 @@ BEGIN
     'organization_channel_subscriptions', 'whatsapp_billing_ledger',
     'meta_usage_charges', 'sms_usage_charges',
     'products',
+    'finance_transactions', 'course_invoices', 'finance_invoice_counters' ,
     'message_templates',
     'marketing_assets',
     'marketing_audiences',
@@ -80,6 +81,7 @@ BEGIN
     'marketing_broadcasts',
     'marketing_calendar_events',
     'imported_sheets'
+
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);

@@ -251,6 +251,22 @@ services:
       postgres: { condition: service_healthy }
     ports: ["4015:4015"]
 
+
+  # Finances & Accounting — tenant's own course-revenue/expense ledger +
+  # GST invoicing. Separate service from billing-service (platform-bills-
+  # tenant), same DB.
+  finance-service:
+    build:
+      context: .
+      dockerfile: services/finance-service/Dockerfile
+      network: host
+    env_file: .env
+    environment:
+      PORT: 4016
+      DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4016:4016"]
   # Marketing Hub service - Assets Library (upload/list/delete) and future
   # Marketing Hub backend routes. Files land under public/uploads/marketing-assets;
   # GATEWAY_PUBLIC_URL is used so returned storage_url resolves via the gateway.
@@ -261,15 +277,16 @@ services:
       network: host
     env_file: .env
     environment:
-      MARKETING_HUB_PORT: "4016"
+      MARKETING_HUB_PORT: "4017"
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
       GATEWAY_PUBLIC_URL: ${GATEWAY_PUBLIC_URL:-http://localhost:8080}
       GATEWAY_PORT: ${GATEWAY_PORT:-8080}
     depends_on:
       postgres: { condition: service_healthy }
-    ports: ["4016:4016"]
+    ports: ["4017:4017"]
     volumes:
       - marketing_hub_uploads:/app/services/marketing-hub-service/public/uploads
+
 
   # E-commerce service - integrates with e-commerce platforms
   ecommerce-service:
@@ -496,7 +513,11 @@ services:
       EMAIL_SERVICE_URL:       http://email-service:4013
       CALENDAR_SERVICE_URL:    http://calendar-service:4014
       BILLING_SERVICE_URL:     http://billing-service:4015
-      MARKETING_HUB_SERVICE_URL: http://marketing-hub-service:4016
+
+      FINANCE_SERVICE_URL:     http://finance-service:4016
+
+      MARKETING_HUB_SERVICE_URL: http://marketing-hub-service:4017
+
     depends_on:
       - auth-service
       - inbox-service
@@ -508,6 +529,7 @@ services:
       - ai-sales-service
       - ai-support-service
       - billing-service
+      - finance-service
       - ecommerce-service
       - review-service
       - analytics-service

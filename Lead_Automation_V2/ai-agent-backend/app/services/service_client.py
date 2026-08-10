@@ -204,3 +204,117 @@ def format_customer_context(ctx: dict | None) -> str | None:
         lines.append(f"- Notes on file: {notes[:600]}")
 
     return "\n".join(lines) if lines else None
+
+
+# ── Finances & Accounting (services/finance-service) ────────────────────────
+#
+# generate_course_invoice / record_expense are NOT best-effort — like
+# create_campaign above, these are real financial/statutory writes (a GST
+# invoice number, once issued, cannot be silently reused), so a failure
+# must surface as a real error to whoever is confirming the action, not be
+# swallowed.
+#
+# By design (see api/v1/finance_agent.py), the Sales Agent itself never
+# calls these two directly from a chat turn — it only *proposes* a
+# structured action for a human to review, exactly the same one-step-removed
+# pattern this file already uses for create_campaign (agent drafts a plan
+# item, POST .../convert commits it). That mirrors this repo's existing
+# rule for the Sales Agent: "You NEVER take direct action on the CRM... you
+# only produce... for a human to review and apply" (see
+# app/agents/sales_agent.py's SYSTEM_PROMPT). Route a natural-language
+# finance command ("record ₹45,000 developer salary payment") through
+# POST /ai-agents/sales/finance/propose first, and only call the functions
+# below from POST /ai-agents/sales/finance/confirm once a human has
+# approved the parsed amount/category.
+
+async def generate_course_invoice(
+    organization_id: uuid.UUID,
+    *,
+    student_name: str,
+    student_state: str,
+    total_amount: float,
+    course_name: str | None = None,
+    student_gstin: str | None = None,
+    student_address: str | None = None,
+) -> dict:
+    """Calls finance-service's POST /finances/invoices — computes the
+    CGST/SGST-vs-IGST split, assigns the next gapless invoice number for
+    this org+FY, and returns { invoice, transaction }. Raises on failure
+    (bad seller GST profile, invalid amount, etc.) so the caller can show
+    the real error rather than silently no-op'ing."""
+    settings = get_settings()
+    token = sign_service_token(organization_id)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(
+            f"{settings.FINANCE_SERVICE_URL}/finances/invoices",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "studentName": student_name,
+                "studentState": student_state,
+                "totalAmount": total_amount,
+                "courseName": course_name,
+                "studentGstin": student_gstin,
+                "studentAddress": student_address,
+                "source": "ai_agent",
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def record_expense(
+    organization_id: uuid.UUID,
+    *,
+    category: str,
+    amount: float,
+    description: str | None = None,
+    payment_method: str | None = None,
+    reference_id: str | None = None,
+) -> dict:
+    """Calls finance-service's POST /finances/transactions with
+    type=EXPENSE, source=ai_agent (tagged distinctly from manual entries —
+    see the "AI Agent" badge in frontend/src/components/finances/
+    ExpensesOutgoings.jsx). Raises on failure."""
+    settings = get_settings()
+    token = sign_service_token(organization_id)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(
+            f"{settings.FINANCE_SERVICE_URL}/finances/transactions",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "type": "EXPENSE",
+                "category": category,
+                "amount": amount,
+                "description": description,
+                "paymentMethod": payment_method,
+                "referenceId": reference_id,
+                "source": "ai_agent",
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def get_financial_summary(organization_id: uuid.UUID, *, from_date: str | None = None, to_date: str | None = None) -> dict | None:
+    """Best-effort read (like get_contacts/get_leads above) — powers
+    'what's our net revenue this month?'-style questions. Returns None on
+    any failure rather than raising, since this only enriches a prompt."""
+    settings = get_settings()
+    token = sign_service_token(organization_id)
+    params = {}
+    if from_date:
+        params["from"] = from_date
+    if to_date:
+        params["to"] = to_date
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.FINANCE_SERVICE_URL}/finances/summary",
+                headers={"Authorization": f"Bearer {token}"},
+                params=params or None,
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except Exception:
+        logger.warning("finance_summary_fetch_failed (non-fatal)", exc_info=True)
+        return None

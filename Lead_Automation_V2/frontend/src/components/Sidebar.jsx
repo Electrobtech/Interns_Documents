@@ -8,7 +8,7 @@ import {
   Star, BarChart3, Plug, Settings, MessageCircle, Instagram,
   MessageSquare, Smartphone, Globe, Phone, Mail, ChevronDown, Bell,
   Zap, FileText, Linkedin, PanelLeftClose, PanelLeftOpen, CreditCard,
-  LayoutTemplate, Workflow, CalendarClock, Package,
+  LayoutTemplate, Workflow, CalendarClock, Package, IndianRupee,
 } from 'lucide-react';
 import { useUnreadCounts } from '@/lib/useUnreadCounts';
 
@@ -44,6 +44,7 @@ const PLATFORM = [
   { label: 'Documents & Knowledge',   icon: FileText,        href: '/app/documents'          },
   { label: 'Integrations & APIs',     icon: Plug,            href: '/app/integrations'       },
   { label: 'Billing & Payments',      icon: CreditCard,      href: '/app/billing'             },
+  { label: 'Finances & Accounting',   icon: IndianRupee,     href: '/app/finances'            },
   { label: 'Settings & Team',         icon: Settings,        href: '/app/settings'           },
   { label: 'Click Notification Demo', icon: Bell,            href: '/app/notification-demo' },
 ];
