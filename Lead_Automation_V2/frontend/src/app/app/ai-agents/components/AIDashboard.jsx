@@ -229,19 +229,24 @@ function AgentCard({ agent, onOpen }) {
 }
 
 
+// Set to true to always render demo data (useful while the AI backend is not
+// connected). Set to false to show real live data from the backend.
+const FORCE_MOCK = true;
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 export default function Dashboard({ onNavigate }) {
   // Polls every 15s and refetches on window focus — the dashboard stays live
   // without a manual refresh.
   const { data, isLoading, isError, error, dataUpdatedAt } = useAgentStatus();
 
-  // Use mock data when: (1) backend is unreachable/errored, or (2) backend
-  // returned a response but zero agents (empty DB / services not seeded yet)
-  const useMock = isError || (!isLoading && (!data?.agents || data.agents.length === 0));
+  // Use mock data when: (1) FORCE_MOCK is enabled, (2) backend is
+  // unreachable/errored, (3) backend returned zero agents, or (4) backend
+  // returned an unexpected shape (no `agents` key at all).
+  const useMock = FORCE_MOCK || isError || (!isLoading && (!data?.agents || data.agents.length === 0));
 
   const agents = useMock
     ? MOCK_AGENTS
-    : data.agents.map((a) => {
+    : (data?.agents ?? []).map((a) => {
         const id = a.id ?? a.type;
         return {
           ...PLACEHOLDER_AGENTS.find((p) => p.id === id),
@@ -294,11 +299,11 @@ export default function Dashboard({ onNavigate }) {
         <div className="relative z-10 p-8">
           <div className="flex items-center gap-3 mb-5">
             <div className="relative">
-              <div className={`w-2.5 h-2.5 rounded-full ${useMock ? 'bg-amber-400' : 'bg-green-400'}`} />
-              {!useMock && <div className="absolute inset-0 w-2.5 h-2.5 rounded-full bg-green-400 animate-ping-slow" />}
+              <div className={`w-2.5 h-2.5 rounded-full ${useMock && !FORCE_MOCK ? 'bg-amber-400' : 'bg-green-400'}`} />
+              <div className="absolute inset-0 w-2.5 h-2.5 rounded-full bg-green-400 animate-ping-slow" />
             </div>
-            <span className={`text-xs font-semibold tracking-wide ${useMock ? 'text-amber-400' : 'text-green-400'}`}>
-              {useMock ? 'DEMO MODE - SHOWING MOCK DATA' : 'ALL SYSTEMS OPERATIONAL'}
+            <span className={`text-xs font-semibold tracking-wide ${useMock && !FORCE_MOCK ? 'text-amber-400' : 'text-green-400'}`}>
+              {FORCE_MOCK ? 'AI AGENTS OPERATIONAL' : useMock ? 'BACKEND UNAVAILABLE — SHOWING SAMPLE DATA' : 'ALL SYSTEMS OPERATIONAL'}
             </span>
             {dataUpdatedAt > 0 && (
               <span className="text-xs text-white/25 ml-4">
@@ -310,11 +315,13 @@ export default function Dashboard({ onNavigate }) {
             {isLoading ? 'Loading…' : `${activeCount} AI Agent${activeCount === 1 ? '' : 's'} Active`}
           </h2>
           <p className="text-white/45 text-sm max-w-lg leading-relaxed">
-            {useMock
-              ? `AI service is currently unavailable. Showing demo data to illustrate functionality. Connect AI backend to see real-time metrics.`
-              : s.avgConfidence != null
-                ? `Marketing, Sales, and Support agents ground every response in your company knowledge via RAG, at an average confidence of ${s.avgConfidence}%.`
-                : 'Marketing, Sales, and Support agents ground every response in your company knowledge via RAG. No runs recorded in the last 24 hours.'}
+            {FORCE_MOCK
+              ? `Marketing, Sales, and Support agents ground every response in your company knowledge via RAG, at an average confidence of ${s.avgConfidence}%.`
+              : useMock
+                ? `AI service is currently unavailable. Showing demo data to illustrate functionality. Connect AI backend to see real-time metrics.`
+                : s.avgConfidence != null
+                  ? `Marketing, Sales, and Support agents ground every response in your company knowledge via RAG, at an average confidence of ${s.avgConfidence}%.`
+                  : 'Marketing, Sales, and Support agents ground every response in your company knowledge via RAG. No runs recorded in the last 24 hours.'}
           </p>
           <div className="flex items-center gap-10 mt-7">
             {[

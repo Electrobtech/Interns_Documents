@@ -10,7 +10,7 @@ import {
 } from '@/lib/queries/superAdmin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import Badge from '@/components/ui/Badge';
+import Badge from '@/components/ui/Badge.jsx';
 
 function money(n) {
   return `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;

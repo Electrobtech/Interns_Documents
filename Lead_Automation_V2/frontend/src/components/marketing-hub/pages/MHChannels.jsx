@@ -1,23 +1,14 @@
 'use client';
 import { useState } from 'react';
 import {
-  Plus, Filter, Calendar, ChevronDown, Info, Settings as SettingsIcon,
+  Plus, Filter, Calendar, ChevronDown, AlertCircle, Info, Settings as SettingsIcon,
   Ban, Send, Radio, Mail, MessageCircle, MessageSquare, Instagram, Linkedin,
 } from 'lucide-react';
 import MHBadge from '../ui/MHBadge';
 import { useMHToast } from '../ui/MHToast';
-import { channels, campaigns as MOCK_CAMPAIGNS, broadcasts as MOCK_BROADCASTS } from '../mockData';
+import { channels } from '../mockData';
 import { useChannelStats, useIntegrationsList } from '@/lib/queries/marketingHub';
 import { setPrefillChannel } from '../prefill';
-
-// Derive mock stats from the mock datasets — counts how many mock campaigns/broadcasts
-// use each channel's platformKey, so channel cards show non-zero demo counts.
-const MOCK_STATS = channels.reduce((acc, ch) => {
-  const campaigns = MOCK_CAMPAIGNS.filter(c => (c.platform || '').toLowerCase() === (ch.platformKey || '').toLowerCase()).length;
-  const broadcasts = MOCK_BROADCASTS.filter(b => (b.channel || '').toLowerCase() === ch.id.toLowerCase()).length;
-  acc[ch.id] = { campaigns, broadcasts };
-  return acc;
-}, {});
 
 const CHANNEL_ICONS = {
   whatsapp: MessageCircle,
@@ -105,6 +96,8 @@ function ChannelCard({ ch, toast, stats, integrations, onNavigate }) {
         )}
       </div>
 
+
+
       <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
         <button
           className="mh-btn"
@@ -134,9 +127,9 @@ function ChannelCard({ ch, toast, stats, integrations, onNavigate }) {
 export default function MHChannels({ onNavigate }) {
   const toast = useMHToast();
   const [dateOpen, setDateOpen] = useState(false);
-  const { data: realStats } = useChannelStats();
-  // Fall back to mock-derived stats when the API returns nothing
-  const stats = (realStats && Object.keys(realStats).length > 0) ? realStats : MOCK_STATS;
+  const [rangeLabel, setRangeLabel] = useState('Last 30 days');
+  const RANGE_DAYS = { 'Last 7 days': 7, 'Last 30 days': 30, 'Last 90 days': 90, 'All time': null };
+  const { data: stats } = useChannelStats(RANGE_DAYS[rangeLabel]);
   const { data: integrations = [] } = useIntegrationsList();
 
   return (
@@ -154,15 +147,15 @@ export default function MHChannels({ onNavigate }) {
               onClick={() => setDateOpen(o => !o)}
               style={{ gap: 8 }}
             >
-              <Calendar size={13} /> Last 30 days <ChevronDown size={13} />
+              <Calendar size={13} /> {rangeLabel} <ChevronDown size={13} />
             </button>
             {dateOpen && (
               <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, width: 200, background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 10, boxShadow: 'var(--mh-shadow-lg)', zIndex: 50, padding: '6px 0' }}>
-                {['Last 7 days', 'Last 30 days', 'Last 90 days'].map(opt => (
-                  <button key={opt} onClick={() => { setDateOpen(false); toast.show(`Showing: ${opt} (counts above are all-time until date filtering is added)`, 'info'); }}
-                    style={{ width: '100%', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--mh-text-2)', textAlign: 'left', fontFamily: 'var(--mh-font-body)' }}
+                {Object.keys(RANGE_DAYS).map(opt => (
+                  <button key={opt} onClick={() => { setDateOpen(false); setRangeLabel(opt); toast.show(`Showing: ${opt}`, 'info'); }}
+                    style={{ width: '100%', padding: '8px 14px', background: opt === rangeLabel ? '#f3f4f6' : 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--mh-text-2)', textAlign: 'left', fontFamily: 'var(--mh-font-body)' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                    onMouseLeave={e => e.currentTarget.style.background = opt === rangeLabel ? '#f3f4f6' : 'none'}>
                     {opt}
                   </button>
                 ))}

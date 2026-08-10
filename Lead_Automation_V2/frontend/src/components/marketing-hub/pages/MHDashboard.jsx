@@ -1,37 +1,20 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Megaphone, Users, Sparkles, BarChart3, RefreshCw,
-  Download, ArrowRight, AlertTriangle, CheckCircle, Info, Radio, Search, Pen,
-  BarChart2, Activity, Clock, Target, DollarSign } from 'lucide-react';
+import { TrendingUp, TrendingDown, Megaphone, Users, AlertTriangle, CheckCircle, Info, RefreshCw, Download, Search, Bot, Swords, Activity } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { kpiData, performanceData, platformData, funnelData, channelPerformance,
-  audienceGrowth, aiInsights, revenueData } from '../mockData';
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { performanceData, platformData, funnelData, audienceGrowth, aiInsights, revenueData, channelPerformance, aeoScores, seoKeywords, competitors } from '../mockData';
 import { useMHToast } from '../ui/MHToast';
-import { useCampaigns, useAISuggestions } from '@/lib/queries/marketingHub';
+import { useCampaigns } from '@/lib/queries/marketingHub';
 import { printReport } from '../export';
-
-const QUICK_ACTIONS = [
-  { icon: Megaphone, label: 'Launch Campaign', sub: 'AI-powered', color: '#6366f1', page: 'campaigns' },
-  { icon: Radio,    label: 'Broadcast',        sub: 'WhatsApp · Email', color: '#10b981', page: 'broadcasts' },
-  { icon: Pen,      label: 'Generate Content', sub: 'AI Studio', color: '#8b5cf6', page: 'content' },
-  { icon: Search,   label: 'SEO Audit',        sub: 'Run now', color: '#f59e0b', page: 'seo' },
-  { icon: Users,    label: 'Build Audience',   sub: 'Segmentation', color: '#3b82f6', page: 'audience' },
-  { icon: BarChart2,label: 'View Analytics',   sub: 'Live data', color: '#ec4899', page: 'analytics' },
-];
-
-const ACTIVITY = [
-  { icon: Megaphone,     text: 'Campaign "AI Bootcamp Q3" launched', sub: '2 min ago', color: '#6366f1' },
-  { icon: Sparkles,      text: 'AI optimized WhatsApp Retargeting budget', sub: '18 min ago', color: '#8b5cf6' },
-  { icon: Users,         text: 'Audience "High-Intent Leads Q3" updated', sub: '1 hour ago', color: '#10b981' },
-  { icon: Radio,         text: 'Flash Sale broadcast sent to 12,000 contacts', sub: '3 hours ago', color: '#f59e0b' },
-  { icon: AlertTriangle, text: 'Competitor alert: HubSpot WhatsApp feature', sub: '5 hours ago', color: '#ef4444' },
-  { icon: CheckCircle,   text: 'SEO audit completed — 74/100 score', sub: '8 hours ago', color: '#10b981' },
-  { icon: BarChart3,     text: 'Monthly report generated and sent', sub: 'Yesterday', color: '#3b82f6' },
-];
 
 const insightIcons   = { warning: AlertTriangle, success: CheckCircle, info: Info };
 const insightColors  = { warning: '#d97706', success: '#059669', info: '#6366f1' };
+
+const ACTIVITY = [
+  { icon: Megaphone, color: '#6366f1', text: 'Q3 Promo Campaign launched', sub: '2 hours ago' },
+  { icon: Users, color: '#10b981', text: '1,200 new leads acquired from LinkedIn', sub: '4 hours ago' },
+  { icon: AlertTriangle, color: '#f59e0b', text: 'High bounce rate detected on Email blast', sub: 'Yesterday' }
+];
 
 function ChartHeader({ title, subtitle }) {
   return (
@@ -45,44 +28,7 @@ function ChartHeader({ title, subtitle }) {
 export default function MHDashboard({ onNavigate }) {
   const { show } = useMHToast();
   const { data: campaigns = [], refetch } = useCampaigns();
-  const aiSuggestions = useAISuggestions();
-  const [aiSummary, setAiSummary] = useState(null);
-  const [loadingAI, setLoadingAI] = useState(false);
 
-  // Fetch AI suggestions on mount
-  useEffect(() => {
-    const fetchAISuggestions = async () => {
-      setLoadingAI(true);
-      try {
-        const context = {
-          campaigns_count: campaigns.length,
-          active_campaigns: campaigns.filter(c => c.status === 'processing' || c.status === 'scheduled').length,
-          recent_performance: campaigns.slice(0, 5).map(c => ({
-            name: c.name,
-            channel: c.channel,
-            status: c.status,
-            recipients: c.total_recipients
-          }))
-        };
-        
-        const result = await aiSuggestions.mutateAsync(context);
-        setAiSummary(result);
-      } catch (error) {
-        console.error('Failed to fetch AI suggestions:', error);
-        // Keep using mock data on error
-      } finally {
-        setLoadingAI(false);
-      }
-    };
-
-    if (campaigns.length > 0) {
-      fetchAISuggestions();
-    }
-  }, [campaigns.length]);
-
-  // Real report from real mh_campaigns rows — everything else on this page
-  // is still the mock hero/chart data (see the plan doc); this button at
-  // least reports on genuine campaigns rather than the static KPI mock.
   const exportReport = () => {
     if (campaigns.length === 0) return show('No campaigns yet to report on', 'error');
     const totals = campaigns.reduce((acc, c) => {
@@ -105,83 +51,10 @@ export default function MHDashboard({ onNavigate }) {
   return (
     <div style={{ padding:'24px 28px', background:'var(--mh-bg)', minHeight:'100vh', display:'flex', flexDirection:'column', gap:24, overflowY:'auto' }}>
 
-      {/* Header row */}
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
-        <div>
-          <h1 style={{ fontFamily:'var(--mh-font-display)', fontSize:26, fontWeight:800, color:'#111827', margin:0 }}>Good morning ✨</h1>
-          <p style={{ fontSize:13, color:'#6b7280', marginTop:4, marginBottom:0 }}>Your marketing is performing well today</p>
-        </div>
-        <div style={{ display:'flex', gap:8 }}>
-          <button className="mh-btn mh-btn-ghost" onClick={exportReport}><Download size={14} />Export Report</button>
-          <button className="mh-btn mh-btn-ghost" onClick={() => { refetch(); show('Refreshed','success'); }}><RefreshCw size={14} />Refresh</button>
-        </div>
-      </div>
-
-      {/* Hero row */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:16 }}>
-        {/* AI Summary card */}
-        <div style={{ background:'linear-gradient(135deg,rgba(99,102,241,0.06),rgba(168,85,247,0.04))', border:'1px solid rgba(99,102,241,0.2)', borderRadius:18, padding:'24px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-            <div style={{ width:32, height:32, borderRadius:8, background:'var(--mh-ai-gradient)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-              <Sparkles size={16} color="#fff" />
-            </div>
-            <div>
-              <div style={{ fontFamily:'var(--mh-font-display)', fontSize:15, fontWeight:700, color:'#111827' }}>Today's AI Summary</div>
-              <div style={{ fontSize:11, color:'#6b7280' }}>Updated 2 minutes ago</div>
-            </div>
-          </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
-            {[
-              { label:'Revenue MTD', value:'₹52.6L', trend:'+34%', up:true },
-              { label:'Active Campaigns', value:aiSummary?.active_campaigns || campaigns.filter(c => c.status === 'processing' || c.status === 'scheduled').length.toString() || '14', trend:'+3', up:true },
-              { label:'Leads Today', value:aiSummary?.leads_today || '284', trend:'+18%', up:true },
-              { label:'Avg ROAS', value:aiSummary?.avg_roas || '29.4x', trend:'+8%', up:true },
-            ].map(m => (
-              <div key={m.label} style={{ background:'rgba(255,255,255,0.7)', border:'1px solid #e5e7eb', borderRadius:10, padding:'12px 14px' }}>
-                <div style={{ fontSize:10, color:'#6b7280', textTransform:'uppercase', letterSpacing:'0.06em', fontWeight:600 }}>{m.label}</div>
-                <div style={{ fontFamily:'var(--mh-font-display)', fontSize:20, fontWeight:800, color:'#111827', marginTop:2 }}>{m.value}</div>
-                <div style={{ fontSize:11, color: m.up ? '#059669' : '#dc2626', fontWeight:600, display:'flex', alignItems:'center', gap:3 }}>
-                  {m.up ? <TrendingUp size={10}/> : <TrendingDown size={10}/>}{m.trend}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ background:'rgba(255,255,255,0.8)', borderRadius:10, padding:'12px 14px', fontSize:13, color:'#374151', lineHeight:1.7, marginBottom:12 }}>
-            {loadingAI ? (
-              <span>Analyzing your marketing performance...</span>
-            ) : aiSummary?.suggestions ? (
-              <span>{aiSummary.suggestions}</span>
-            ) : (
-              <span><strong>3 campaigns need attention.</strong> CTR on Brand Awareness dropped 8% — creative refresh recommended. <strong>Increasing LinkedIn budget by 20%</strong> could generate +420 qualified leads.</span>
-            )}
-          </div>
-          <div style={{ marginBottom:14 }}>
-            <div style={{ display:'flex', justifyContent:'flex-end', fontSize:11, color:'#6b7280', marginBottom:4 }}>92% confidence</div>
-            <div className="progress-track"><div className="progress-fill" style={{ width:'92%', background:'var(--mh-primary)' }} /></div>
-          </div>
-          <div style={{ display:'flex', gap:8 }}>
-            <button className="mh-btn mh-btn-ai" onClick={() => onNavigate?.('campaigns')}><Sparkles size={13} />Apply Suggestions</button>
-            <button className="mh-btn mh-btn-ghost" onClick={() => onNavigate?.('campaigns')}>View Details →</button>
-          </div>
-        </div>
-
-        {/* Quick Actions card */}
-        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:18, padding:20 }}>
-          <div style={{ fontFamily:'var(--mh-font-display)', fontSize:14, fontWeight:700, color:'#111827', marginBottom:14 }}>Quick Actions</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
-            {QUICK_ACTIONS.map(a => (
-              <button key={a.label} onClick={() => onNavigate?.(a.page)} style={{ background:'#f9fafb', border:'1px solid #e5e7eb', borderRadius:10, padding:'12px 8px', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:6, transition:'all 0.15s' }}
-                onMouseEnter={e => { e.currentTarget.style.background='#f0f2f5'; e.currentTarget.style.borderColor='#d1d5db'; }}
-                onMouseLeave={e => { e.currentTarget.style.background='#f9fafb'; e.currentTarget.style.borderColor='#e5e7eb'; }}>
-                <div style={{ width:32, height:32, borderRadius:'50%', background:a.color+'18', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <a.icon size={15} color={a.color} />
-                </div>
-                <div style={{ fontSize:12, fontWeight:700, color:'#111827', textAlign:'center', lineHeight:1.3 }}>{a.label}</div>
-                <div style={{ fontSize:10, color:'#6b7280', textAlign:'center' }}>{a.sub}</div>
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* Header row — export/refresh only */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:8 }}>
+        <button className="mh-btn mh-btn-ghost" onClick={exportReport}><Download size={14} />Export Report</button>
+        <button className="mh-btn mh-btn-ghost" onClick={() => { refetch(); show('Refreshed','success'); }}><RefreshCw size={14} />Refresh</button>
       </div>
 
       {/* KPI strip */}
@@ -206,6 +79,7 @@ export default function MHDashboard({ onNavigate }) {
           </div>
         ))}
       </div>
+
 
       {/* Charts row 1 */}
       <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:16 }}>
@@ -386,6 +260,79 @@ export default function MHDashboard({ onNavigate }) {
         </div>
       </div>
 
+      {/* Analytics Expansion: AEO, SEO, Competitors */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:16, marginTop: 16 }}>
+        
+        {/* SEO Keywords */}
+        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:18, padding:20 }}>
+          <ChartHeader title="SEO Performance" subtitle="Top ranking keywords" />
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {seoKeywords.slice(0, 5).map(kw => (
+              <div key={kw.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <Search size={14} color="#6b7280" />
+                  <div>
+                    <div style={{ fontSize:12, fontWeight:600, color:'#111827' }}>{kw.term}</div>
+                    <div style={{ fontSize:10, color:'#6b7280' }}>Vol: {kw.volume.toLocaleString()}</div>
+                  </div>
+                </div>
+                <div style={{ textAlign:'right' }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#111827' }}>Rank #{kw.rank}</div>
+                  <div style={{ fontSize:10, color: kw.change > 0 ? '#059669' : kw.change < 0 ? '#dc2626' : '#6b7280', display:'flex', alignItems:'center', justifyContent:'flex-end', gap:2 }}>
+                    {kw.change > 0 ? <TrendingUp size={10}/> : kw.change < 0 ? <TrendingDown size={10}/> : null}
+                    {Math.abs(kw.change) || '-'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* AEO Scores */}
+        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:18, padding:20 }}>
+          <ChartHeader title="AEO Visibility" subtitle="Answer Engine Optimization" />
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {Object.entries(aeoScores).slice(0, 5).map(([key, value]) => {
+              const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+              return (
+                <div key={key}>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#374151', marginBottom:4 }}>
+                    <span style={{ display:'flex', alignItems:'center', gap:6 }}><Bot size={12} color="#8b5cf6" /> {label}</span>
+                    <span style={{ fontWeight:600 }}>{value}/100</span>
+                  </div>
+                  <div className="progress-track">
+                    <div className="progress-fill" style={{ width:`${value}%`, background: value >= 80 ? '#10b981' : value >= 70 ? '#f59e0b' : '#dc2626' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Competitor Analytics */}
+        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:18, padding:20 }}>
+          <ChartHeader title="Competitor Analytics" subtitle="Share of Voice & Mentions" />
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {competitors.slice(0, 5).map((comp, i) => (
+              <div key={comp.id} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ width:28, height:28, borderRadius:'50%', background:['#fee2e2','#e0e7ff','#dcfce3'][i%3], color:['#dc2626','#4f46e5','#16a34a'][i%3], display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700 }}>
+                  {comp.name.charAt(0)}
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:'#111827' }}>{comp.name}</div>
+                  <div style={{ fontSize:10, color:'#6b7280' }}>SOV: {comp.shareOfVoice}%</div>
+                </div>
+                <div style={{ fontSize:12, fontWeight:700, color:'#374151' }}>
+                  {comp.mentions}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </div>
+
     </div>
   );
 }
+

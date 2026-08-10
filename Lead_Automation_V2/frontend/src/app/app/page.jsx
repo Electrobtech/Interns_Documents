@@ -11,7 +11,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, Tooltip } from 'recharts';
 import { useApi } from '@/lib/useApi';
 import { useAgentStatus, useMarketingRuns, useSalesRuns, useSupportRuns } from '@/lib/queries/aiAgents';
 import { useSetHandledBy } from '@/lib/queries/crm';
-import Switch from '@/components/ui/Switch';
+import { Switch } from '@/components/ui/switch';
 
 const inr = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
@@ -416,7 +416,7 @@ export default function Dashboard() {
                   </div>
                   {c.id && (
                     <div className="flex flex-col items-center gap-0.5" title="Human takeover — pause the bot and reply yourself">
-                      <Switch checked={c.handledBy === 'human'} onChange={() => toggleHandledBy(c)} label="Human takeover" />
+                      <Switch checked={c.handledBy === 'human'} onCheckedChange={() => toggleHandledBy(c)} />
                       <span className="text-[9px] text-slate-400">{c.handledBy === 'human' ? 'Human' : 'Bot'}</span>
                     </div>
                   )}

@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { useAnalyticsFinance } from '@/lib/queries/superAdmin';
 import { KpiCard, SectionCard, QueryGate, money, pct } from './shared';
-import Badge from '@/components/ui/Badge';
+import Badge from '@/components/ui/Badge.jsx';
 
 const TIER_LABELS = { starter: 'Starter', professional: 'Pro', enterprise: 'Enterprise', custom: 'Custom' };
 const TIER_COLORS = { starter: '#94a3b8', professional: '#22c55e', enterprise: '#6366f1', custom: '#f59e0b' };

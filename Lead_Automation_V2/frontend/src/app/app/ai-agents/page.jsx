@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import AIDashboard from './components/AIDashboard';
-import MarketingHub from './components/marketing/MarketingHub';
+import MarketingHub from '@/components/marketing-hub/MarketingHub';
 import SalesWorkspace from './components/SalesWorkspace';
 import SupportWorkspace from './components/SupportWorkspace';
 

@@ -36,10 +36,13 @@ from app.models.support import (  # noqa: F401
 config = context.config
 
 # Override sqlalchemy.url from the environment at runtime.
+# Normalise all common PostgreSQL URL forms to the asyncpg async driver scheme.
 database_url = os.environ.get("DATABASE_URL", "")
 if database_url.startswith("postgres://"):
-    # asyncpg requires postgresql+asyncpg:// scheme.
     database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+# If DATABASE_URL is not set, fall through to the alembic.ini value (already asyncpg).
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 

@@ -16,6 +16,68 @@ import { useApi } from '@/lib/useApi';
 
 const AI = '/ai-agents';
 
+/* ─── Mock data (set USE_MOCK_DATA = false to use real backend) ─────────── */
+
+const USE_MOCK_DATA = true;
+
+const MOCK_STATUS_DATA = {
+  agents: [
+    {
+      id: 'marketing',
+      type: 'marketing',
+      status: 'active',
+      currentTask: 'Generating Q4 SaaS campaign recommendations via Content Studio',
+      confidence: 92,
+      queue: 7,
+      completed: 156,
+      avgRuntime: 45,
+      knowledgeUsed: 28,
+      lastActivity: '2 minutes ago',
+      capabilities: ['Campaign Planning', 'Content Generation', 'SEO Analysis', 'Social Media', 'Email Marketing'],
+    },
+    {
+      id: 'sales',
+      type: 'sales',
+      status: 'active',
+      currentTask: 'Qualifying 12 inbound leads from WhatsApp CTWA campaign',
+      confidence: 88,
+      queue: 12,
+      completed: 243,
+      avgRuntime: 32,
+      knowledgeUsed: 35,
+      lastActivity: '5 minutes ago',
+      capabilities: ['Lead Qualification', 'Deal Scoring', 'Follow-up Automation', 'CRM Integration', 'Pipeline Forecasting'],
+    },
+    {
+      id: 'support',
+      type: 'support',
+      status: 'idle',
+      currentTask: null,
+      confidence: 89,
+      queue: 3,
+      completed: 89,
+      avgRuntime: 28,
+      knowledgeUsed: 42,
+      lastActivity: '15 minutes ago',
+      capabilities: ['Ticket Triage', 'Knowledge Base Q&A', 'Auto-responses', 'Escalation Routing'],
+    },
+  ],
+  summary: {
+    agentsActive: 2,
+    tasksToday: 488,
+    pendingApprovals: 12,
+    avgConfidence: 89,
+    completedToday: 445,
+    creditsToday: 15240,
+    activeTasks: 23,
+    humanEscalations: 8,
+    knowledgeSources: 156,
+    connectedChannels: 6,
+    leadsProcessed: 2840,
+    revenueInfluenced: 842000,
+  },
+};
+
 /* ─── Live dashboard ─────────────────────────────────────────────────────── */
 
 /**
@@ -25,17 +87,20 @@ const AI = '/ai-agents';
  * compute (revenueInfluenced, leadsProcessed) come back as null by design;
  * render them with `fmt()` below so they show an em-dash rather than a
  * plausible-looking fake number.
+ *
+ * Set USE_MOCK_DATA = true above to bypass the backend entirely.
  */
 export function useAgentStatus({ live = true } = {}) {
   const { call } = useApi();
   return useQuery({
     queryKey: ['ai-agents', 'status'],
-    queryFn: () => call(`${AI}/status`),
-    refetchInterval: live ? 15_000 : false,
-    refetchOnWindowFocus: true,
-    staleTime: 10_000,
+    queryFn: USE_MOCK_DATA ? () => Promise.resolve(MOCK_STATUS_DATA) : () => call(`${AI}/status`),
+    refetchInterval: USE_MOCK_DATA ? false : live ? 15_000 : false,
+    refetchOnWindowFocus: !USE_MOCK_DATA,
+    staleTime: USE_MOCK_DATA ? Infinity : 10_000,
   });
 }
+
 
 /** GET /ai-agents/analytics?range=24h|7d|30d|90d — time series + capability leaderboard. */
 export function useAgentAnalytics(range = '7d', { live = true } = {}) {
@@ -176,6 +241,27 @@ export function useSessionExecutions(sessionId) {
 }
 
 /* ─── Knowledge base ─────────────────────────────────────────────────────── */
+
+/**
+ * GET /ai-agents/support/audit — RAG coverage gaps.
+ * Uses mock data by default since the endpoint isn't fully wired yet.
+ */
+export function useSupportCoverageAudit() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['ai-agents', 'support', 'audit'],
+    queryFn: USE_MOCK_DATA ? () => Promise.resolve({
+      gaps: [
+        { category: 'billing', gap_pct: 12, ungrounded_count: 8, ticket_count: 67 },
+        { category: 'onboarding', gap_pct: 5, ungrounded_count: 2, ticket_count: 40 }
+      ],
+      citations: [],
+      grounded_pct: 94,
+      total_runs_analyzed: 342
+    }) : () => call(`${AI}/support/audit`),
+    staleTime: 60_000,
+  });
+}
 
 export function useKnowledgeSources(workspace) {
   const { call } = useApi();

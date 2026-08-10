@@ -60,7 +60,7 @@ class SalesAgentConfig(Base):
     require_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Day-offsets a follow-up should fire on relative to the lead entering
     # the sequence, e.g. [1, 3, 7, 14] == "Day 1, 3, 7, 14".
-    followup_cadence_days: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False, default=lambda: [1, 3, 7, 14])
+    followup_cadence_days: Mapped[List[int]] = mapped_column(ARRAY(Integer), nullable=False, default=lambda: [1, 3, 7, 14])
 
     # Forecasting tab gap analysis: target vs. actual closed revenue this
     # month. NULL means "not set" — kept distinct from 0, same reasoning as
