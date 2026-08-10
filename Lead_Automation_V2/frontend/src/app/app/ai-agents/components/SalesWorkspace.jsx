@@ -12,7 +12,9 @@ import ConfidenceSignalModal from '@/components/ai-agents/sales/ConfidenceSignal
 import SalesQueueDrawer from '@/components/ai-agents/sales/SalesQueueDrawer';
 import SalesExportModal from '@/components/ai-agents/sales/SalesExportModal';
 import LeadDetailDrawer from '@/components/ai-agents/sales/LeadDetailDrawer';
-import { useLeads, useSendReply, useFindConversationByName } from '@/lib/queries/crm';
+import { useToast, ToastStack } from '@/components/Toast';
+import { useLeads, useUpdateLead, useSendReply, useFindConversationByName } from '@/lib/queries/crm';
+import { useProducts } from '@/lib/queries/products';
 import { useFollowUps, useFollowUpCounts } from '@/lib/queries/followUps';
 import {
   useHandoffs, useUpdateHandoff, useSalesAgentRuns,
@@ -283,11 +285,19 @@ function SalesOverview({ onOpenDealValueModal, onOpenConfidenceModal }) {
   );
 }
 
-// ─── Pipeline tab — real leads, grouped by real stage, click to open the
-// Lead Detail Drawer (which is how a card's stage actually changes — Apply
-// writes PUT /leads/:id via useApplyRecommendation, same endpoint the task
-// spec's "connect card stage transitions to PUT /leads/:id/stage" calls for).
-function Pipeline({ leads, isLoading, onSelectLead }) {
+// ─── Pipeline tab — real leads, grouped by real stage. Two ways to move a
+// lead: drag a card to another column (fires PUT /leads/:id via
+// useUpdateLead, same endpoint the task spec's "connect card stage
+// transitions to PUT /leads/:id/stage" calls for — updateLead sends a
+// partial body so { stage } alone leaves score untouched), or click a card
+// to open the Lead Detail Drawer for the full AI-scored view + Apply flow.
+// Native HTML5 drag-and-drop (no added dependency): a real drag never fires
+// the card's onClick in any modern browser, so both interactions coexist
+// without extra click-vs-drag bookkeeping.
+function Pipeline({ leads, isLoading, onSelectLead, onMoveStage, movingLeadId }) {
+  const [dragLeadId, setDragLeadId] = useState(null);
+  const [dragOverStage, setDragOverStage] = useState(null);
+
   const byStage = useMemo(() => {
     const grouped = {};
     STAGE_ORDER.forEach((s) => { grouped[s] = []; });
@@ -307,31 +317,82 @@ function Pipeline({ leads, isLoading, onSelectLead }) {
       {STAGE_ORDER.map((stage) => {
         const stageLeads = byStage[stage];
         const color = STAGE_COLOR[stage];
+        const isDragTarget = dragOverStage === stage;
         return (
-          <div key={stage} className="flex-shrink-0 w-56">
-            <div className="flex items-center gap-2 mb-3">
+          <div
+            key={stage}
+            className={`flex-shrink-0 w-56 rounded-xl transition-colors ${isDragTarget ? 'bg-blue-50/60 ring-2 ring-blue-200' : ''}`}
+            onDragOver={(e) => {
+              if (!dragLeadId) return;
+              e.preventDefault(); // required to allow a drop
+              e.dataTransfer.dropEffect = 'move';
+              if (dragOverStage !== stage) setDragOverStage(stage);
+            }}
+            onDragLeave={(e) => {
+              // Only clear if we're actually leaving the column, not just
+              // moving between two child elements inside it.
+              if (!e.currentTarget.contains(e.relatedTarget)) setDragOverStage(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              const leadId = e.dataTransfer.getData('text/plain') || dragLeadId;
+              setDragOverStage(null);
+              setDragLeadId(null);
+              if (!leadId) return;
+              const lead = (leads || []).find((l) => String(l.id) === String(leadId));
+              if (!lead || lead.stage === stage) return; // no-op drop back in the same column
+              onMoveStage?.(lead, stage);
+            }}
+          >
+            <div className="flex items-center gap-2 mb-3 px-0.5">
               <div className="w-2 h-2 rounded-full" style={{ background: color }} />
               <span className="text-xs font-semibold text-[#0F1929]">{STAGE_LABEL[stage]}</span>
               <span className="ml-auto text-xs text-slate-400">{stageLeads.length}</span>
             </div>
-            <div className="space-y-2.5">
+            <div className="space-y-2.5 min-h-[3rem]">
               {stageLeads.length === 0 && (
-                <div className="text-xs text-slate-300 text-center py-4">No leads</div>
+                <div className={`text-xs text-center py-4 rounded-lg border border-dashed ${isDragTarget ? 'border-blue-200 text-blue-400' : 'border-transparent text-slate-300'}`}>
+                  {isDragTarget ? 'Drop to move here' : 'No leads'}
+                </div>
               )}
-              {stageLeads.map((lead) => (
-                <button
-                  key={lead.id}
-                  onClick={() => onSelectLead(lead)}
-                  className="w-full text-left p-3.5 rounded-xl border border-[#E4E8F0] bg-white hover:shadow-md transition-all hover:border-blue-100"
-                >
-                  <div className="text-xs font-semibold text-[#0F1929] mb-0.5 truncate">{lead.name || 'Unnamed lead'}</div>
-                  <div className="text-xs text-slate-400 mb-2 truncate">{lead.source || 'Source unknown'}</div>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex-1"><ConfidenceMeter value={Number(lead.score) || 0} color={color} /></div>
-                    <Mono color={color}>{lead.score ?? '—'}</Mono>
+              {stageLeads.map((lead) => {
+                const isMoving = movingLeadId === lead.id;
+                const isDragging = dragLeadId === lead.id;
+                return (
+                  <div
+                    key={lead.id}
+                    draggable={!isMoving}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', String(lead.id));
+                      e.dataTransfer.effectAllowed = 'move';
+                      setDragLeadId(lead.id);
+                    }}
+                    onDragEnd={() => {
+                      setDragLeadId(null);
+                      setDragOverStage(null);
+                    }}
+                    onClick={() => !isMoving && onSelectLead(lead)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter') onSelectLead(lead); }}
+                    className={`w-full text-left p-3.5 rounded-xl border border-[#E4E8F0] bg-white transition-all cursor-grab active:cursor-grabbing hover:shadow-md hover:border-blue-100 ${isDragging ? 'opacity-40' : ''} ${isMoving ? 'opacity-60 pointer-events-none' : ''}`}
+                  >
+                    <div className="text-xs font-semibold text-[#0F1929] mb-0.5 truncate">{lead.name || 'Unnamed lead'}</div>
+                    <div className="flex items-center gap-1.5 mb-2 min-w-0">
+                      <span className="text-xs text-slate-400 truncate">{lead.source || 'Source unknown'}</span>
+                      {lead.product_name && (
+                        <span className="text-[10px] font-medium text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded-full truncate shrink-0">
+                          {lead.product_name}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1"><ConfidenceMeter value={Number(lead.score) || 0} color={color} /></div>
+                      <Mono color={color}>{isMoving ? '…' : (lead.score ?? '—')}</Mono>
+                    </div>
                   </div>
-                </button>
-              ))}
+                );
+              })}
             </div>
           </div>
         );
@@ -674,6 +735,51 @@ function Forecasting({ onOpenDealValueModal, onOpenTargetModal }) {
           <p className="text-xs text-blue-800 leading-relaxed">{data.explanation}</p>
         </div>
       </Card>
+      {data.pipeline_by_product && data.pipeline_by_product.length > 0 && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <SectionTitle>Pipeline by Product</SectionTitle>
+            <button onClick={onOpenTargetModal} className="text-xs text-blue-600 hover:underline">
+              Set product targets
+            </button>
+          </div>
+          <div className="space-y-3">
+            {data.pipeline_by_product.map((p) => {
+              const g = p.revenue_gap;
+              const pct = g.pct_of_target != null ? Math.min(100, Math.max(0, g.pct_of_target)) : null;
+              return (
+                <div key={p.product_id || 'unassigned'} className="p-3.5 rounded-xl border border-[#E4E8F0] bg-white">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs font-semibold text-[#0F1929] truncate">{p.product_name}</span>
+                      {p.product_category && (
+                        <span className="text-[10px] text-slate-400 px-1.5 py-0.5 bg-slate-50 rounded-full flex-shrink-0">{p.product_category}</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-slate-400 flex-shrink-0">{p.open_deal_count} open</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-slate-500 w-24 flex-shrink-0">
+                      Pipeline: <Mono color="#0F1929">{p.pipeline_value != null ? `$${p.pipeline_value.toLocaleString()}` : '—'}</Mono>
+                    </span>
+                    {pct != null ? (
+                      <>
+                        <div className="flex-1"><ConfidenceMeter value={pct} color={g.gap != null && g.gap <= 0 ? '#10B981' : '#F59E0B'} /></div>
+                        <span className="text-xs text-slate-400 w-10 text-right flex-shrink-0">{Math.round(pct)}%</span>
+                      </>
+                    ) : (
+                      <span className="flex-1 text-xs text-slate-300">{g.note}</span>
+                    )}
+                  </div>
+                  {g.target != null && (
+                    <p className="text-[11px] text-slate-400 mt-1.5">{g.note}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -732,8 +838,87 @@ function Toggle({ value, onChange }) {
   );
 }
 
+// ─── Revenue Targets — org-wide target had no settings UI at all before
+// this (only a "+ Set Target" CTA that jumped to this tab and found
+// nothing to fill in); per-product targets are new. Local draft state +
+// explicit Save (not patch-per-keystroke) since these are money figures —
+// a stray keypress shouldn't silently PATCH a wrong target.
+function RevenueTargets({ config, products, patch, saving }) {
+  const [orgDraft, setOrgDraft] = useState(config.monthly_revenue_target ?? '');
+  const [productDrafts, setProductDrafts] = useState(() => ({ ...(config.product_targets || {}) }));
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (!dirty) {
+      setOrgDraft(config.monthly_revenue_target ?? '');
+      setProductDrafts({ ...(config.product_targets || {}) });
+    }
+  }, [config, dirty]);
+
+  const save = () => {
+    const cleanedProductTargets = {};
+    Object.entries(productDrafts).forEach(([id, v]) => {
+      if (v !== '' && v != null && !Number.isNaN(Number(v))) cleanedProductTargets[id] = Number(v);
+    });
+    patch({
+      monthly_revenue_target: orgDraft === '' ? null : Number(orgDraft),
+      product_targets: cleanedProductTargets,
+    });
+    setDirty(false);
+  };
+
+  return (
+    <Card className="p-5">
+      <SectionTitle className="mb-4">Revenue Targets</SectionTitle>
+      <div className="space-y-3.5">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-600">Monthly revenue target (org-wide)</span>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-lg border border-[#E4E8F0]">
+            <span className="text-xs text-slate-400">$</span>
+            <input
+              type="number" min="0" step="1" placeholder="Not set" value={orgDraft}
+              onChange={(e) => { setOrgDraft(e.target.value); setDirty(true); }}
+              className="w-28 bg-transparent text-xs text-slate-700 outline-none"
+            />
+          </div>
+        </div>
+        {products && products.length > 0 && (
+          <div className="pt-2 border-t border-slate-100 space-y-2.5">
+            <span className="text-xs font-medium text-slate-500">Per-product targets</span>
+            {products.map((p) => (
+              <div key={p.id} className="flex items-center justify-between">
+                <span className="text-sm text-slate-600 truncate pr-3">{p.name}</span>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 rounded-lg border border-[#E4E8F0] flex-shrink-0">
+                  <span className="text-xs text-slate-400">$</span>
+                  <input
+                    type="number" min="0" step="1" placeholder="Not set"
+                    value={productDrafts[p.id] ?? ''}
+                    onChange={(e) => { setProductDrafts((d) => ({ ...d, [p.id]: e.target.value })); setDirty(true); }}
+                    className="w-28 bg-transparent text-xs text-slate-700 outline-none"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {dirty && (
+          <div className="flex justify-end pt-1">
+            <button
+              onClick={save} disabled={saving}
+              className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save targets'}
+            </button>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function SalesSettings() {
   const { data: config, isLoading } = useSalesAgentConfig();
+  const { data: products } = useProducts('active');
   const update = useUpdateSalesAgentConfig();
 
   const patch = (body) => update.mutate(body);
@@ -748,6 +933,7 @@ function SalesSettings() {
 
   return (
     <div className="max-w-2xl space-y-5">
+      <RevenueTargets config={config} products={products} patch={patch} saving={update.isPending} />
       <Card className="p-5">
         <SectionTitle className="mb-4">Lead Scoring</SectionTitle>
         <div className="space-y-3.5">
@@ -807,6 +993,19 @@ export default function SalesWorkspace() {
   const { data: leadsData, isLoading: leadsLoading } = useLeads();
   const leads = leadsData || [];
 
+  const { toasts, toast, dismiss } = useToast();
+  const updateLead = useUpdateLead();
+
+  const handleMoveStage = (lead, newStage) => {
+    updateLead.mutate(
+      { id: lead.id, stage: newStage },
+      {
+        onSuccess: () => toast.success(`${lead.name || 'Lead'} moved to ${STAGE_LABEL[newStage] || newStage}.`),
+        onError: (e) => toast.error(e?.message || 'Could not move lead — please try again.'),
+      }
+    );
+  };
+
   const badge = queue
     ? `Running · ${queue.total} task${queue.total === 1 ? '' : 's'} queued`
     : 'Running · tasks queued';
@@ -837,7 +1036,13 @@ export default function SalesWorkspace() {
           />
         )}
         {tab === 'Pipeline' && (
-          <Pipeline leads={leads} isLoading={leadsLoading} onSelectLead={selectLeadFromPipeline} />
+          <Pipeline
+            leads={leads}
+            isLoading={leadsLoading}
+            onSelectLead={selectLeadFromPipeline}
+            onMoveStage={handleMoveStage}
+            movingLeadId={updateLead.isPending ? updateLead.variables?.id : null}
+          />
         )}
         {tab === 'Lead Intelligence' && (
           <LeadIntelligence selectedLead={selectedLead} onOpenDrawer={() => setDrawerLead(selectedLead)} />
@@ -873,6 +1078,7 @@ export default function SalesWorkspace() {
           onApplied={() => setDrawerLead(null)}
         />
       )}
+      <ToastStack toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }

@@ -1,31 +1,37 @@
-export const campaigns = [
-  { id:'1', name:'AI Bootcamp Lead Gen Q3', platform:'Facebook', objective:'Lead Generation', status:'Active', budget:5000, spend:3240, ctr:4.2, cpm:8.4, cpc:2.1, reach:142000, impressions:385000, leads:1540, conversions:312, revenue:93600, roas:28.9, createdBy:'Priya Sharma', startDate:'2025-06-01', endDate:'2025-08-31', aiScore:94 },
-  { id:'2', name:'SaaS Growth Campaign', platform:'LinkedIn', objective:'Website Traffic', status:'Active', budget:8000, spend:6120, ctr:3.1, cpm:12.6, cpc:4.1, reach:89000, impressions:486000, leads:890, conversions:198, revenue:59400, roas:9.7, createdBy:'Rahul Verma', startDate:'2025-05-15', endDate:'2025-09-30', aiScore:81 },
-  { id:'3', name:'Webinar Registration Drive', platform:'Google Ads', objective:'Event Registration', status:'Scheduled', budget:3000, spend:0, ctr:0, cpm:0, cpc:0, reach:0, impressions:0, leads:0, conversions:0, revenue:0, roas:0, createdBy:'Ananya Iyer', startDate:'2025-08-10', endDate:'2025-08-20', aiScore:72 },
-  { id:'4', name:'Brand Awareness Wave', platform:'Instagram', objective:'Brand Awareness', status:'Paused', budget:4500, spend:2100, ctr:1.8, cpm:6.2, cpc:3.4, reach:320000, impressions:338000, leads:0, conversions:45, revenue:0, roas:0, createdBy:'Vikram Singh', startDate:'2025-04-20', endDate:'2025-06-30', aiScore:56 },
-  { id:'5', name:'WhatsApp Retargeting', platform:'WhatsApp', objective:'Remarketing', status:'Active', budget:1200, spend:940, ctr:6.7, cpm:4.1, cpc:0.6, reach:22000, impressions:229000, leads:1100, conversions:540, revenue:162000, roas:172.3, createdBy:'Priya Sharma', startDate:'2025-07-01', endDate:'2025-08-31', aiScore:97 },
-  { id:'6', name:'Enterprise Sales Push', platform:'Email', objective:'Sales', status:'Draft', budget:500, spend:0, ctr:0, cpm:0, cpc:0, reach:0, impressions:0, leads:0, conversions:0, revenue:0, roas:0, createdBy:'Ananya Iyer', startDate:'2025-07-25', endDate:'2025-09-01', aiScore:68 },
-  { id:'7', name:'Course Enrollment - Python', platform:'Facebook', objective:'Course Registration', status:'Active', budget:2500, spend:2100, ctr:5.4, cpm:7.8, cpc:1.4, reach:68000, impressions:269000, leads:1870, conversions:420, revenue:126000, roas:60.0, createdBy:'Rahul Verma', startDate:'2025-06-15', endDate:'2025-08-15', aiScore:91 },
-  { id:'8', name:'Google Search - B2B', platform:'Google Ads', objective:'Lead Generation', status:'Active', budget:6000, spend:5400, ctr:8.2, cpm:22.1, cpc:2.7, reach:45000, impressions:244000, leads:2000, conversions:650, revenue:195000, roas:36.1, createdBy:'Vikram Singh', startDate:'2025-05-01', endDate:'2025-09-30', aiScore:88 },
-];
-export const broadcasts = [
-  { id:'1', name:'Welcome Series - New Leads', channel:'WhatsApp', audience:'New Leads (2.4k)', status:'Sent', sent:2400, delivered:2280, opened:1920, clicked:864, responses:312, conversion:13.0, aiScore:91 },
-  { id:'2', name:'Webinar Reminder - Tomorrow', channel:'Email', audience:'Registered Users (1.8k)', status:'Scheduled', sent:0, delivered:0, opened:0, clicked:0, responses:0, conversion:0, aiScore:78 },
-  { id:'3', name:'Flash Sale - 48hrs', channel:'SMS', audience:'All Subscribers (12k)', status:'Sent', sent:12000, delivered:11640, opened:8400, clicked:2940, responses:0, conversion:24.5, aiScore:85 },
-  { id:'4', name:'Monthly Newsletter - Aug', channel:'Email', audience:'Newsletter List (5.6k)', status:'Draft', sent:0, delivered:0, opened:0, clicked:0, responses:0, conversion:0, aiScore:65 },
-  { id:'5', name:'Re-engagement - Cold Leads', channel:'WhatsApp', audience:'Inactive 60d (3.1k)', status:'Active', sent:3100, delivered:2945, opened:1770, clicked:531, responses:248, conversion:8.0, aiScore:73 },
-];
-// `platformKey`/`channelKey` match the `platform` field on `campaigns` rows and
-// the `channel` field on `broadcasts` rows above — counts on the Channels page
-// are derived by filtering those arrays, not hardcoded here.
+// Static channel metadata (icon color/background, description, and whether
+// bulk broadcasts are supported) for the Channels grid. Real per-channel
+// campaign/broadcast counts and connection status come from the backend via
+// useChannelStats()/useIntegrationsList() — this array is display-only.
 export const channels = [
-  { id:'whatsapp',   name:'WhatsApp Business',   platformKey:'WhatsApp',   color:'#25D366', bg:'#e8f9ef', status:'connected', broadcastsSupported:true,     description:'Send campaigns and broadcasts via WhatsApp Business API.' },
-  { id:'email',      name:'Email',               platformKey:'Email',     color:'#3b82f6', bg:'#eff6ff', status:'connected', broadcastsSupported:true,     description:'Create email campaigns and send broadcast emails.' },
-  { id:'sms',        name:'SMS',                 platformKey:'SMS',       color:'#f59e0b', bg:'#fffbeb', status:'connected', broadcastsSupported:true,     description:'Send SMS campaigns and bulk messages instantly.' },
-  { id:'messenger',  name:'Facebook Messenger',  platformKey:'Messenger', color:'#0084ff', bg:'#eff6ff', status:'connected', broadcastsSupported:true,     description:'Engage your audience with Messenger campaigns and broadcasts.' },
-  { id:'instagram',  name:'Instagram',           platformKey:'Instagram', color:'#e1306c', bg:'#fdf2f8', status:'limited',   broadcastsSupported:'limited', description:'Run campaigns and limited broadcasts via Instagram (DM automation).' },
-  { id:'linkedin',   name:'LinkedIn',            platformKey:'LinkedIn',  color:'#0a66c2', bg:'#eff6ff', status:'connected', broadcastsSupported:false,    description:'Run LinkedIn campaigns to engage professionals and leads.' },
+  { id: 'whatsapp', name: 'WhatsApp Business', description: 'Reach contacts directly with template and session messages.', color: '#25D366', bg: '#e7faf0', broadcastsSupported: true },
+  { id: 'email', name: 'Email', description: 'Newsletters, drip sequences, and transactional campaigns.', color: '#6366f1', bg: '#eef2ff', broadcastsSupported: true },
+  { id: 'sms', name: 'SMS', description: 'Short, high-open-rate text messages for time-sensitive offers.', color: '#f59e0b', bg: '#fffbeb', broadcastsSupported: true },
+  { id: 'messenger', name: 'Facebook Messenger', description: 'Conversational campaigns through Messenger threads.', color: '#0084ff', bg: '#eaf5ff', broadcastsSupported: true },
+  { id: 'instagram', name: 'Instagram', description: 'DMs and story replies; broadcast sends are rate-limited by Meta.', color: '#e1306c', bg: '#fdf0f4', broadcastsSupported: 'limited' },
+  { id: 'linkedin', name: 'LinkedIn', description: 'Connection requests and InMail — one-to-one outreach only.', color: '#0a66c2', bg: '#eaf3fb', broadcastsSupported: false },
 ];
+
+// Demo campaigns/broadcasts, keyed by platform/channel so MHChannels.jsx can
+// derive non-zero per-channel counts as a fallback when useChannelStats()
+// returns no real data yet (new orgs with no campaigns created).
+export const campaigns = [
+  { id: 'c1', name: 'Q3 Lead Gen Push', platform: 'whatsapp', status: 'running' },
+  { id: 'c2', name: 'Newsletter Relaunch', platform: 'email', status: 'running' },
+  { id: 'c3', name: 'Flash Sale SMS', platform: 'sms', status: 'scheduled' },
+  { id: 'c4', name: 'Messenger Reactivation', platform: 'messenger', status: 'draft' },
+  { id: 'c5', name: 'Instagram Story Ads', platform: 'instagram', status: 'running' },
+  { id: 'c6', name: 'LinkedIn ABM Outreach', platform: 'linkedin', status: 'running' },
+  { id: 'c7', name: 'Webinar Reminder Emails', platform: 'email', status: 'scheduled' },
+];
+
+export const broadcasts = [
+  { id: 'b1', name: 'Order Confirmation Blast', channel: 'whatsapp', status: 'sent' },
+  { id: 'b2', name: 'Weekly Digest', channel: 'email', status: 'sent' },
+  { id: 'b3', name: 'Flash Sale Alert', channel: 'sms', status: 'sent' },
+  { id: 'b4', name: 'Cart Abandonment Ping', channel: 'messenger', status: 'scheduled' },
+  { id: 'b5', name: 'New Feature Announcement', channel: 'instagram', status: 'sent' },
+];
+
 export const audiences = [
   { id:'1', name:'High-Intent Leads Q3', size:4820, source:'Custom', score:92, lastUpdated:'2025-07-30', status:'Active' },
   { id:'2', name:'Website Visitors 30d', size:18400, source:'Pixel', score:74, lastUpdated:'2025-07-31', status:'Active' },
@@ -92,23 +98,6 @@ export const competitors = [
   { id:'8', name:'ConvertKit',    domain:'convertkit.com',      da:78, traffic:'3.2M', backlinks:'2.1M',  opportunity:85, threat:65, engagement:5.2 },
   { id:'9', name:'Drip',         domain:'drip.com',            da:81, traffic:'4.5M', backlinks:'3.2M',  opportunity:79, threat:71, engagement:4.3 },
 ];
-export const calendarEvents = [
-  { id:'1',  title:'AI Bootcamp Campaign Launch',  type:'campaign',  date:'2025-08-05', color:'#6366f1' },
-  { id:'2',  title:'Webinar - AI in Marketing',    type:'webinar',   date:'2025-08-07', color:'#f59e0b' },
-  { id:'3',  title:'Flash Sale Broadcast',         type:'broadcast', date:'2025-08-10', color:'#10b981' },
-  { id:'4',  title:'Monthly Report Review',        type:'meeting',   date:'2025-08-12', color:'#3b82f6' },
-  { id:'5',  title:'LinkedIn Campaign Pause',      type:'campaign',  date:'2025-08-15', color:'#6366f1' },
-  { id:'6',  title:'Independence Day Campaign',    type:'campaign',  date:'2025-08-15', color:'#ef4444' },
-  { id:'7',  title:'Q3 Strategy Meeting',          type:'meeting',   date:'2025-08-18', color:'#3b82f6' },
-  { id:'8',  title:'SEO Audit Deadline',           type:'reminder',  date:'2025-08-20', color:'#8b5cf6' },
-  { id:'9',  title:'Back to School Campaign',      type:'campaign',  date:'2025-08-22', color:'#6366f1' },
-  { id:'10', title:'Newsletter - August',          type:'broadcast', date:'2025-08-28', color:'#10b981' },
-  { id:'11', title:'Product Launch - September',  type:'campaign',  date:'2025-09-01', color:'#6366f1' },
-  { id:'12', title:'Team Building Event',          type:'meeting',   date:'2025-09-05', color:'#3b82f6' },
-  { id:'13', title:'Diwali Campaign Start',        type:'campaign',  date:'2025-09-10', color:'#f59e0b' },
-  { id:'14', title:'Email Broadcast - New Leads',   type:'broadcast', date:'2025-09-12', color:'#10b981' },
-  { id:'15', title:'Competitor Analysis Review',    type:'meeting',   date:'2025-09-15', color:'#3b82f6' },
-];
 export const seoKeywords = [
   { keyword:'AI marketing automation',    volume:14400, difficulty:68, position:8,  change:3  },
   { keyword:'lead generation software',   volume:22000, difficulty:74, position:14, change:-2 },
@@ -143,13 +132,6 @@ export const knowledgeDocs = [
   { id:'10', title:'WhatsApp Marketing Strategy', category:'Marketing Docs',   tags:['WhatsApp','strategy','marketing'], updatedAt:'2025-07-08', size:'1.7 MB' },
   { id:'11', title:'Social Media Templates',       category:'Templates',        tags:['social','templates','content'],  updatedAt:'2025-07-05', size:'890 KB' },
 ];
-export const teamMembers = [
-  { id:'1', name:'Priya Sharma',  email:'priya@acme.io',  role:'Marketing Manager',   status:'Active',  avatar:'PS' },
-  { id:'2', name:'Rahul Verma',   email:'rahul@acme.io',  role:'Campaign Specialist', status:'Active',  avatar:'RV' },
-  { id:'3', name:'Ananya Iyer',   email:'ananya@acme.io', role:'Content Strategist',  status:'Active',  avatar:'AI' },
-  { id:'4', name:'Vikram Singh',  email:'vikram@acme.io', role:'SEO Analyst',         status:'Active',  avatar:'VS' },
-  { id:'5', name:'Meera Nair',    email:'meera@acme.io',  role:'Designer',            status:'Invited', avatar:'MN' },
-];
 export const revenueData = [
   { month:'Jan', revenue:258000, target:300000 },
   { month:'Feb', revenue:216000, target:280000 },
@@ -158,9 +140,4 @@ export const revenueData = [
   { month:'May', revenue:456000, target:420000 },
   { month:'Jun', revenue:423000, target:450000 },
   { month:'Jul', revenue:552000, target:500000 },
-  { month:'Aug', revenue:498000, target:520000 },
-  { month:'Sep', revenue:585000, target:550000 },
-  { month:'Oct', revenue:624000, target:580000 },
-  { month:'Nov', revenue:678000, target:620000 },
-  { month:'Dec', revenue:712000, target:650000 },
 ];

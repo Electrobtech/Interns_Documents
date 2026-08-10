@@ -1,123 +1,185 @@
 'use client';
 import { useState } from 'react';
-import { Zap, RefreshCw, Plus, Copy, Trash2, Sparkles } from 'lucide-react';
+import { Zap, RefreshCw, ChevronDown, ChevronRight, MessageSquare } from 'lucide-react';
 import { useMHToast } from '../ui/MHToast';
-import { useAeoList, useCreateAeoOptimization, useDeleteAeoOptimization, useAeoOverview } from '@/lib/queries/marketingHub';
+import { PageHeader, SectionCard, EmptyState } from './_shared';
+import { useAeoOptimizations, useGenerateAeoOptimization } from '@/lib/queries/marketingHub';
 
-const ANSWER_TYPES = [
-  { value: 'featured_snippet', label: 'Featured Snippet' },
-  { value: 'local_pack', label: 'Local Pack' },
-  { value: 'knowledge_panel', label: 'Knowledge Panel' },
-];
+// This used to show four fixed platform scores (ChatGPT/Gemini/Claude/
+// Perplexity) that never changed. There's no per-platform citation tracking
+// anywhere in the backend — the real endpoint (AeoService) takes one piece
+// of copy, scores it, and returns rewritten copy plus concrete suggestions.
+// So this is a "paste copy, get one score + a rewrite" flow, same shape as
+// SEO/Competitor above.
+
+function ScoreRing({ score, size = 120 }) {
+  const r = (size - 14) / 2;
+  const circ = 2 * Math.PI * r;
+  const fill = (score / 100) * circ;
+  const color = score >= 80 ? '#059669' : score >= 50 ? '#d97706' : '#dc2626';
+  return (
+    <svg width={size} height={size}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e5e7eb" strokeWidth={10} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={10}
+        strokeDasharray={`${fill} ${circ - fill}`} strokeLinecap="round" transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+      <text x="50%" y="46%" dominantBaseline="middle" textAnchor="middle" style={{ fontSize: 24, fontWeight: 800, fill: '#111827', fontFamily: 'Outfit,sans-serif' }}>{score}</text>
+      <text x="50%" y="62%" dominantBaseline="middle" textAnchor="middle" style={{ fontSize: 10, fill: '#6b7280', fontWeight: 600 }}>/ 100</text>
+    </svg>
+  );
+}
+
+function OptimizationRow({ item, expanded, onToggle }) {
+  const out = item.output || {};
+  const hooks = out.citation_hooks || [];
+  const qa = out.structured_qa || [];
+  const improvements = out.improvements || [];
+  const quickWins = out.quick_wins || [];
+  return (
+    <div style={{ borderBottom: '1px solid #f3f4f6' }}>
+      <button
+        onClick={onToggle}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+      >
+        {expanded ? <ChevronDown size={15} style={{ color: '#9ca3af', flexShrink: 0 }} /> : <ChevronRight size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />}
+        <MessageSquare size={15} style={{ color: '#6366f1', flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.input_text}</div>
+          <div style={{ fontSize: 11, color: '#9ca3af' }}>{new Date(item.created_at).toLocaleString()}</div>
+        </div>
+        {typeof out.aeo_score === 'number' && (
+          <span style={{ fontSize: 12, fontWeight: 700, color: out.aeo_score >= 80 ? '#059669' : out.aeo_score >= 50 ? '#d97706' : '#dc2626', flexShrink: 0 }}>
+            {out.aeo_score}/100
+          </span>
+        )}
+      </button>
+      {expanded && (
+        <div style={{ padding: '0 16px 18px 41px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {out.score_reason && (
+            <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.6 }}>{out.score_reason}</div>
+          )}
+          {out.optimized_copy && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Optimized Copy</div>
+              <div style={{ fontSize: 13, color: '#111827', lineHeight: 1.6, background: '#f9fafb', border: '1px solid #f3f4f6', borderRadius: 8, padding: 12 }}>{out.optimized_copy}</div>
+            </div>
+          )}
+          {quickWins.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Quick Wins</div>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#374151', lineHeight: 1.8 }}>
+                {quickWins.map((q, i) => <li key={i}>{typeof q === 'string' ? q : JSON.stringify(q)}</li>)}
+              </ul>
+            </div>
+          )}
+          {improvements.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Improvements</div>
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#374151', lineHeight: 1.8 }}>
+                {improvements.map((im, i) => <li key={i}>{typeof im === 'string' ? im : JSON.stringify(im)}</li>)}
+              </ul>
+            </div>
+          )}
+          {qa.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Structured Q&amp;A</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {qa.map((item2, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#374151' }}>
+                    {typeof item2 === 'object' ? (
+                      <>
+                        <div style={{ fontWeight: 700 }}>{item2.question}</div>
+                        <div style={{ color: '#6b7280' }}>{item2.answer}</div>
+                      </>
+                    ) : JSON.stringify(item2)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {hooks.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>Citation Hooks</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {hooks.map((h, i) => (
+                  <span key={i} style={{ fontSize: 12, background: '#eef2ff', color: '#4338ca', padding: '3px 9px', borderRadius: 99 }}>
+                    {typeof h === 'string' ? h : JSON.stringify(h)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function MHAEO() {
   const toast = useMHToast();
-  const [queryText, setQueryText] = useState('');
-  const [answerType, setAnswerType] = useState('featured_snippet');
-  const [currentContent, setCurrentContent] = useState('');
-  const [expanded, setExpanded] = useState(null);
+  const [copy, setCopy] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
+  const [lastResult, setLastResult] = useState(null);
 
-  const { data: items = [], isLoading } = useAeoList();
-  const create = useCreateAeoOptimization();
-  const remove = useDeleteAeoOptimization();
-  const { data: overview } = useAeoOverview();
+  const { data: history, isLoading, isError } = useAeoOptimizations();
+  const generate = useGenerateAeoOptimization();
 
-  const handleCreate = async () => {
-    if (!queryText.trim()) return toast.show('Enter a question or query first', 'error');
-    try {
-      const row = await create.mutateAsync({ query: queryText.trim(), answer_type: answerType, current_content: currentContent.trim() || null });
-      setExpanded(row.id);
-      setQueryText(''); setCurrentContent('');
-      toast.show('AI-optimized answer generated', 'success');
-    } catch (err) {
-      toast.show(err.message || 'Could not generate optimization', 'error');
-    }
+  const handleOptimize = () => {
+    if (!copy.trim()) return;
+    generate.mutate({ copy: copy.trim() }, {
+      onSuccess: (res) => {
+        toast.show('AEO analysis complete.', 'success');
+        setLastResult(res);
+        setExpandedId(res.id);
+        setCopy('');
+      },
+      onError: (err) => toast.show(err.message || 'Failed to run AEO optimization', 'error'),
+    });
   };
 
   return (
     <div style={{ padding: '24px 28px', background: 'var(--mh-bg)', minHeight: '100vh' }}>
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontFamily: 'var(--mh-font-display)', fontSize: 22, fontWeight: 700, color: 'var(--mh-text)', margin: 0 }}>AEO — Answer Engine Optimization</h1>
-        <p style={{ fontSize: 13, color: 'var(--mh-text-3)', marginTop: 4 }}>Generate AI-answer-engine-optimized content per query, with a real LLM call</p>
-      </div>
+      <PageHeader
+        title="AEO Citation Engine"
+        subtitle="Paste marketing copy to get an AI-answer-engine citation score and a rewrite — scored per submission, not a live multi-platform tracker."
+      />
 
-      {/* Overview strip */}
-      {overview?.status_distribution?.length > 0 && (
-        <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
-          {overview.status_distribution.map((s, i) => (
-            <span key={i} style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 99, background: '#fff', border: '1px solid var(--mh-border)', color: '#374151' }}>
-              {s.count} {s.answer_type?.replace('_', ' ')} ({s.status})
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 20, alignItems: 'start' }}>
-        {/* New optimization form */}
-        <div style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, padding: 20, boxShadow: 'var(--mh-shadow-sm)', position: 'sticky', top: 24 }}>
-          <div style={{ fontFamily: 'var(--mh-font-display)', fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 14 }}>New Optimization</div>
-          <label style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 6 }}>Query / Question</label>
-          <input className="mh-input" value={queryText} onChange={(e) => setQueryText(e.target.value)} placeholder='e.g. "what is the best CRM for small teams"' style={{ width: '100%', marginBottom: 14 }} />
-          <label style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 6 }}>Target Answer Type</label>
-          <select className="mh-input" value={answerType} onChange={(e) => setAnswerType(e.target.value)} style={{ width: '100%', marginBottom: 14 }}>
-            {ANSWER_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-          </select>
-          <label style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', display: 'block', marginBottom: 6 }}>Existing Content (optional)</label>
-          <textarea className="mh-input" value={currentContent} onChange={(e) => setCurrentContent(e.target.value)} rows={4}
-            placeholder="Paste your current page content to improve — or leave blank to generate from scratch." style={{ width: '100%', resize: 'vertical', marginBottom: 16 }} />
-          <button className="mh-btn mh-btn-ai" onClick={handleCreate} disabled={create.isPending} style={{ width: '100%', justifyContent: 'center' }}>
-            {create.isPending ? <><RefreshCw size={14} className="mh-animate-spin" />Generating…</> : <><Sparkles size={14} />Generate Optimized Answer</>}
+      <div style={{ display: 'grid', gridTemplateColumns: lastResult ? '1fr 220px' : '1fr', gap: 20, alignItems: 'start', marginBottom: 20 }}>
+        <SectionCard title="Optimize Copy" subtitle="Paste a headline, page copy, or FAQ answer to score and improve">
+          <textarea
+            className="mh-input"
+            value={copy}
+            onChange={(e) => setCopy(e.target.value)}
+            placeholder="Paste the marketing copy you want AI search engines to be able to cite…"
+            rows={5}
+            style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit' }}
+          />
+          <button className="mh-btn mh-btn-ai" onClick={handleOptimize} disabled={generate.isPending || !copy.trim()} style={{ marginTop: 10 }}>
+            {generate.isPending ? <><RefreshCw size={14} className="mh-animate-spin" />Optimizing…</> : <><Zap size={14} />Optimize for AI</>}
           </button>
-        </div>
+        </SectionCard>
 
-        {/* List */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {isLoading && <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Loading…</div>}
-          {!isLoading && items.length === 0 && (
-            <div style={{ background: '#fff', border: '1px dashed #e5e7eb', borderRadius: 14, padding: '48px 24px', textAlign: 'center' }}>
-              <Zap size={28} style={{ color: '#d1d5db', margin: '0 auto 10px' }} />
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>No optimizations yet</div>
-              <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>Generate one from the form on the left.</p>
-            </div>
-          )}
-          {items.map((item) => {
-            const isOpen = expanded === item.id;
-            const fromLlm = item.performance?.generated_by === 'llm';
-            return (
-              <div key={item.id} style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, boxShadow: 'var(--mh-shadow-sm)', overflow: 'hidden' }}>
-                <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => setExpanded(isOpen ? null : item.id)}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{item.query}</div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <span style={{ textTransform: 'capitalize' }}>{item.answer_type?.replace('_', ' ')}</span>
-                      {fromLlm && <span style={{ color: '#a855f7', fontWeight: 600 }}>· AI-generated</span>}
-                    </div>
-                  </div>
-                  <button className="mh-btn mh-btn-ghost" style={{ fontSize: 11, padding: '3px 8px', color: '#dc2626' }}
-                    onClick={(e) => { e.stopPropagation(); remove.mutate(item.id, { onSuccess: () => toast.show('Deleted', 'success') }); }}>
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-                {isOpen && (
-                  <div style={{ padding: '0 18px 18px' }}>
-                    <pre style={{ fontFamily: 'var(--mh-font-body)', fontSize: 13, color: '#374151', whiteSpace: 'pre-wrap', lineHeight: 1.6, margin: '0 0 12px', background: '#f9fafb', borderRadius: 10, padding: 14, border: '1px solid #f3f4f6' }}>{item.optimized_content}</pre>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-                      {(item.optimization_tips || []).map((tip, i) => (
-                        <span key={i} style={{ fontSize: 11, color: '#6366f1', background: '#eef2ff', padding: '3px 9px', borderRadius: 99 }}>{tip}</span>
-                      ))}
-                    </div>
-                    <button className="mh-btn mh-btn-ghost" style={{ fontSize: 12 }}
-                      onClick={() => { navigator.clipboard?.writeText(item.optimized_content || ''); toast.show('Copied', 'success'); }}>
-                      <Copy size={12} /> Copy
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        {lastResult && typeof lastResult.aeo_score === 'number' && (
+          <div style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, padding: '20px', boxShadow: 'var(--mh-shadow-sm)', textAlign: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6b7280', marginBottom: 12 }}>Latest Score</div>
+            <ScoreRing score={lastResult.aeo_score} />
+          </div>
+        )}
       </div>
+
+      <SectionCard title="History" subtitle={history?.length ? `${history.length} optimizations` : undefined}>
+        {isLoading && <div style={{ padding: 20, fontSize: 13, color: '#6b7280' }}>Loading…</div>}
+        {isError && <div style={{ padding: 20, fontSize: 13, color: '#dc2626' }}>Couldn't load history.</div>}
+        {!isLoading && !isError && (!history || history.length === 0) && (
+          <EmptyState icon={MessageSquare} title="No optimizations yet" desc="Paste some copy above to run your first AEO analysis." />
+        )}
+        {!isLoading && history && history.length > 0 && (
+          <div style={{ margin: '-16px -20px' }}>
+            {history.map((item) => (
+              <OptimizationRow key={item.id} item={item} expanded={expandedId === item.id} onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)} />
+            ))}
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }

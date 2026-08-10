@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rbac import require_permission
 from app.core.security import AuthUser
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.schemas.marketing_extras import (
     CampaignPlanIn, CampaignPlanOut, CampaignPlanSummary, ConvertPlanItemIn,
 )
@@ -25,7 +25,7 @@ _can_manage = require_permission("ai_agents:manage")
 async def generate_campaign_plan(
     body: CampaignPlanIn,
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> CampaignPlanOut:
     organization_id = uuid.UUID(user.organization_id)
     result = await CampaignPlannerService(session).generate(
@@ -39,7 +39,7 @@ async def generate_campaign_plan(
 @router.get("/marketing/campaign-plans", response_model=list[CampaignPlanSummary])
 async def list_campaign_plans(
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> list[CampaignPlanSummary]:
     organization_id = uuid.UUID(user.organization_id)
     rows = await CampaignPlannerService(session).list_recent(organization_id)
@@ -52,7 +52,7 @@ async def convert_plan_item(
     item_index: int,
     body: ConvertPlanItemIn,
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> dict:
     organization_id = uuid.UUID(user.organization_id)
     try:

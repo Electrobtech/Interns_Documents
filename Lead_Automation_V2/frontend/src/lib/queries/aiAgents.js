@@ -217,6 +217,7 @@ export const useSupportRuns = (opts) => useAgentRuns('support', opts);
  * exists (api/v1/sales.py `list_sales_runs`), so the Sales Agent Brain Log
  * can show real completed runs instead of mock entries.
  */
+
 export function useSalesAgentRuns() {
   const { call } = useApi();
   return useQuery({
@@ -237,6 +238,23 @@ export function useSessionExecutions(sessionId) {
     queryKey: ['ai-agents', 'sessions', sessionId, 'executions'],
     queryFn: () => call(`/sessions/${sessionId}/executions`),
     enabled: !!sessionId,
+  });
+}
+
+/**
+ * GET /ai-agents/support/coverage-audit — RAG Auditor: ticket categories the
+ * knowledge base couldn't ground (coverage gaps) plus per-source citation
+ * counts and staleness. Pure aggregation over recent support runs + the
+ * knowledge base, no LLM call, so a short poll is cheap. Backs
+ * RAGAuditorPanel.jsx.
+ */
+export function useSupportCoverageAudit() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['ai-agents', 'support', 'coverage-audit'],
+    queryFn: () => call(`${AI}/support/coverage-audit`),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }
 

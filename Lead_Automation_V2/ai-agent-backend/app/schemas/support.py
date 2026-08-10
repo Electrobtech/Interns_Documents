@@ -51,3 +51,33 @@ class SupportRunSummary(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class CoverageGap(BaseModel):
+    """A ticket category where a meaningful share of replies had no grounded
+    knowledge-base match — signals a doc that should be added."""
+
+    category: str
+    ticket_count: int
+    ungrounded_count: int
+    gap_pct: int
+
+
+class SourceCitation(BaseModel):
+    """How often one knowledge source was actually cited by a support run,
+    plus whether it's due for re-verification."""
+
+    source_id: uuid.UUID
+    name: str
+    source_type: str
+    cited_count: int
+    days_since_updated: int
+    stale: bool
+
+
+class CoverageAuditOut(BaseModel):
+    total_runs_analyzed: int
+    grounded_pct: int
+    gaps: list[CoverageGap] = Field(default_factory=list)
+    citations: list[SourceCitation] = Field(default_factory=list)
+    stale_source_count: int

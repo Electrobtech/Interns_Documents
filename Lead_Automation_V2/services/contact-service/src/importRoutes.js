@@ -21,6 +21,7 @@ const { pool, requirePermission, logAudit } = require('@lead/shared');
 const {
   inspectWorkbook, buildRecords, markInFileDuplicates, cellToText,
 } = require('./importer');
+const { writeContacts, countExisting: countExistingShared } = require('./contactWriter');
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_ROWS_PER_IMPORT = 20000;
@@ -151,24 +152,7 @@ router.post('/contacts/import/preview', canWrite, handleUpload, async (req, res)
 
 /** Counts how many candidate records already exist, matched on phone or email. */
 async function countExisting(organizationId, records) {
-  const phones = records.map((r) => r.phone).filter(Boolean);
-  const emails = records.map((r) => r.email).filter(Boolean);
-  if (!phones.length && !emails.length) return { matched: 0, phones: new Set(), emails: new Set() };
-
-  const { rows } = await pool.query(
-    `SELECT phone, lower(email) AS email FROM contacts
-      WHERE organization_id = $1
-        AND (phone = ANY($2::text[]) OR lower(email) = ANY($3::text[]))`,
-    [organizationId, phones, emails.map((e) => e.toLowerCase())]
-  );
-  const existingPhones = new Set(rows.map((r) => r.phone).filter(Boolean));
-  const existingEmails = new Set(rows.map((r) => r.email).filter(Boolean));
-
-  let matched = 0;
-  for (const r of records) {
-    if ((r.phone && existingPhones.has(r.phone)) || (r.email && existingEmails.has(r.email.toLowerCase()))) matched++;
-  }
-  return { matched, phones: existingPhones, emails: existingEmails };
+  return countExistingShared(pool, organizationId, records);
 }
 
 /**
@@ -178,7 +162,16 @@ async function countExisting(organizationId, records) {
  */
 router.post('/contacts/import', canWrite, handleUpload, async (req, res) => {
   const onDuplicate = req.body.onDuplicate === 'update' ? 'update' : 'skip';
-  const client = await pool.connect();
+  // NOTE: deliberately NOT pool.connect() for this transaction — that checks
+  // out a fresh, unscoped connection that bypasses the single tenant-scoped
+  // connection shared/src/auth.js's `authenticate` already pinned to this
+  // request (see shared/src/db.js's AsyncLocalStorage comment). With that
+  // pattern, RLS's WITH CHECK rejects every INSERT INTO contacts with "new
+  // row violates row-level security policy", since the fresh connection
+  // never had app.current_org set. pool.query() is already routed onto the
+  // pinned connection, so BEGIN/COMMIT/ROLLBACK on it just extends the
+  // request's existing scope — same fix as campaign-service's broadcast
+  // route and products.js.
   try {
     const { sheets } = inspectWorkbook(req.file.buffer, req.file.originalname);
     const chosen = req.body.sheetName
@@ -212,7 +205,7 @@ router.post('/contacts/import', canWrite, handleUpload, async (req, res) => {
     const result = { inserted: 0, updated: 0, skipped: stats.skipped + duplicates.length, failed: 0 };
     const failures = [];
 
-    await client.query('BEGIN');
+    await pool.query('BEGIN');
     for (const rec of unique) {
       try {
         // Match an existing contact on either reachable identity.
@@ -220,7 +213,7 @@ router.post('/contacts/import', canWrite, handleUpload, async (req, res) => {
         // fall back to name+source so re-running the same import does not
         // duplicate them on every pass.
         const { rows: found } = rec.phone || rec.email
-          ? await client.query(
+          ? await pool.query(
             `SELECT id FROM contacts
               WHERE organization_id = $1
                 AND ( ($2::text IS NOT NULL AND phone = $2)
@@ -228,7 +221,7 @@ router.post('/contacts/import', canWrite, handleUpload, async (req, res) => {
               LIMIT 1`,
             [req.user.organizationId, rec.phone, rec.email]
           )
-          : await client.query(
+          : await pool.query(
             `SELECT id FROM contacts
               WHERE organization_id = $1 AND name IS NOT DISTINCT FROM $2
                 AND source IS NOT DISTINCT FROM $3
@@ -239,7 +232,7 @@ router.post('/contacts/import', canWrite, handleUpload, async (req, res) => {
         if (found.length) {
           if (onDuplicate === 'update') {
             // COALESCE so an empty cell in the sheet never blanks existing data.
-            await client.query(
+            await pool.query(
               `UPDATE contacts SET
                  name   = COALESCE($2, name),
                  email  = COALESCE($3, email),
@@ -257,7 +250,7 @@ router.post('/contacts/import', canWrite, handleUpload, async (req, res) => {
           continue;
         }
 
-        await client.query(
+        await pool.query(
           `INSERT INTO contacts (organization_id, name, email, phone, source, notes, tags)
            VALUES ($1,$2,$3,$4,$5,$6,$7)`,
           [req.user.organizationId, rec.name, rec.email, rec.phone, rec.source, rec.notes, rec.tags]
@@ -270,7 +263,7 @@ router.post('/contacts/import', canWrite, handleUpload, async (req, res) => {
         console.error('[contact-import] row failed', { row: rec.rowNumber, err: rowErr.message });
       }
     }
-    await client.query('COMMIT');
+    await pool.query('COMMIT');
 
     logAudit(req, 'contact.import', {
       file: req.file.originalname,
@@ -286,11 +279,9 @@ router.post('/contacts/import', canWrite, handleUpload, async (req, res) => {
       issues: [...issues, ...duplicates, ...failures].slice(0, 500),
     });
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    await pool.query('ROLLBACK').catch(() => {});
     console.error('[contact-import] import failed', { err: err.message, file: req.file?.originalname });
     res.status(err.status || 500).json({ error: err.message });
-  } finally {
-    client.release();
   }
 });
 

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rbac import require_permission
 from app.core.security import AuthUser
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.models.support import AgentWebhook
 from app.services.audit_service import log_audit
 
@@ -36,7 +36,7 @@ class WebhookOut(BaseModel):
 @router.get("/webhooks", response_model=list[WebhookOut])
 async def list_webhooks(
     user: AuthUser = Depends(require_permission("ai_agents:manage")),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> list[WebhookOut]:
     org = uuid.UUID(user.organization_id)
     rows = (await session.execute(select(AgentWebhook).where(AgentWebhook.organization_id == org))).scalars().all()
@@ -47,7 +47,7 @@ async def list_webhooks(
 async def create_webhook(
     body: WebhookIn,
     user: AuthUser = Depends(require_permission("ai_agents:manage")),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> WebhookOut:
     org = uuid.UUID(user.organization_id)
     hook = AgentWebhook(organization_id=org, url=str(body.url), events=body.events)
@@ -61,7 +61,7 @@ async def create_webhook(
 async def delete_webhook(
     webhook_id: uuid.UUID,
     user: AuthUser = Depends(require_permission("ai_agents:manage")),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> dict:
     org = uuid.UUID(user.organization_id)
     result = await session.execute(

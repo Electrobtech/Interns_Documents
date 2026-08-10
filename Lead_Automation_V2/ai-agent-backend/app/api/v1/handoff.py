@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rbac import require_permission
 from app.core.security import AuthUser, get_current_user
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.repositories.handoff_repo import HandoffRepository
 from app.services.audit_service import log_audit
 from app.services.webhook_service import WebhookService
@@ -59,7 +59,7 @@ async def list_handoffs(
     agent_type: str | None = None,
     limit: int = 50,
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> list[HandoffOut]:
     """List human handoff requests for the organization. Filter by status
     (pending | assigned | resolved | rejected) and/or agent_type."""
@@ -79,7 +79,7 @@ async def list_handoffs(
 async def get_handoff(
     handoff_id: uuid.UUID,
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> HandoffOut:
     organization_id = uuid.UUID(user.organization_id)
     row = await HandoffRepository(session).get(organization_id, handoff_id)
@@ -93,7 +93,7 @@ async def update_handoff_status(
     handoff_id: uuid.UUID,
     body: HandoffStatusUpdate,
     user: AuthUser = Depends(require_permission("ai_agents:manage")),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> HandoffOut:
     """Claim, resolve, or reject a handoff request."""
     organization_id = uuid.UUID(user.organization_id)

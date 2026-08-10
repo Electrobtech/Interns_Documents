@@ -11,7 +11,7 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import AuthUser, get_current_user
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.models.support import AgentConversationTurn
 from app.repositories.conversation_repo import ConversationRepository
 from app.services.audit_service import log_audit
@@ -49,7 +49,7 @@ async def get_session_memory(
     session_id: str,
     limit: int = 50,
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> SessionMemoryOut:
     """Retrieve conversation history for a session."""
     organization_id = uuid.UUID(user.organization_id)
@@ -66,7 +66,7 @@ async def get_session_memory(
 async def clear_session_memory(
     session_id: str,
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> dict:
     """Delete all conversation turns for a session (e.g. to start fresh)."""
     organization_id = uuid.UUID(user.organization_id)
@@ -88,7 +88,7 @@ async def clear_session_memory(
 async def list_active_sessions(
     limit: int = 100,
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> list[str]:
     """List distinct active session IDs for this organization."""
     from sqlalchemy import select, distinct, func

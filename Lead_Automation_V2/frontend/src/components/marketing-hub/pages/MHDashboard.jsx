@@ -1,11 +1,11 @@
 'use client';
 import { TrendingUp, TrendingDown, Megaphone, Users, AlertTriangle, CheckCircle, Info, RefreshCw, Download, Search, Bot, Swords, Activity } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { performanceData, platformData, funnelData, audienceGrowth, aiInsights, revenueData, channelPerformance, aeoScores, seoKeywords, competitors } from '../mockData';
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { kpiData, performanceData, platformData, funnelData, channelPerformance,
+  aiInsights, revenueData } from '../mockData';
 import { useMHToast } from '../ui/MHToast';
-import { useCampaigns } from '@/lib/queries/marketingHub';
-import { printReport } from '../export';
+import { useAudienceGrowth } from '@/lib/queries/marketingHub';
 
 const insightIcons   = { warning: AlertTriangle, success: CheckCircle, info: Info };
 const insightColors  = { warning: '#d97706', success: '#059669', info: '#6366f1' };
@@ -26,6 +26,8 @@ function ChartHeader({ title, subtitle }) {
 }
 
 export default function MHDashboard({ onNavigate }) {
+  const { data: audienceGrowth = [] } = useAudienceGrowth(8);
+
   const { show } = useMHToast();
   const { data: campaigns = [], refetch } = useCampaigns();
 

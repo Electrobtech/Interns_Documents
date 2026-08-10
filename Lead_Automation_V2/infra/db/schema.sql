@@ -182,13 +182,6 @@ CREATE TABLE IF NOT EXISTS leads (
   -- Nullable with no default: unset must stay unset, not silently 0, so
   -- Pipeline Value aggregation can tell "unknown" apart from "zero".
   deal_value      NUMERIC(14, 2),
-  -- Leads/CRM page fields (see migrations/032_lead_crm_fields.sql).
-  -- `temperature`/`category` are intentionally separate from `stage` so
-  -- existing stage-based Pipeline/Dashboard/Analytics queries are untouched.
-  course          TEXT,
-  temperature     TEXT NOT NULL DEFAULT 'warm' CHECK (temperature IN ('hot', 'warm', 'cold')),
-  contact_status  TEXT NOT NULL DEFAULT 'no response',
-  category        TEXT NOT NULL DEFAULT 'active' CHECK (category IN ('active', 'onboarded', 'inactive')),
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   -- Last time score/stage/deal_value was written (see
   -- migrations/031_lead_updated_at.sql). Bumped at the application layer
@@ -724,15 +717,31 @@ CREATE TABLE IF NOT EXISTS analytics_events (
 );
 
 -- ---------- Notifications ----------
+-- type: 'generic' | 'ui_click' | 'followup_due'. contact_id/follow_up_id
+-- are populated for 'followup_due' rows (see notification-service's poller,
+-- which turns a follow-up's due_at coming due into one of these) so the
+-- bell dropdown's click-through has something to navigate to.
 CREATE TABLE IF NOT EXISTS notifications (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
   user_id         UUID REFERENCES users(id),
+  type            TEXT NOT NULL DEFAULT 'generic',
   title           TEXT,
   body            TEXT,
+  contact_id      UUID REFERENCES contacts(id) ON DELETE CASCADE,
+  follow_up_id    UUID REFERENCES follow_ups(id) ON DELETE CASCADE,
   read            BOOLEAN DEFAULT false,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Stops the follow-up poller from inserting a duplicate notification for
+-- the same follow-up on every ~60s poll cycle.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_notifications_org_followup
+  ON notifications (organization_id, follow_up_id)
+  WHERE follow_up_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_notifications_org_created
+  ON notifications (organization_id, created_at DESC);
 
 -- ---------- API / Webhooks / Audit ----------
 CREATE TABLE IF NOT EXISTS api_keys (
@@ -1703,8 +1712,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_products_one_primary
 
 ALTER TABLE campaigns       ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
 ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
+-- See infra/db/migrations/032_lead_product_id.sql — which product/section a
+-- lead is associated with, so the Sales Agent's Forecasting tab can break
+-- pipeline value, targets, and gap analysis down per product instead of
+-- only org-wide.
+ALTER TABLE leads           ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS ix_campaigns_product ON campaigns (product_id) WHERE product_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_leads_product     ON leads     (product_id) WHERE product_id IS NOT NULL;
 
 -- ---------- Message Templates ----------
 CREATE TABLE IF NOT EXISTS message_templates (
@@ -1746,3 +1761,289 @@ DROP TRIGGER IF EXISTS trg_create_wallet_for_new_org ON organizations;
 CREATE TRIGGER trg_create_wallet_for_new_org
   AFTER INSERT ON organizations
   FOR EACH ROW EXECUTE FUNCTION create_wallet_for_new_org();
+
+-- =====================================================================
+-- Finances & Accounting
+-- Tenant's own business ledger and course invoices.
+-- Added from infra/db/migrations/034_finance_accounting.sql so the
+-- Docker database initialization creates these tables before 03-rls.sql.
+-- RLS policies are intentionally NOT defined here; 03-rls.sql handles
+-- RLS for these tables after this schema file has been executed.
+-- =====================================================================
+
+-- ---------- finance_transactions ----------
+created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_finance_transactions_org_date
+  ON finance_transactions (organization_id, transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_finance_transactions_org_type
+  ON finance_transactions (organization_id, type);
+
+-- ---------- Marketing Hub Assets Library ----------
+-- Owned by marketing-hub-service. File blobs on local disk under
+-- public/uploads/marketing-assets; this table holds metadata + tenant scope.
+CREATE TABLE IF NOT EXISTS marketing_assets (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  type            TEXT NOT NULL CHECK (type IN (
+                    'Logos', 'Images', 'Videos', 'PDFs', 'AI Generated Images'
+                  )),
+  size_bytes      BIGINT NOT NULL DEFAULT 0,
+  storage_url     TEXT NOT NULL,
+  mime_type       TEXT,
+  uploaded_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+CREATE INDEX IF NOT EXISTS idx_finance_transactions_org_date
+  ON finance_transactions (organization_id, transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_finance_transactions_org_type
+  ON finance_transactions (organization_id, type);
+
+-- ---------- course_invoices ----------
+CREATE TABLE IF NOT EXISTS course_invoices (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  invoice_number        TEXT NOT NULL,
+  financial_year        TEXT NOT NULL,
+
+  seller_legal_name     TEXT NOT NULL,
+  seller_gstin          TEXT,
+  seller_address        TEXT,
+  seller_state          TEXT,
+  seller_state_code     TEXT,
+
+  student_name          TEXT NOT NULL,
+  student_gstin         TEXT,
+  student_address       TEXT,
+  student_state         TEXT NOT NULL,
+  student_state_code    TEXT NOT NULL,
+  place_of_supply       TEXT NOT NULL,
+
+  sac_code              TEXT NOT NULL DEFAULT '9992',
+  course_name           TEXT,
+
+  base_amount           NUMERIC(12,2) NOT NULL,
+  gst_rate              NUMERIC(5,2) NOT NULL DEFAULT 18,
+  cgst_rate             NUMERIC(5,2) NOT NULL DEFAULT 0,
+  cgst_amount           NUMERIC(12,2) NOT NULL DEFAULT 0,
+  sgst_rate             NUMERIC(5,2) NOT NULL DEFAULT 0,
+  sgst_amount           NUMERIC(12,2) NOT NULL DEFAULT 0,
+  igst_rate             NUMERIC(5,2) NOT NULL DEFAULT 0,
+  igst_amount           NUMERIC(12,2) NOT NULL DEFAULT 0,
+  intra_state           BOOLEAN NOT NULL,
+  total_amount          NUMERIC(12,2) NOT NULL,
+
+  status                TEXT NOT NULL DEFAULT 'issued' CHECK (status IN ('issued', 'void')),
+  pdf_generated_at      TIMESTAMPTZ,
+  source                TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'ai_agent')),
+  created_by_user       UUID REFERENCES users(id),
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  UNIQUE (organization_id, invoice_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_course_invoices_org_created
+  ON course_invoices (organization_id, created_at DESC);
+
+-- ---------- finance_invoice_counters ----------
+CREATE TABLE IF NOT EXISTS finance_invoice_counters (
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  financial_year    TEXT NOT NULL,
+  last_number       INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (organization_id, financial_year)
+);
+=======
+CREATE INDEX IF NOT EXISTS ix_marketing_assets_org
+  ON marketing_assets (organization_id);
+CREATE INDEX IF NOT EXISTS ix_marketing_assets_org_type
+  ON marketing_assets (organization_id, type);
+CREATE INDEX IF NOT EXISTS ix_marketing_assets_org_created
+  ON marketing_assets (organization_id, created_at DESC);
+
+-- ---------- Marketing Hub Audiences ----------
+-- Owned by marketing-hub-service. Contact-service only has tag-based
+-- segments (GET /contacts/segments = DISTINCT tags + counts). That is too
+-- thin for the Audience Manager UI (source, score, status, filter rules,
+-- growth chart), so we keep a dedicated marketing_audiences table here
+-- rather than overloading contacts.tags.
+CREATE TABLE IF NOT EXISTS marketing_audiences (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id    UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name               TEXT NOT NULL,
+  source             TEXT NOT NULL DEFAULT 'Custom'
+                       CHECK (source IN ('Custom', 'Pixel', 'Lookalike', 'Import', 'CRM')),
+  size               BIGINT NOT NULL DEFAULT 0,
+  score              INTEGER,
+  status             TEXT NOT NULL DEFAULT 'Active'
+                       CHECK (status IN ('Active', 'Archived')),
+  filter_definition  JSONB NOT NULL DEFAULT '{}',
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_marketing_audiences_org
+  ON marketing_audiences (organization_id);
+CREATE INDEX IF NOT EXISTS ix_marketing_audiences_org_status
+  ON marketing_audiences (organization_id, status);
+CREATE INDEX IF NOT EXISTS ix_marketing_audiences_org_created
+  ON marketing_audiences (organization_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS marketing_audience_snapshots (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  audience_id   UUID NOT NULL REFERENCES marketing_audiences(id) ON DELETE CASCADE,
+  size          BIGINT NOT NULL DEFAULT 0,
+  captured_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_marketing_audience_snapshots_audience_captured
+  ON marketing_audience_snapshots (audience_id, captured_at DESC);
+CREATE INDEX IF NOT EXISTS ix_marketing_audience_snapshots_captured
+  ON marketing_audience_snapshots (captured_at);
+
+-- ---------- Marketing Hub Campaigns (ad-platform tracking) ----------
+-- DECISION: metrics are manually entered CRUD — no Meta/Google Ads OAuth
+-- or webhook sync. Kept separate from campaign-service's `campaigns` table
+-- (outbound WhatsApp/SMS/email broadcasts). See migrations/034_marketing_campaigns.sql.
+CREATE TABLE IF NOT EXISTS marketing_campaigns (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  name              TEXT NOT NULL,
+  platform          TEXT NOT NULL
+                      CHECK (platform IN (
+                        'Facebook', 'Google Ads', 'LinkedIn',
+                        'Instagram', 'WhatsApp', 'Email'
+                      )),
+  objective         TEXT,
+  status            TEXT NOT NULL DEFAULT 'Draft'
+                      CHECK (status IN ('Active', 'Scheduled', 'Paused', 'Draft')),
+
+  budget            NUMERIC NOT NULL DEFAULT 0,
+  spend             NUMERIC NOT NULL DEFAULT 0,
+  ctr               NUMERIC NOT NULL DEFAULT 0,
+  cpm               NUMERIC NOT NULL DEFAULT 0,
+  cpc               NUMERIC NOT NULL DEFAULT 0,
+  reach             BIGINT  NOT NULL DEFAULT 0,
+  impressions       BIGINT  NOT NULL DEFAULT 0,
+  leads             INTEGER NOT NULL DEFAULT 0,
+  conversions       INTEGER NOT NULL DEFAULT 0,
+  revenue           NUMERIC NOT NULL DEFAULT 0,
+  roas              NUMERIC NOT NULL DEFAULT 0,
+
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  start_date        DATE,
+  end_date          DATE,
+  ai_score          INTEGER CHECK (ai_score IS NULL OR (ai_score >= 0 AND ai_score <= 100)),
+
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org
+  ON marketing_campaigns (organization_id);
+CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org_status
+  ON marketing_campaigns (organization_id, status);
+CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org_platform
+  ON marketing_campaigns (organization_id, platform);
+CREATE INDEX IF NOT EXISTS ix_marketing_campaigns_org_created
+  ON marketing_campaigns (organization_id, created_at DESC);
+
+
+-- ---------- Marketing Hub Broadcasts (one-to-many sends) ----------
+-- DECISION: own table in marketing-hub-service; /send uses same simulation
+-- convention as campaign-service bulkCampaignWorker (no real carrier wired).
+-- See migrations/035_marketing_broadcasts.sql.
+CREATE TABLE IF NOT EXISTS marketing_broadcasts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  name              TEXT NOT NULL,
+  channel           TEXT NOT NULL
+                      CHECK (channel IN ('WhatsApp', 'Email', 'SMS')),
+  audience_id       UUID REFERENCES marketing_audiences(id) ON DELETE SET NULL,
+
+  status            TEXT NOT NULL DEFAULT 'Draft'
+                      CHECK (status IN ('Draft', 'Scheduled', 'Active', 'Sent')),
+
+  sent              INTEGER NOT NULL DEFAULT 0,
+  delivered         INTEGER NOT NULL DEFAULT 0,
+  opened            INTEGER NOT NULL DEFAULT 0,
+  clicked           INTEGER NOT NULL DEFAULT 0,
+  responses         INTEGER NOT NULL DEFAULT 0,
+  conversion        NUMERIC NOT NULL DEFAULT 0,
+  ai_score          INTEGER CHECK (ai_score IS NULL OR (ai_score >= 0 AND ai_score <= 100)),
+
+  message_body      TEXT,
+
+  scheduled_at      TIMESTAMPTZ,
+  sent_at           TIMESTAMPTZ,
+
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_marketing_broadcasts_org
+  ON marketing_broadcasts (organization_id);
+CREATE INDEX IF NOT EXISTS ix_marketing_broadcasts_org_status
+  ON marketing_broadcasts (organization_id, status);
+CREATE INDEX IF NOT EXISTS ix_marketing_broadcasts_org_channel
+  ON marketing_broadcasts (organization_id, channel);
+CREATE INDEX IF NOT EXISTS ix_marketing_broadcasts_org_created
+  ON marketing_broadcasts (organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_marketing_broadcasts_audience
+  ON marketing_broadcasts (audience_id);
+
+-- ---------- Marketing Hub Calendar (standalone meeting/reminder events) ----------
+-- Campaign/broadcast events are derived at read time from marketing_campaigns
+-- and marketing_broadcasts — not stored here. See migrations/036_marketing_calendar_events.sql.
+CREATE TABLE IF NOT EXISTS marketing_calendar_events (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  title             TEXT NOT NULL,
+  type              TEXT NOT NULL
+                      CHECK (type IN ('meeting', 'reminder')),
+  date              DATE NOT NULL,
+  color             TEXT NOT NULL DEFAULT '#3b82f6',
+
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_marketing_calendar_events_org
+  ON marketing_calendar_events (organization_id);
+CREATE INDEX IF NOT EXISTS ix_marketing_calendar_events_org_date
+  ON marketing_calendar_events (organization_id, date);
+
+-- ---------- Imported Sheets (Support Agent Import tab: saved, editable spreadsheets) ----------
+-- See migrations/037_imported_sheets.sql for full column notes.
+CREATE TABLE IF NOT EXISTS imported_sheets (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+
+  name              TEXT NOT NULL,
+  source            TEXT NOT NULL
+                      CHECK (source IN ('upload', 'google_sheets')),
+  source_ref        TEXT,
+
+  headers           JSONB NOT NULL DEFAULT '[]'::jsonb,
+  rows              JSONB NOT NULL DEFAULT '[]'::jsonb,
+
+  last_imported_at  TIMESTAMPTZ,
+
+  created_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_imported_sheets_org
+  ON imported_sheets (organization_id);
+CREATE INDEX IF NOT EXISTS ix_imported_sheets_org_updated
+  ON imported_sheets (organization_id, updated_at DESC);
+

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rbac import require_permission
 from app.core.security import AuthUser
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.schemas.marketing_extras import (
     AeoIn, AeoOut, AeoSummary,
     AntiBanIn, AntiBanOut,
@@ -34,7 +34,7 @@ _can_manage = require_permission("ai_agents:manage")
 async def optimize_for_answer_engines(
     body: AeoIn,
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> AeoOut:
     organization_id = uuid.UUID(user.organization_id)
     result = await AeoService(session).optimize(organization_id, body.copy)
@@ -46,7 +46,7 @@ async def optimize_for_answer_engines(
 @router.get("/marketing/aeo/optimizations", response_model=list[AeoSummary])
 async def list_aeo_optimizations(
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> list[AeoSummary]:
     organization_id = uuid.UUID(user.organization_id)
     rows = await AeoService(session).list_recent(organization_id)
@@ -60,7 +60,7 @@ async def list_aeo_optimizations(
 async def anti_ban_check(
     body: AntiBanIn,
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> AntiBanOut:
     organization_id = uuid.UUID(user.organization_id)
     result = await AntiBanService(session).check(
@@ -78,7 +78,7 @@ async def anti_ban_check(
 async def generate_ctwa_ad(
     body: CtwaIn,
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> CtwaOut:
     organization_id = uuid.UUID(user.organization_id)
     result = await CtwaService(session).generate(organization_id, body.offer_brief)
@@ -90,7 +90,7 @@ async def generate_ctwa_ad(
 @router.get("/marketing/ctwa/packages", response_model=list[CtwaSummary])
 async def list_ctwa_packages(
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> list[CtwaSummary]:
     organization_id = uuid.UUID(user.organization_id)
     rows = await CtwaService(session).list_recent(organization_id)
@@ -104,7 +104,7 @@ async def list_ctwa_packages(
 async def cold_lead_revival(
     body: ColdRevivalIn,
     user: AuthUser = Depends(_can_manage),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> ColdRevivalOut:
     organization_id = uuid.UUID(user.organization_id)
     result = await ColdRevivalService(session).scan(organization_id, body.dormant_days, body.note)

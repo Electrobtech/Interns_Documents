@@ -32,34 +32,45 @@ export default function ConnectionPanel({
     <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          <p className="text-sm font-medium text-slate-700">Connected to Google Business Profile</p>
+          <span className={`w-2 h-2 rounded-full ${status.mock ? 'bg-amber-400' : 'bg-emerald-500'}`} />
+          <p className="text-sm font-medium text-slate-700">
+            {status.mock ? 'Showing mock Google reviews' : 'Connected to Google Business Profile'}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => onSync()} disabled={busy}
-            className="flex items-center gap-1.5 text-xs font-medium border border-slate-300 rounded-lg px-3 py-1.5 text-slate-600 hover:text-brand disabled:opacity-60">
-            <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Sync now
-          </button>
-          <button onClick={onDisconnect} disabled={busy}
-            className="flex items-center gap-1.5 text-xs font-medium border border-slate-300 rounded-lg px-3 py-1.5 text-slate-500 hover:text-red-500 disabled:opacity-60">
-            <Unlink size={13} /> Disconnect
-          </button>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-        {status.lastSyncAt && <span>Last synced {new Date(status.lastSyncAt).toLocaleString()}</span>}
-        {status.lastSyncStatus === 'error' && (
-          <span className="text-red-500">Last sync had errors: {status.lastSyncError}</span>
-        )}
-        {!accounts.length && (
-          <button onClick={onLoadAccounts} className="text-brand font-medium hover:text-brand-dark">
-            Load businesses →
-          </button>
+        {!status.mock && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => onSync()} disabled={busy}
+              className="flex items-center gap-1.5 text-xs font-medium border border-slate-300 rounded-lg px-3 py-1.5 text-slate-600 hover:text-brand disabled:opacity-60">
+              <RefreshCw size={13} className={busy ? 'animate-spin' : ''} /> Sync now
+            </button>
+            <button onClick={onDisconnect} disabled={busy}
+              className="flex items-center gap-1.5 text-xs font-medium border border-slate-300 rounded-lg px-3 py-1.5 text-slate-500 hover:text-red-500 disabled:opacity-60">
+              <Unlink size={13} /> Disconnect
+            </button>
+          </div>
         )}
       </div>
 
-      {!!accounts.length && (
+      {status.mock ? (
+        <p className="text-xs text-slate-400">
+          Google Business Profile API access isn&apos;t connected yet, so these reviews are sample data. Replies you post here
+          are saved and will keep working once a real account is connected.
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+          {status.lastSyncAt && <span>Last synced {new Date(status.lastSyncAt).toLocaleString()}</span>}
+          {status.lastSyncStatus === 'error' && (
+            <span className="text-red-500">Last sync had errors: {status.lastSyncError}</span>
+          )}
+          {!accounts.length && (
+            <button onClick={onLoadAccounts} className="text-brand font-medium hover:text-brand-dark">
+              Load businesses →
+            </button>
+          )}
+        </div>
+      )}
+
+      {!status.mock && !!accounts.length && (
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Business</label>

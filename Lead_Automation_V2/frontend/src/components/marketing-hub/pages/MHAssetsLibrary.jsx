@@ -1,26 +1,152 @@
 'use client';
 import { useRef, useState } from 'react';
-import { Plus, Search, Download, Eye, FileText, Image as ImageIcon, Video, Music, Trash2, Upload as UploadIcon } from 'lucide-react';
+import { Plus, Search, Download, Trash2, Image as ImageIcon, FileText, Video, FileArchive } from 'lucide-react';
 import { useMHToast } from '../ui/MHToast';
-import { useAssets, useUploadAsset, useDeleteAsset, useAssetStats } from '@/lib/queries/marketingHub';
-import { getToken } from '@/lib/auth';
+import { EmptyState } from './_shared';
+import {
+  useMarketingAssets,
+  useUploadMarketingAsset,
+  useDeleteMarketingAsset,
+} from '@/lib/queries/marketingHub';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 const TYPE_ICON = { image: ImageIcon, video: Video, audio: Music, document: FileText, template: FileText };
 const TYPE_COLOR = { image: '#10b981', video: '#6366f1', audio: '#f59e0b', document: '#3b82f6', template: '#a855f7' };
 
-function fmtSize(bytes) {
-  if (!bytes) return '—';
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+function formatBytes(n) {
+  if (n == null || Number.isNaN(Number(n))) return '-';
+  const bytes = Number(n);
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function isImageType(type, mime) {
+  if (type === 'Images' || type === 'Logos' || type === 'AI Generated Images') return true;
+  return Boolean(mime && mime.startsWith('image/'));
 }
 
 export default function MHAssetsLibrary() {
   const toast = useMHToast();
-  const [search, setSearch] = useState('');
-  const [type, setType] = useState('All');
   const fileInputRef = useRef(null);
+  const [activeTab, setActiveTab] = useState('All');
+  const [search, setSearch] = useState('');
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  const { data: assets = [], isLoading, isError } = useMarketingAssets(activeTab);
+  const uploadMutation = useUploadMarketingAsset();
+  const deleteMutation = useDeleteMarketingAsset();
+
+  const filtered = (Array.isArray(assets) ? assets : []).filter((a) =>
+    (a.name || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const getIcon = (type) => TYPE_ICONS[type] || FileText;
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (activeTab === 'Logos') formData.append('type', 'Logos');
+    else if (activeTab === 'AI Generated') formData.append('type', 'AI Generated Images');
+
+    try {
+      await uploadMutation.mutateAsync(formData);
+      toast.show('Uploaded ' + file.name, 'success');
+    } catch (err) {
+      toast.show(err?.message || 'Upload failed', 'error');
+    }
+  };
+
+  const handleDelete = async (asset) => {
+    try {
+      await deleteMutation.mutateAsync(asset.id);
+      toast.show('Deleted ' + asset.name, 'info');
+    } catch (err) {
+      toast.show(err?.message || 'Delete failed', 'error');
+    }
+  };
+
+  const handleDownload = (asset) => {
+    if (!asset.storage_url) {
+      toast.show('No download URL available', 'error');
+      return;
+    }
+    window.open(asset.storage_url, '_blank', 'noopener,noreferrer');
+    toast.show('Opening ' + asset.name, 'success');
+  };
+
+  const getTypeLabel = (type) => {
+    return TYPE_LABELS[type] || type;
+  };
+
+  const handleDrag = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFiles(e.dataTransfer.files);
+    }
+  }, []);
+
+  const handleFileSelect = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleFiles(e.target.files);
+    }
+  };
+
+  const handleFiles = (files) => {
+    const validFiles = Array.from(files).filter(file => {
+      if (file.size > MAX_FILE_SIZE) {
+        toast.show(`${file.name} exceeds 300MB limit`, 'error');
+        return false;
+      }
+      return true;
+    });
+    
+    setSelectedFiles(prev => [...prev, ...validFiles]);
+  };
+
+  const removeFile = (index) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const handleUpload = async () => {
+    if (selectedFiles.length === 0) {
+      toast.show('Please select files to upload', 'error');
+      return;
+    }
 
   const { data: assets = [], isLoading } = useAssets({ search: search || undefined, type: type === 'All' ? undefined : type });
   const { data: stats } = useAssetStats();
@@ -42,34 +168,9 @@ export default function MHAssetsLibrary() {
     }
   };
 
-  // Files are served with an Authorization header (routes/assets.js's
-  // GET /:id/file), so a plain <a href> won't carry the token — fetch as a
-  // blob and trigger the download client-side instead.
-  const openAsset = async (asset, mode) => {
-    try {
-      const resp = await fetch(`${API_BASE}/marketing-hub/assets/${asset.id}/file`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (!resp.ok) throw new Error(resp.status === 404 ? 'File not found on disk — this looks like seeded demo data with no real file behind it yet.' : `Failed (${resp.status})`);
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      if (mode === 'view') {
-        window.open(url, '_blank');
-      } else {
-        const a = document.createElement('a');
-        a.href = url; a.download = asset.name;
-        document.body.appendChild(a); a.click(); a.remove();
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 30000);
-    } catch (err) {
-      toast.show(err.message || 'Could not open file', 'error');
-    }
-  };
-
   return (
     <div style={{ padding: '24px 28px', background: 'var(--mh-bg)', minHeight: '100vh' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontFamily: 'var(--mh-font-display)', fontSize: 22, fontWeight: 700, color: 'var(--mh-text)', margin: 0 }}>Assets Library</h1>
           <p style={{ fontSize: 13, color: 'var(--mh-text-3)', marginTop: 4 }}>
@@ -82,46 +183,162 @@ export default function MHAssetsLibrary() {
             {uploadAsset.isPending ? <>Uploading…</> : <><UploadIcon size={15} /> Upload Asset</>}
           </button>
         </div>
+        <button
+          className="mh-btn mh-btn-primary"
+          onClick={handleUploadClick}
+          disabled={uploadMutation.isPending}
+        >
+          <Plus size={15} /> {uploadMutation.isPending ? 'Uploading...' : 'Upload Asset'}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/mp4,video/webm,video/quicktime,application/pdf"
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+        />
       </div>
 
-      {/* Search + Filter */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
           <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
-          <input className="mh-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search assets…" style={{ paddingLeft: 32, width: '100%' }} />
+          <input
+            className="mh-input"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search assets..."
+            style={{ paddingLeft: 32, width: '100%' }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {TABS.map((tab) => (
+            <button
+              key={tab}
+              className={`mh-btn ${activeTab === tab ? 'mh-btn-primary' : 'mh-btn-ghost'}`}
+              style={{ fontSize: 12, padding: '6px 12px' }}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
         <select className="mh-input" value={type} onChange={(e) => setType(e.target.value)}>
           {['All', 'image', 'video', 'document', 'audio', 'template'].map((t) => <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>)}
         </select>
       </div>
 
-      {isLoading && <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>Loading…</div>}
+      {isLoading && (
+        <div style={{ padding: 40, textAlign: 'center', fontSize: 13, color: '#6b7280' }}>Loading assets...</div>
+      )}
 
-      {!isLoading && assets.length === 0 && (
-        <div style={{ background: '#fff', border: '1px dashed #e5e7eb', borderRadius: 14, padding: '48px 24px', textAlign: 'center' }}>
-          <UploadIcon size={28} style={{ color: '#d1d5db', margin: '0 auto 10px' }} />
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>No assets yet</div>
-          <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>Upload your first file to get started.</p>
+      {isError && !isLoading && (
+        <div style={{ padding: 40, textAlign: 'center', fontSize: 13, color: '#b91c1c' }}>
+          Failed to load assets. Check that marketing-hub-service is running.
         </div>
       )}
 
-      {!isLoading && assets.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
-          {assets.map((a) => {
-            const Icon = TYPE_ICON[a.type] || FileText;
-            const color = TYPE_COLOR[a.type] || '#6b7280';
+      {!isLoading && !isError && filtered.length === 0 && (
+        <EmptyState
+          icon={ImageIcon}
+          title="No assets found"
+          desc={search ? 'Try adjusting your filters or search.' : 'Upload your first logo, image, video, or PDF to get started.'}
+          action={
+            <button className="mh-btn mh-btn-primary" onClick={handleUploadClick}>
+              <Plus size={15} /> Upload Asset
+            </button>
+          }
+        />
+      )}
+
+      {!isLoading && !isError && filtered.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+          {filtered.map((a) => {
+            const Icon = getIcon(a.type);
+            const showThumb = isImageType(a.type, a.mime_type) && a.storage_url;
+            const modified = a.updated_at || a.created_at;
             return (
-              <div key={a.id} style={{ background: '#fff', border: '1px solid var(--mh-border)', borderRadius: 14, padding: 16, boxShadow: 'var(--mh-shadow-sm)' }}>
-                <div style={{ width: 40, height: 40, borderRadius: 10, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
-                  <Icon size={18} style={{ color }} />
+              <div
+                key={a.id}
+                style={{
+                  background: '#fff',
+                  border: '1px solid var(--mh-border)',
+                  borderRadius: 14,
+                  overflow: 'hidden',
+                  boxShadow: 'var(--mh-shadow-sm)',
+                }}
+              >
+                <div
+                  style={{
+                    height: 140,
+                    background: '#f3f4f6',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {showThumb ? (
+                    <img src={a.storage_url} alt={a.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <Icon size={36} style={{ color: '#d1d5db' }} />
+                  )}
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
-                <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 10 }}>{fmtSize(a.file_size)} · {new Date(a.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</div>
-                {a.tags?.length > 0 && (
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 10 }}>
-                    {a.tags.slice(0, 3).map((t) => (
-                      <span key={t} style={{ fontSize: 10, color: '#6366f1', background: '#eef2ff', padding: '2px 7px', borderRadius: 99 }}>{t}</span>
-                    ))}
+                <div style={{ padding: '14px' }}>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: '#111827',
+                      marginBottom: 6,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={a.name}
+                  >
+                    {a.name}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: '2px 7px',
+                        borderRadius: 99,
+                        background: '#e0e7ff',
+                        color: '#3730a3',
+                      }}
+                    >
+                      {a.type}
+                    </span>
+                    <span style={{ fontSize: 11, color: '#9ca3af' }}>{formatBytes(a.size_bytes)}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 12 }}>
+                    {modified
+                      ? 'Modified ' +
+                        new Date(modified).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : ''}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="mh-btn mh-btn-ghost"
+                      style={{ flex: 1, justifyContent: 'center', fontSize: 11 }}
+                      onClick={() => handleDownload(a)}
+                    >
+                      <Download size={12} /> Download
+                    </button>
+                    <button
+                      className="mh-btn mh-btn-ghost"
+                      style={{ padding: '4px 10px', fontSize: 11 }}
+                      onClick={() => handleDelete(a)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 6 }}>

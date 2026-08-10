@@ -111,6 +111,51 @@ INSERT INTO integrations (organization_id, provider, status) VALUES
   ('11111111-1111-1111-1111-111111111111', 'zapier',        'disconnected')
 ON CONFLICT DO NOTHING;
 
+-- ---------- Message Templates ----------
+-- Seeds the WhatsApp template created via the Template Creation module
+-- (sidebar: Automation > Templates) so it ships with every fresh
+-- database instead of only existing in whichever laptop's local Postgres
+-- volume it was created in. Fixed id matches what was already issued to
+-- the frontend/any campaigns referencing it, so re-running this seed
+-- (e.g. after `docker compose up` on a new machine) is idempotent.
+-- NOTE: header_media_url below is a placeholder — swap it for the real
+-- hosted logo URL if the header image needs to render correctly.
+INSERT INTO message_templates (
+  id, organization_id, name, category, language, channels, status,
+  header_type, header_text, header_media_url,
+  body, body_variables, footer, buttons, created_by
+) VALUES (
+  '501e84c4-f52d-4f0b-bf62-97d324e5e45b',
+  '11111111-1111-1111-1111-111111111111',
+  'electrobtech_launch_update',
+  'MARKETING',
+  'en_US',
+  '{WHATSAPP}',
+  'APPROVED',
+  'IMAGE',
+  NULL,
+  'https://cdn.corenexis.com/f/MeT8otelK1Q.webp',
+  $body$🚀 **Exciting Updates from Electrobtech Innovations!**
+
+Hello! 👋
+
+We're excited to bring you the latest updates, offers, and solutions from **Electrobtech Innovations**.
+
+✨ Discover our innovative technology solutions
+📣 Stay updated with our latest announcements
+💡 Get expert solutions tailored to your business needs
+
+For more information, feel free to connect with our team.
+
+**Electrobtech Innovations**
+*Innovating Today, Empowering Tomorrow.* 🚀$body$,
+  '{}',
+  NULL,
+  '[{"type":"PHONE_NUMBER","text":"Contact Us","value":"1234567890"}]',
+  (SELECT id FROM users WHERE organization_id = '11111111-1111-1111-1111-111111111111' AND email = 'admin@electrobtech.com')
+)
+ON CONFLICT (id) DO NOTHING;
+
 -- ---------- Contacts ----------
 -- external_id mirrors phone here for the demo seed — for a real WhatsApp
 -- contact this would be the raw wa_id Meta sends as msg.from (see
@@ -229,9 +274,173 @@ INSERT INTO social_comments (organization_id, source, author, body, reply) VALUE
   ('11111111-1111-1111-1111-111111111111','linkedin','Neha Patel','Amazing collection!',NULL)
 ON CONFLICT DO NOTHING;
 
+-- ---------- Google Reviews (mock — Google Business Profile API access is
+-- temporarily unavailable) ----------
+-- Seeds the same google_accounts / google_locations / google_reviews tables
+-- the real Google integration uses (services/review-service/src/google/),
+-- so the UI, reply flow, and stats all work unmodified. The mock location's
+-- id is prefixed "mock-" — services/review-service/src/google/routes.js
+-- checks that prefix to skip real Google API calls when replying, so
+-- replies work without a live Google connection. Delete these rows (or
+-- just connect a real account) once real API access is restored.
+--
+-- NOTE: this same INSERT also lives in
+-- migrations/033_mock_google_reviews.sql so it can be re-run by hand
+-- against a database that was already initialized before this change —
+-- keep both in sync if you edit the mock reviews.
+INSERT INTO google_accounts (organization_id, account_id, account_name) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'accounts/mock-electrobtech', 'Electrobtech Innovations (Mock)')
+ON CONFLICT (organization_id, account_id) DO NOTHING;
+
+INSERT INTO google_locations (organization_id, account_id, location_id, location_name, address, phone, is_selected) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'accounts/mock-electrobtech', 'locations/mock-electrobtech-1',
+   'Electrobtech Innovations — HSR Layout', 'HSR Layout, Bengaluru, Karnataka, India', '+91 80 4000 1234', true)
+ON CONFLICT (organization_id, location_id) DO NOTHING;
+
+INSERT INTO google_reviews (
+  organization_id, location_id, review_id, reviewer_name, reviewer_photo_url,
+  star_rating, comment, create_time, update_time, reply_comment, reply_update_time
+) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-01', 'Rohan Verma',   'https://i.pravatar.cc/150?img=11',
+   5, 'Excellent service! The team was quick to respond and resolved my issue same day.',
+   now() - interval '2 days', now() - interval '2 days', NULL, NULL),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-02', 'Sana Iyer',     'https://i.pravatar.cc/150?img=32',
+   4, 'Good products and fast delivery. Packaging could be a little sturdier.',
+   now() - interval '4 days', now() - interval '3 days',
+   'Thanks for the feedback, Sana! We are working on improving our packaging.', now() - interval '3 days'),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-03', 'Arjun Mehta',   'https://i.pravatar.cc/150?img=13',
+   2, 'Delivery was late and the packaging was damaged when it arrived.',
+   now() - interval '6 days', now() - interval '6 days', NULL, NULL),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-04', 'Priya Nair',    'https://i.pravatar.cc/150?img=25',
+   5, 'Absolutely love this store! Staff are friendly and very knowledgeable.',
+   now() - interval '8 days', now() - interval '7 days',
+   'Thank you so much, Priya — see you again soon!', now() - interval '7 days'),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-05', 'Karan Malhotra','https://i.pravatar.cc/150?img=14',
+   3, 'Decent experience overall, nothing extraordinary. Prices are a bit high.',
+   now() - interval '10 days', now() - interval '10 days', NULL, NULL),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-06', 'Neha Patel',    'https://i.pravatar.cc/150?img=47',
+   5, 'Best customer support I have experienced in a long time. Highly recommend!',
+   now() - interval '12 days', now() - interval '11 days',
+   'We really appreciate this, Neha! Thank you for the kind words.', now() - interval '11 days'),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-07', 'Vikram Rao',    'https://i.pravatar.cc/150?img=15',
+   1, 'Very disappointed. The product I received did not match the description at all.',
+   now() - interval '14 days', now() - interval '14 days', NULL, NULL),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-08', 'Ananya Singh',  'https://i.pravatar.cc/150?img=44',
+   4, 'Great range of products. Checkout took a little longer than expected.',
+   now() - interval '16 days', now() - interval '16 days', NULL, NULL),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-09', 'Rahul Deshmukh','https://i.pravatar.cc/150?img=18',
+   5, 'Five stars for the quick turnaround and professional communication throughout.',
+   now() - interval '18 days', now() - interval '17 days',
+   'Thank you, Rahul! Glad we could help.', now() - interval '17 days'),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-10', 'Ishita Kapoor', 'https://i.pravatar.cc/150?img=29',
+   2, 'The item arrived fine but customer service was slow to respond to my query.',
+   now() - interval '20 days', now() - interval '20 days', NULL, NULL),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-11', 'Aditya Sharma', 'https://i.pravatar.cc/150?img=16',
+   5, 'Impressed with the quality and the attention to detail. Will be back!',
+   now() - interval '23 days', now() - interval '22 days',
+   'That means a lot to us, Aditya — thank you!', now() - interval '22 days'),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-12', 'Meera Joshi',   'https://i.pravatar.cc/150?img=48',
+   3, 'Average experience. The store was clean but the staff seemed understaffed.',
+   now() - interval '26 days', now() - interval '26 days', NULL, NULL),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-13', 'Siddharth Rao', 'https://i.pravatar.cc/150?img=17',
+   4, 'Solid experience overall. Would appreciate more payment options at checkout.',
+   now() - interval '29 days', now() - interval '29 days', NULL, NULL),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-14', 'Tanvi Shah',    'https://i.pravatar.cc/150?img=45',
+   5, 'Outstanding! They went above and beyond to make sure I was happy with my order.',
+   now() - interval '33 days', now() - interval '32 days',
+   'Thank you, Tanvi! We are thrilled to hear that.', now() - interval '32 days'),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-15', 'Farhan Khan',   'https://i.pravatar.cc/150?img=19',
+   1, 'Ordered two weeks ago and still waiting on a resolution. Not happy.',
+   now() - interval '36 days', now() - interval '36 days', NULL, NULL),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-16', 'Divya Menon',   'https://i.pravatar.cc/150?img=49',
+   4, 'Really happy with my purchase. Delivery tracking could be more accurate though.',
+   now() - interval '40 days', now() - interval '40 days', NULL, NULL),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-17', 'Gaurav Chawla', 'https://i.pravatar.cc/150?img=20',
+   5, 'Consistently great service every time I visit. Keep it up!',
+   now() - interval '44 days', now() - interval '43 days',
+   'Thanks for being a loyal customer, Gaurav!', now() - interval '43 days'),
+
+  ('11111111-1111-1111-1111-111111111111', 'locations/mock-electrobtech-1', 'mock-review-18', 'Kavya Reddy',   'https://i.pravatar.cc/150?img=26',
+   3, 'Products are good but the website was a bit confusing to navigate.',
+   now() - interval '48 days', now() - interval '48 days', NULL, NULL)
+
+ON CONFLICT (organization_id, review_id) DO NOTHING;
+
 -- ---------- Lead Automation (WhatsApp/Instagram playbook engine) ----------
 -- Demo playbooks live as JSON fixtures in
 -- services/automation-service/src/seeds/ and are loaded separately with
 -- `npm run seed` (from services/automation-service) rather than inserted
 -- here directly, since they're maintained/versioned alongside the flow
 -- builder rather than as bootstrap CRM data.
+-- ---------- Marketing Hub Audiences (demo data for Audience Manager) ----------
+INSERT INTO marketing_audiences (id, organization_id, name, source, size, score, status, filter_definition, created_at, updated_at) VALUES
+  ('a1111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 'High-Intent Leads Q3', 'Custom', 4820, 92, 'Active', '{"tags":["vip","hot"]}', now() - interval '14 days', now() - interval '1 day'),
+  ('a2222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'Website Visitors 30d', 'Pixel', 18400, 74, 'Active', '{"window_days":30}', now() - interval '21 days', now()),
+  ('a3333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111', 'Lookalike - Top Buyers', 'Lookalike', 2100000, 81, 'Active', '{"seed":"top_buyers","pct":2}', now() - interval '30 days', now() - interval '5 days'),
+  ('a4444444-4444-4444-4444-444444444444', '11111111-1111-1111-1111-111111111111', 'Email List - Opted In', 'Import', 9650, 88, 'Active', '{}', now() - interval '60 days', now() - interval '45 days'),
+  ('a5555555-5555-5555-5555-555555555555', '11111111-1111-1111-1111-111111111111', 'Webinar Registrants 2025', 'CRM', 3240, 95, 'Active', '{"event":"webinar_2025"}', now() - interval '10 days', now() - interval '2 days')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO marketing_audience_snapshots (audience_id, size, captured_at)
+SELECT a.id,
+       GREATEST(100, ROUND(a.size * (0.55 + 0.45 * (w.n / 8.0)))::bigint),
+       date_trunc('week', now()) - ((8 - w.n) * interval '1 week') + interval '3 days'
+  FROM marketing_audiences a
+  CROSS JOIN generate_series(1, 8) AS w(n)
+ WHERE a.organization_id = '11111111-1111-1111-1111-111111111111';
+
+-- ---------- Marketing Hub Campaigns (manual-entry ad-platform tracking) ----------
+INSERT INTO marketing_campaigns (
+  id, organization_id, name, platform, objective, status,
+  budget, spend, ctr, cpm, cpc, reach, impressions, leads, conversions,
+  revenue, roas, start_date, end_date, ai_score, created_at, updated_at
+) VALUES
+  ('aaaaaaaa-0001-4000-8000-000000000001', '11111111-1111-1111-1111-111111111111',
+   'AI Bootcamp Lead Gen Q3', 'Facebook', 'Lead Generation', 'Active',
+   5000, 3240, 4.2, 8.4, 2.1, 142000, 385000, 1540, 312,
+   93600, 28.9, '2025-06-01', '2025-08-31', 94, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000002', '11111111-1111-1111-1111-111111111111',
+   'SaaS Growth Campaign', 'LinkedIn', 'Website Traffic', 'Active',
+   8000, 6120, 3.1, 12.6, 4.1, 89000, 486000, 890, 198,
+   59400, 9.7, '2025-05-15', '2025-09-30', 81, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000003', '11111111-1111-1111-1111-111111111111',
+   'Webinar Registration Drive', 'Google Ads', 'Event Registration', 'Scheduled',
+   3000, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, '2025-08-10', '2025-08-20', 72, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000004', '11111111-1111-1111-1111-111111111111',
+   'Brand Awareness Wave', 'Instagram', 'Brand Awareness', 'Paused',
+   4500, 2100, 1.8, 6.2, 3.4, 320000, 338000, 0, 45,
+   0, 0, '2025-04-20', '2025-06-30', 56, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000005', '11111111-1111-1111-1111-111111111111',
+   'WhatsApp Retargeting', 'WhatsApp', 'Remarketing', 'Active',
+   1200, 940, 6.7, 4.1, 0.6, 22000, 229000, 1100, 540,
+   162000, 172.3, '2025-07-01', '2025-08-31', 97, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000006', '11111111-1111-1111-1111-111111111111',
+   'Enterprise Sales Push', 'Email', 'Sales', 'Draft',
+   500, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, '2025-07-25', '2025-09-01', 68, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000007', '11111111-1111-1111-1111-111111111111',
+   'Course Enrollment - Python', 'Facebook', 'Course Registration', 'Active',
+   2500, 2100, 5.4, 7.8, 1.4, 68000, 269000, 1870, 420,
+   126000, 60.0, '2025-06-15', '2025-08-15', 91, now(), now()),
+  ('aaaaaaaa-0001-4000-8000-000000000008', '11111111-1111-1111-1111-111111111111',
+   'Google Search - B2B', 'Google Ads', 'Lead Generation', 'Active',
+   6000, 5400, 8.2, 22.1, 2.7, 45000, 245000, 2100, 380,
+   114000, 21.1, '2025-05-01', '2025-08-31', 88, now(), now())
+ON CONFLICT (id) DO NOTHING;

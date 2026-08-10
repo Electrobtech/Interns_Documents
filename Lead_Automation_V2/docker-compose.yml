@@ -107,26 +107,6 @@ services:
       redis:    { condition: service_healthy }
     ports: ["4004:4004"]
 
-  # Marketing Hub service - campaigns/broadcasts/audiences backend for
-  # frontend/src/components/marketing-hub/, with a channel-simulation layer
-  # (WhatsApp/Email/SMS/Messenger/Instagram/LinkedIn) behind a BullMQ queue.
-  # No new datastore — reuses the shared postgres/redis below.
-  marketing-hub-service:
-    build:
-      context: .
-      dockerfile: services/marketing-hub-service/Dockerfile
-      network: host
-    env_file: .env
-    environment:
-      MARKETING_HUB_PORT: 4016
-      DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
-      REDIS_URL: redis://redis:6379
-      CONTACT_SERVICE_URL: http://contact-service:4003
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis:    { condition: service_healthy }
-    ports: ["4016:4016"]
-
   # AI Agent Overview service - Python/FastAPI for Overview and orchestration
   ai-overview-service:
     build:
@@ -136,12 +116,14 @@ services:
     container_name: ai-overview-service
     env_file: .env
     environment:
-      # NOTE: still connects as the admin/migration role, not app_user. This
-      # service's SQLAlchemy models (ai_agents/ai_suggestions-equivalent
-      # tables) aren't part of infra/db/rls.sql yet and it has no
-      # per-request tenant-scoping layer analogous to shared/src/db.js —
-      # see docs/MULTI_TENANT_RLS.md's known-gaps note. Tracked as follow-up.
-      DATABASE_URL:          postgresql+asyncpg://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      # RLS is now wired up (docs/MULTI_TENANT_RLS.md §3.1, closed): the
+      # service connects as app_user (non-owner, NOBYPASSRLS — same role
+      # every Node service uses) at runtime, same as the others below.
+      # MIGRATION_DATABASE_URL stays the owner role because Alembic DDL
+      # (ENABLE ROW LEVEL SECURITY, CREATE POLICY, etc.) requires it — see
+      # entrypoint.sh / alembic/env.py.
+      DATABASE_URL:           postgresql+asyncpg://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      MIGRATION_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-lead}:${POSTGRES_PASSWORD:-leadpass}@postgres:5432/${POSTGRES_DB:-lead_automation}
       JWT_SECRET:            ${JWT_SECRET:-change-me-in-prod}
       LLM_PROVIDER:          ${LLM_PROVIDER:-groq}
       LLM_FALLBACK_PROVIDER: ${LLM_FALLBACK_PROVIDER:-ollama}
@@ -266,6 +248,43 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     ports: ["4015:4015"]
+
+
+  # Finances & Accounting — tenant's own course-revenue/expense ledger +
+  # GST invoicing. Separate service from billing-service (platform-bills-
+  # tenant), same DB.
+  finance-service:
+    build:
+      context: .
+      dockerfile: services/finance-service/Dockerfile
+      network: host
+    env_file: .env
+    environment:
+      PORT: 4016
+      DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4016:4016"]
+  # Marketing Hub service - Assets Library (upload/list/delete) and future
+  # Marketing Hub backend routes. Files land under public/uploads/marketing-assets;
+  # GATEWAY_PUBLIC_URL is used so returned storage_url resolves via the gateway.
+  marketing-hub-service:
+    build:
+      context: .
+      dockerfile: services/marketing-hub-service/Dockerfile
+      network: host
+    env_file: .env
+    environment:
+      MARKETING_HUB_PORT: "4017"
+      DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      GATEWAY_PUBLIC_URL: ${GATEWAY_PUBLIC_URL:-http://localhost:8080}
+      GATEWAY_PORT: ${GATEWAY_PORT:-8080}
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["4017:4017"]
+    volumes:
+      - marketing_hub_uploads:/app/services/marketing-hub-service/public/uploads
+
 
   # E-commerce service - integrates with e-commerce platforms
   ecommerce-service:
@@ -394,8 +413,12 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD:-apppass}@postgres:5432/${POSTGRES_DB:-lead_automation}
+      # Container-to-container call the follow-up-due poller makes to pull
+      # today's/overdue follow-ups — see src/followUpPoller.js.
+      CONTACT_SERVICE_URL: http://contact-service:4003
     depends_on:
       postgres: { condition: service_healthy }
+      contact-service: { condition: service_started }
     ports: ["4012:4012"]
 
   # Email service - Gmail integration (OAuth, sync, send/reply, attachments)
@@ -476,10 +499,7 @@ services:
       INBOX_SERVICE_URL:       http://inbox-service:4002
       CONTACT_SERVICE_URL:     http://contact-service:4003
       CAMPAIGN_SERVICE_URL:    http://campaign-service:4004
-      AI_OVERVIEW_SERVICE_URL:    http://ai-overview-service:4020
-      AI_MARKETING_SERVICE_URL:   http://ai-marketing-service:4021
-      AI_SALES_SERVICE_URL:       http://ai-sales-service:4022
-      AI_SUPPORT_SERVICE_URL:     http://ai-support-service:4023
+      AI_SERVICE_URL:          http://ai-agent-service:4005
       ECOMMERCE_SERVICE_URL:   http://ecommerce-service:4006
       REVIEW_SERVICE_URL:      http://review-service:4007
       ANALYTICS_SERVICE_URL:   http://analytics-service:4008
@@ -491,7 +511,11 @@ services:
       EMAIL_SERVICE_URL:       http://email-service:4013
       CALENDAR_SERVICE_URL:    http://calendar-service:4014
       BILLING_SERVICE_URL:     http://billing-service:4015
-      MARKETING_HUB_SERVICE_URL: http://marketing-hub-service:4016
+
+      FINANCE_SERVICE_URL:     http://finance-service:4016
+
+      MARKETING_HUB_SERVICE_URL: http://marketing-hub-service:4017
+
     depends_on:
       - auth-service
       - inbox-service
@@ -503,6 +527,7 @@ services:
       - ai-sales-service
       - ai-support-service
       - billing-service
+      - finance-service
       - ecommerce-service
       - review-service
       - analytics-service
@@ -547,4 +572,5 @@ volumes:
   automation_uploads:
   auth_uploads:
   email_uploads:
+  marketing_hub_uploads:
   ollama:

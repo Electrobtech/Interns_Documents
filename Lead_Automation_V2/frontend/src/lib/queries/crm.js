@@ -5,21 +5,19 @@ import { useApi } from '@/lib/useApi';
 // Real platform CRM data, reused by the agent dashboards — one source of
 // truth, no mocked metrics.
 
-// GET /leads — { id, contact_id, name, source, phone, stage, priority,
-// score, deal_value, course, temperature, contact_status, category,
-// created_at, updated_at }. `name`, `source` and `phone` are joined in from
-// the backing contact; `updated_at` is bumped by contact-service on every
-// PUT /leads/:id or PUT /leads/:id/stage (see
-// infra/db/migrations/031_lead_updated_at.sql).
-//
-// `category` is one of 'hot'|'warm'|'cold' (filters on leads.temperature)
-// or 'active'|'onboarded'|'inactive' (filters on leads.category) — powers
-// the Leads/CRM page's filter tabs server-side. Omit for the unfiltered list.
-export function useLeads(category) {
+// GET /leads — { id, contact_id, name, stage, priority, score, created_at }
+// GET /leads?created_after=ISO&created_before=ISO — day/week-scoped, used
+// by the Support Agent's Daily Report tab. Omitting `range` keeps the
+// original unfiltered call (and its query key) exactly as before.
+export function useLeads(range) {
   const { call } = useApi();
+  const qs = new URLSearchParams();
+  if (range?.created_after) qs.set('created_after', range.created_after);
+  if (range?.created_before) qs.set('created_before', range.created_before);
+  const query = qs.toString();
   return useQuery({
-    queryKey: ['leads', 'list', category || 'all'],
-    queryFn: () => call(category ? `/leads?category=${encodeURIComponent(category)}` : '/leads'),
+    queryKey: ['leads', 'list', range?.created_after || null, range?.created_before || null],
+    queryFn: () => call(`/leads${query ? `?${query}` : ''}`),
   });
 }
 
@@ -107,8 +105,18 @@ export function useCampaignDecision() {
   });
 }
 
-// POST /leads — { name, company?, email?, mobile? (or phone?), score?,
-// priority?, stage?, source?, course?, temperature?, contact_status?, category? }
+// GET /campaigns/:id/recipients — per-recipient send status, powers the
+// Campaigns page's DetailsModal (frontend/src/app/app/campaigns/page.jsx).
+export function useCampaignRecipients(id) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['campaigns', id, 'recipients'],
+    queryFn: () => call(`/campaigns/${id}/recipients`),
+    enabled: !!id,
+  });
+}
+
+// POST /leads — { name, company?, email?, phone?, score?, priority?, stage?, source? }
 export function useCreateLead() {
   const { call } = useApi();
   const qc = useQueryClient();

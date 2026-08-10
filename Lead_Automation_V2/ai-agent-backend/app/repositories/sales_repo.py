@@ -53,6 +53,7 @@ class SalesConfigRepository:
         require_approval: bool | object = ...,
         followup_cadence_days: list[int] | object = ...,
         monthly_revenue_target: float | None | object = ...,
+        product_targets: dict | None | object = ...,
     ) -> SalesAgentConfig:
         """`...` (Ellipsis, via the `object` sentinel default) means "field
         not sent in this PATCH, leave as-is" — distinct from `None`/empty,
@@ -79,6 +80,8 @@ class SalesConfigRepository:
             row.followup_cadence_days = followup_cadence_days or []
         if monthly_revenue_target is not ...:
             row.monthly_revenue_target = monthly_revenue_target
+        if product_targets is not ...:
+            row.product_targets = product_targets or {}
 
         await self._session.flush()
         return row

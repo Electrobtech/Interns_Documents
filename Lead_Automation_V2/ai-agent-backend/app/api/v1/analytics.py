@@ -10,19 +10,19 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import AuthUser, get_current_user
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.repositories.provider_log_repo import ProviderLogRepository
 
 router = APIRouter()
 
-_RANGE_TO_DAYS = {"24h": 1, "7d": 7, "30d": 30, "90d": 90}
+_RANGE_TO_DAYS = {"24h": 1, "7d": 7, "30d": 30, "90d": 90, "all": 36_500}
 
 
 @router.get("/analytics")
 async def analytics(
     range: str = Query(default="7d"),
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> dict:
     """Full analytics payload:
     - run totals + daily series per agent type
