@@ -1,17 +1,29 @@
 'use client';
 import { useState } from 'react';
 import {
-  Sheet, AlertTriangle, Info, CheckCircle2, Loader2, RotateCcw, ArrowRight,
+  Sheet, AlertTriangle, Info, CheckCircle2, Loader2, RotateCcw, ArrowRight, Zap, Table2,
 } from 'lucide-react';
 import { usePreviewSheet, useImportSheet } from '@/lib/queries/sheets';
+import SpreadsheetsLibrary from './SpreadsheetsLibrary';
 
 /**
- * Support Agent — Google Sheets import. Paste a link (public, or private +
- * shared with the configured service account), review/adjust the suggested
- * contacts mapping, then commit — writes into the CRM through the same
- * mapping/dedupe pipeline as the CSV/XLSX importer
- * (services/contact-service/src/sheetsRoutes.js + contactWriter.js).
+ * Support Agent — Import tab. Two ways to bring a spreadsheet in:
+ *
+ *   Quick Import   — paste a link, map columns, commit. One-shot, writes
+ *                     nothing to disk beyond the resulting contacts.
+ *   My Spreadsheets — upload a file or fetch a Google Sheet, then it's
+ *                     saved here: view/edit cells in-app, save, and import
+ *                     into contacts/leads whenever ready (SpreadsheetsLibrary
+ *                     + SpreadsheetEditor).
+ *
+ * Both write into the CRM through the same mapping/dedupe pipeline
+ * (services/contact-service/src/contactWriter.js).
  */
+
+const SUB_TABS = [
+  { key: 'quick', label: 'Quick Import', icon: Zap },
+  { key: 'library', label: 'My Spreadsheets', icon: Table2 },
+];
 
 /* Fields an import can populate. Mirrors TARGET_FIELDS in
    services/contact-service/src/importer.js. */
@@ -47,7 +59,7 @@ function fieldByIndexToMapping(fieldByIndex) {
   return mapping;
 }
 
-export default function ImportTab() {
+function QuickImport() {
   const [url, setUrl] = useState('');
   const [fieldByIndex, setFieldByIndex] = useState(null); // string[] aligned to headers
   const [defaultSource, setDefaultSource] = useState('');
@@ -308,6 +320,31 @@ export default function ImportTab() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+export default function ImportTab() {
+  const [sub, setSub] = useState('quick');
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-1">
+        {SUB_TABS.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => setSub(key)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors
+              ${sub === key
+                ? 'bg-violet-100 text-violet-700'
+                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+          >
+            <Icon size={12} />
+            {label}
+          </button>
+        ))}
+      </div>
+      {sub === 'quick' ? <QuickImport /> : <SpreadsheetsLibrary />}
     </div>
   );
 }
