@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import AuthUser, get_current_user
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.knowledge.retriever import KnowledgeRetriever, RetrievedChunk
 
 router = APIRouter()
@@ -51,7 +51,7 @@ class RAGQueryOut(BaseModel):
 async def rag_query(
     body: RAGQueryIn,
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> RAGQueryOut:
     """Run hybrid retrieval + reranking against the knowledge base and return
     the ranked chunks with their scores. Does NOT call an LLM."""

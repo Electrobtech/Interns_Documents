@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import AuthUser, get_current_user
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.services.orchestrator_service import OrchestratorService
 
 router = APIRouter()
@@ -32,7 +32,7 @@ class OrchestrateOut(BaseModel):
 async def orchestrate(
     body: OrchestrateIn,
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> OrchestrateOut:
     organization_id = uuid.UUID(user.organization_id)
     result = await OrchestratorService(session).orchestrate(

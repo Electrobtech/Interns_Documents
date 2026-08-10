@@ -15,7 +15,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    DATABASE_URL: str = "postgresql+asyncpg://lead:leadpass@postgres:5432/lead_automation"
+    # Runtime connection — app_user (non-owner, NOBYPASSRLS), same role every
+    # Node service uses, so RLS policies (0007_enable_rls) are actually
+    # enforced. See docs/MULTI_TENANT_RLS.md §3.1/§2.4. Migrations run as the
+    # owner role separately (MIGRATION_DATABASE_URL, see alembic/env.py).
+    DATABASE_URL: str = "postgresql+asyncpg://app_user:apppass@postgres:5432/lead_automation"
     JWT_SECRET: str = "dev-secret"
 
     # LLM_PROVIDER: "groq" | "ollama"

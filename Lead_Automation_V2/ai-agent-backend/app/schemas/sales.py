@@ -97,6 +97,15 @@ class SalesAgentConfigIn(BaseModel):
 
     # ── Forecasting tab gap analysis ─────────────────────────────────────
     monthly_revenue_target: float | None = Field(None, ge=0, description="Empty/omitted leaves unset; 0 is a valid target.")
+    product_targets: dict[str, float] | None = Field(
+        None,
+        description=(
+            "Per-product monthly revenue targets: {product_id: target}. "
+            "Sibling to monthly_revenue_target (org-wide), not derived from "
+            "it. Omit to leave unchanged; send {} to clear all product "
+            "targets. product_id must be a real id from GET /products."
+        ),
+    )
 
 
 class SignalBreakdown(BaseModel):
@@ -126,6 +135,7 @@ class SalesAgentConfigOut(BaseModel):
     require_approval: bool = True
     followup_cadence_days: list[int] = Field(default_factory=lambda: [1, 3, 7, 14])
     monthly_revenue_target: float | None = None
+    product_targets: dict[str, float] = Field(default_factory=dict)
     computed: SalesComputedMetrics
     updated_at: datetime | None = None
 
@@ -180,6 +190,22 @@ class RevenueGap(BaseModel):
     note: str
 
 
+class ProductForecast(BaseModel):
+    """Requirement 4 — per-product breakdown of pipeline, MTD sales, and
+    gap-to-target, so target setting / tracking / gap analysis (requirements
+    1-3) aren't only available org-wide. One entry per product returned by
+    campaign-service's GET /products, plus a trailing "unassigned" entry for
+    leads with no product_id (see infra/db/migrations/032_lead_product_id.sql)
+    — surfaced rather than silently dropped, so an org can see how much of
+    its pipeline still needs categorizing."""
+    product_id: str | None = None       # None only for the "unassigned" bucket
+    product_name: str
+    product_category: str | None = None
+    open_deal_count: int
+    pipeline_value: float | None = None       # sum of deal_value_field across this product's open leads
+    revenue_gap: RevenueGap
+
+
 class SalesForecastOut(BaseModel):
     generated_at: datetime
     deal_value_field: str | None = None
@@ -188,6 +214,7 @@ class SalesForecastOut(BaseModel):
     monthly_revenue: list[MonthlyRevenuePoint]
     quarterly_prediction: float | None = None       # weighted_pipeline_value, this quarter's read
     revenue_gap: RevenueGap
+    pipeline_by_product: list[ProductForecast] = Field(default_factory=list)
     explanation: str
 
 

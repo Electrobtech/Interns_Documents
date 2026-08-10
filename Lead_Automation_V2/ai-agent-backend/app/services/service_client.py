@@ -72,6 +72,28 @@ async def get_leads(organization_id: uuid.UUID, limit: int = 300) -> list[dict] 
         return None
 
 
+async def get_products(organization_id: uuid.UUID, status: str | None = None) -> list[dict] | None:
+    """Best-effort fetch of products/offers (campaign-service owns
+    /products). Used by SalesService.get_forecast/get_analytics to break
+    pipeline value, revenue targets, and gap analysis down per product.
+    Returns None on any failure — per-product breakdown degrades to
+    org-wide-only rather than hard-failing the whole forecast."""
+    settings = get_settings()
+    token = sign_service_token(organization_id)
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.CAMPAIGN_SERVICE_URL}/products",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"status": status} if status else None,
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except Exception:
+        logger.warning("product_service_fetch_failed (non-fatal)", exc_info=True)
+        return None
+
+
 async def get_follow_ups(organization_id: uuid.UUID, bucket: str | None = None) -> list[dict] | None:
     """Best-effort fetch of CRM follow-up reminders (contact-service owns
     /follow-ups). Used to build the Sales Agent's real task queue

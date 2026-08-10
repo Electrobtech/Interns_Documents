@@ -66,5 +66,17 @@ class SalesAgentConfig(Base):
     # deal_value_field above.
     monthly_revenue_target: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
 
+    # Per-product monthly revenue targets: {"<product_id>": <float>}. A
+    # sibling to monthly_revenue_target (org-wide), not a replacement — kept
+    # as two separate numbers rather than deriving org-wide by summing the
+    # per-product ones, because a rep can undershoot on one product and
+    # overshoot on another and still hit (or miss) the org-wide number; the
+    # two are independently meaningful. JSONB rather than a child table for
+    # the same reason as confidence_signal_config above: small, always
+    # fetched as a whole with the rest of the config row, no independent
+    # query pattern (never "find all orgs with a target on product X").
+    # See migration 0008_sales_product_targets.
+    product_targets: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
