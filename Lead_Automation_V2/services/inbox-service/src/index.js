@@ -89,8 +89,39 @@ app.get('/conversations/unread-summary', async (req, res) => {
   res.json({ byChannel, total });
 });
 
+// True per-channel + total conversation counts (uncapped, unlike the
+// /conversations list above), for the Unified Inbox's filter-chip badges
+// and header total. Registered BEFORE /conversations/:id — Express
+// matches routes in declaration order, and without this route a request
+// for /conversations/channel-counts falls through to /conversations/:id
+// with id="channel-counts", which Postgres then rejects as an invalid
+// UUID (22P02) with no try/catch around it, crashing the whole process.
+app.get('/conversations/channel-counts', async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT channel_type, COUNT(*)::int AS count
+       FROM conversations
+      WHERE organization_id = $1
+      GROUP BY channel_type`,
+    [req.user.organizationId]
+  );
+  const byChannel = {};
+  let total = 0;
+  for (const row of rows) {
+    byChannel[row.channel_type] = row.count;
+    total += row.count;
+  }
+  res.json({ byChannel, total });
+});
+
 app.get('/conversations/:id', async (req, res) => {
   const org = req.user.organizationId;
+  // Defense in depth: even with channel-counts registered above, any other
+  // non-UUID path segment (typo, stale bookmark, bad client code) would
+  // otherwise hit the same unhandled 22P02 crash this route just caused.
+  // Fail with a normal 400 instead of taking the whole service down.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+    return res.status(400).json({ error: 'Invalid conversation id' });
+  }
   // Joined to contacts for contact_name/contact_id — previously this was a
   // bare `SELECT *` on conversations alone, so the Unified Inbox's
   // conversation header always fell back to displaying the raw internal

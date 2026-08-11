@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { TrendingUp, TrendingDown, Megaphone, Users, Sparkles, BarChart3, RefreshCw,
   Download, ArrowRight, AlertTriangle, CheckCircle, Info, Radio, Search, Pen,
   BarChart2, Activity, Clock, Target, DollarSign } from 'lucide-react';
@@ -8,7 +8,8 @@ import { AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
 import { kpiData, performanceData, platformData, funnelData, channelPerformance,
   aiInsights, revenueData } from '../mockData';
 import { useMHToast } from '../ui/MHToast';
-import { useAudienceGrowth } from '@/lib/queries/marketingHub';
+import { useAudienceGrowth, useMarketingCampaigns } from '@/lib/queries/marketingHub';
+import { printReport } from '../export';
 
 const QUICK_ACTIONS = [
   { icon: Megaphone, label: 'Launch Campaign', sub: 'AI-powered', color: '#6366f1', page: 'campaigns' },
@@ -45,61 +46,34 @@ export default function MHDashboard({ onNavigate }) {
   const { data: audienceGrowth = [] } = useAudienceGrowth(8);
 
   const { show } = useMHToast();
-  const { data: campaigns = [], refetch } = useCampaigns();
-  const aiSuggestions = useAISuggestions();
-  const [aiSummary, setAiSummary] = useState(null);
-  const [loadingAI, setLoadingAI] = useState(false);
-
-  // Fetch AI suggestions on mount
-  useEffect(() => {
-    const fetchAISuggestions = async () => {
-      setLoadingAI(true);
-      try {
-        const context = {
-          campaigns_count: campaigns.length,
-          active_campaigns: campaigns.filter(c => c.status === 'processing' || c.status === 'scheduled').length,
-          recent_performance: campaigns.slice(0, 5).map(c => ({
-            name: c.name,
-            channel: c.channel,
-            status: c.status,
-            recipients: c.total_recipients
-          }))
-        };
-        
-        const result = await aiSuggestions.mutateAsync(context);
-        setAiSummary(result);
-      } catch (error) {
-        console.error('Failed to fetch AI suggestions:', error);
-        // Keep using mock data on error
-      } finally {
-        setLoadingAI(false);
-      }
-    };
-
-    if (campaigns.length > 0) {
-      fetchAISuggestions();
-    }
-  }, [campaigns.length]);
+  const { data: campaigns = [], refetch } = useMarketingCampaigns();
+  // No backend endpoint currently generates a live AI summary for this card,
+  // so it stays null and the static copy below is shown instead.
+  const [aiSummary] = useState(null);
+  const [loadingAI] = useState(false);
 
   // Real report from real mh_campaigns rows — everything else on this page
   // is still the mock hero/chart data (see the plan doc); this button at
   // least reports on genuine campaigns rather than the static KPI mock.
+  // Field names follow campaigns.js's SELECT_COLS (platform, spend, leads,
+  // conversions, revenue) — not the broadcast-shaped fields (total_recipients,
+  // sent_count, etc.) those live on mh_broadcasts rows, a different table.
   const exportReport = () => {
     if (campaigns.length === 0) return show('No campaigns yet to report on', 'error');
     const totals = campaigns.reduce((acc, c) => {
-      acc.recipients += c.total_recipients || 0; acc.sent += c.sent_count || 0;
-      acc.delivered += c.delivered_count || 0; acc.failed += c.failed_count || 0;
+      acc.spend += Number(c.spend) || 0; acc.leads += Number(c.leads) || 0;
+      acc.conversions += Number(c.conversions) || 0; acc.revenue += Number(c.revenue) || 0;
       return acc;
-    }, { recipients: 0, sent: 0, delivered: 0, failed: 0 });
+    }, { spend: 0, leads: 0, conversions: 0, revenue: 0 });
     const html = `
       <h1>Marketing Hub Report</h1>
       <div class="meta">Generated ${new Date().toLocaleString()} · ${campaigns.length} campaign(s)</div>
       <div class="kpi-grid">
-        ${[['Campaigns', campaigns.length], ['Recipients', totals.recipients], ['Sent', totals.sent], ['Delivered', totals.delivered], ['Failed', totals.failed]]
+        ${[['Campaigns', campaigns.length], ['Spend', totals.spend], ['Leads', totals.leads], ['Conversions', totals.conversions], ['Revenue', totals.revenue]]
           .map(([l, v]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v.toLocaleString()}</div></div>`).join('')}
       </div>
-      <table><thead><tr><th>Name</th><th>Channel</th><th>Status</th><th>Recipients</th><th>Sent</th></tr></thead>
-      <tbody>${campaigns.map((c) => `<tr><td>${c.name}</td><td>${c.channel}</td><td>${c.status}</td><td>${c.total_recipients || 0}</td><td>${c.sent_count || 0}</td></tr>`).join('')}</tbody></table>`;
+      <table><thead><tr><th>Name</th><th>Platform</th><th>Status</th><th>Leads</th><th>Spend</th></tr></thead>
+      <tbody>${campaigns.map((c) => `<tr><td>${c.name}</td><td>${c.platform}</td><td>${c.status}</td><td>${c.leads || 0}</td><td>${c.spend || 0}</td></tr>`).join('')}</tbody></table>`;
     if (!printReport('Marketing Hub Report', html)) show('Enable pop-ups to open the report', 'error');
   };
 
@@ -134,7 +108,7 @@ export default function MHDashboard({ onNavigate }) {
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
             {[
               { label:'Revenue MTD', value:'₹52.6L', trend:'+34%', up:true },
-              { label:'Active Campaigns', value:aiSummary?.active_campaigns || campaigns.filter(c => c.status === 'processing' || c.status === 'scheduled').length.toString() || '14', trend:'+3', up:true },
+              { label:'Active Campaigns', value:campaigns.length ? campaigns.filter(c => c.status === 'Active' || c.status === 'Scheduled').length.toString() : '14', trend:'+3', up:true },
               { label:'Leads Today', value:aiSummary?.leads_today || '284', trend:'+18%', up:true },
               { label:'Avg ROAS', value:aiSummary?.avg_roas || '29.4x', trend:'+8%', up:true },
             ].map(m => (
