@@ -42,10 +42,16 @@ export default function MHDashboard({ onNavigate }) {
 
   const { show } = useMHToast();
   const { data: campaigns = [], refetch } = useMarketingCampaigns();
-  // No backend endpoint currently generates a live AI summary for this card,
-  // so it stays null and the static copy below is shown instead.
-  const [aiSummary] = useState(null);
-  const [loadingAI] = useState(false);
+  const [aiSummary, setAiSummary] = useState(null);
+  const [loadingAI, setLoadingAI] = useState(false);
+
+  // There's no live AI-summary endpoint wired up yet for this dashboard, so
+  // this intentionally just falls back to the static `aiInsights` mock data
+  // rendered below rather than crashing or spinning forever.
+  useEffect(() => {
+    setLoadingAI(false);
+    setAiSummary(null);
+  }, [campaigns.length]);
 
   // Real report from real mh_campaigns rows — everything else on this page
   // is still the mock hero/chart data (see the plan doc); this button at

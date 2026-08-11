@@ -6,7 +6,7 @@ of it — see app/models/sales.py:SalesAgentConfig.product_targets for why
 the two are kept independent rather than one deriving from the other.
 
 Revision ID: 0008
-Revises: 0007
+Revises: 0007b
 Create Date: 2026-08-08
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0008"
-down_revision: Union[str, None] = "0007"
+down_revision: Union[str, None] = "0007b"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

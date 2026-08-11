@@ -5,7 +5,7 @@ import {
   KnowledgePanel, BrainLog, TaskQueue, ApprovalQueue, ConfidenceMeter,
   MetricsRow, MiniBarChart, Divider, TimelineItem, Mono,
 } from './SharedUI';
-import { Mail, MessageSquare, Phone, RefreshCw } from 'lucide-react';
+import { Mail, MessageSquare, Phone, RefreshCw, AlertCircle } from 'lucide-react';
 import FitScorerPanel from '@/components/ai-agents/sales/FitScorerPanel';
 import DealValueFieldModal from '@/components/ai-agents/sales/DealValueFieldModal';
 import ConfidenceSignalModal from '@/components/ai-agents/sales/ConfidenceSignalModal';
@@ -686,11 +686,35 @@ function Followups({ leads, selectedLead, onSelectLead }) {
   );
 }
 
+// ─── Shared error state for the Forecasting/Analytics/Settings tabs — react-
+// query sets isLoading back to false once a request fails, but data stays
+// undefined, so `isLoading || !data` alone gets stuck showing "Loading…"
+// forever on any backend error instead of surfacing it.
+function TabLoadError({ error, onRetry }) {
+  return (
+    <div className="py-8 flex flex-col items-center gap-2 text-center">
+      <AlertCircle size={20} className="text-red-400" />
+      <p className="text-xs text-slate-500">
+        {error?.message || 'Something went wrong loading this data.'}
+      </p>
+      <button
+        onClick={onRetry}
+        className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
+      >
+        <RefreshCw size={12} /> Retry
+      </button>
+    </div>
+  );
+}
+
 // ─── Forecasting tab — real pipeline-by-stage, monthly revenue trend, and
 // target-vs-actual gap analysis from GET /ai-agents/sales/forecast.
 function Forecasting({ onOpenDealValueModal, onOpenTargetModal }) {
-  const { data, isLoading } = useSalesForecast();
+  const { data, isLoading, isError, error, refetch } = useSalesForecast();
 
+  if (isError) {
+    return <TabLoadError error={error} onRetry={refetch} />;
+  }
   if (isLoading || !data) {
     return <div className="text-xs text-slate-400 py-8 text-center">Loading forecast…</div>;
   }
@@ -787,8 +811,11 @@ function Forecasting({ onOpenDealValueModal, onOpenTargetModal }) {
 // ─── Analytics tab — real MTD/avg-deal/cycle/productivity from
 // GET /ai-agents/sales/analytics.
 function SalesAnalytics() {
-  const { data, isLoading } = useSalesAnalytics();
+  const { data, isLoading, isError, error, refetch } = useSalesAnalytics();
 
+  if (isError) {
+    return <TabLoadError error={error} onRetry={refetch} />;
+  }
   if (isLoading || !data) {
     return <div className="text-xs text-slate-400 py-8 text-center">Loading analytics…</div>;
   }
@@ -917,12 +944,15 @@ function RevenueTargets({ config, products, patch, saving }) {
 }
 
 function SalesSettings() {
-  const { data: config, isLoading } = useSalesAgentConfig();
+  const { data: config, isLoading, isError, error, refetch } = useSalesAgentConfig();
   const { data: products } = useProducts('active');
   const update = useUpdateSalesAgentConfig();
 
   const patch = (body) => update.mutate(body);
 
+  if (isError) {
+    return <TabLoadError error={error} onRetry={refetch} />;
+  }
   if (isLoading || !config) {
     return <div className="text-xs text-slate-400 py-8 text-center">Loading settings…</div>;
   }

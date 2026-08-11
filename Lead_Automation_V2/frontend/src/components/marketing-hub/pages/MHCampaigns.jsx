@@ -1,10 +1,10 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import {
   Plus, Copy, Archive, Pause, Play, Trash2,
   BarChart3, Wand2, Search, LayoutGrid, List, Columns,
   MoreHorizontal, TrendingUp, TrendingDown, Sparkles,
-  Filter, RefreshCw, Upload, Download, Loader2, AlertCircle
+  Filter, RefreshCw, Upload, Download, Loader2, AlertCircle, Activity
 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 import MHBadge from '../ui/MHBadge';
@@ -16,9 +16,15 @@ import {
   useCreateMarketingCampaign,
   useUpdateMarketingCampaign,
   useDeleteMarketingCampaign,
+  useMarketingAudiences as useAudiences,
+  useCreateCampaign,
+  usePublishCampaign,
+  useOptimizeCampaign,
+  useCampaignRecipients,
   CHANNELS,
   OBJECTIVES,
 } from '@/lib/queries/marketingHub';
+import { useCampaignRoom, useMarketingHubSocketEvent } from '@/lib/marketingHubSocket';
 
 /** Map API row (snake_case / numeric strings from Postgres) → UI shape. */
 function normalizeCampaign(row) {

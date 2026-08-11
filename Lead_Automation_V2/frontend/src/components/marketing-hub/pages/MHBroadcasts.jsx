@@ -9,10 +9,15 @@ import {
   useMarketingBroadcasts,
   useCreateMarketingBroadcast,
   useSendMarketingBroadcast,
+  useMarketingAudiences as useAudiences,
   useMarketingAudiences,
+  useCreateBroadcast,
+  usePublishBroadcast,
+  useBroadcastRecipients,
   CHANNELS,
   OBJECTIVES,
 } from '@/lib/queries/marketingHub';
+import { useCampaignRoom } from '@/lib/marketingHubSocket';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const STATUS_VARIANT = {
