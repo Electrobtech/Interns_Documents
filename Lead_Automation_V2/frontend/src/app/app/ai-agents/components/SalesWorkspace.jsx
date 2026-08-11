@@ -55,6 +55,61 @@ function tierOf(score) {
   return s >= 75 ? 'hot' : s >= 45 ? 'warm' : 'cold';
 }
 
+// ─── Sales mock data (used when APIs return empty results) ──────────────────
+const MOCK_LEADS = [
+  { id: '1', name: 'Priya Sharma',    company: 'TechWave AI',     score: 91, stage: 'qualified', email: 'priya@techwave.ai',   phone: '+91 98765 43210' },
+  { id: '2', name: 'Carlos Rivera',   company: 'Apex Solutions',  score: 83, stage: 'active',    email: 'c.rivera@apex.com',   phone: '+1 415 555 0128'  },
+  { id: '3', name: 'Lena Fischer',    company: 'GrowthLab GmbH',  score: 78, stage: 'new',       email: 'lena@growthlab.de',   phone: '+49 30 12345678'  },
+  { id: '4', name: 'James Okafor',    company: 'Nile Commerce',   score: 62, stage: 'qualified', email: 'j.okafor@nile.ng',    phone: '+234 803 000 0001' },
+  { id: '5', name: 'Aiko Tanaka',     company: 'Kyoto Digital',   score: 55, stage: 'active',    email: 'aiko@kyoto.digital',  phone: '+81 3-1234-5678'  },
+  { id: '6', name: 'Ben Park',        company: 'Seoulify',        score: 48, stage: 'new',       email: 'ben@seoulify.kr',     phone: '+82 2-555-0001'   },
+  { id: '7', name: 'Maria Lopez',     company: 'Nexo Ventures',   score: 34, stage: 'lost',      email: 'maria@nexo.mx',       phone: '+52 55 5555 5555'  },
+  { id: '8', name: 'David Chen',      company: 'PivotX Labs',     score: 88, stage: 'won',       email: 'd.chen@pivotx.io',    phone: '+65 9123 4567'    },
+  { id: '9', name: 'Sara Müller',     company: 'Datanova GmbH',   score: 76, stage: 'qualified', email: 'sara@datanova.de',    phone: '+49 89 12345678'  },
+  { id: '10', name: 'Raj Patel',      company: 'InnoSpark Inc',   score: 29, stage: 'cold',      email: 'raj@innospark.com',   phone: '+91 99887 76543'  },
+  { id: '11', name: 'Emma Wilson',    company: 'ScaleUp Co',      score: 95, stage: 'active',    email: 'emma@scaleup.io',     phone: '+44 20 7946 0958' },
+  { id: '12', name: 'Tomás García',   company: 'LaunchPad ES',    score: 67, stage: 'new',       email: 'tomas@launchpad.es',  phone: '+34 91 123 45 67' },
+];
+
+const MOCK_FOLLOW_UP_COUNTS = { today: 8, overdue: 3, upcoming: 14 };
+
+const MOCK_OVERDUE_FOLLOWS = [
+  { id: 'f1', contact_name: 'Priya Sharma',  notes: 'Demo follow-up — sent pricing deck 3 days ago' },
+  { id: 'f2', contact_name: 'Carlos Rivera', notes: 'Trial expires tomorrow — check-in needed'       },
+  { id: 'f3', contact_name: 'Emma Wilson',   notes: 'Proposal review — no response in 5 days'        },
+];
+
+const MOCK_TODAY_FOLLOWS = [
+  { id: 'f4', contact_name: 'David Chen',    notes: 'Onboarding call scheduled 3pm'    },
+  { id: 'f5', contact_name: 'Sara Müller',   notes: 'Send contract draft'              },
+  { id: 'f6', contact_name: 'James Okafor',  notes: 'Qualification call — WhatsApp'   },
+  { id: 'f7', contact_name: 'Lena Fischer',  notes: 'Re-engage cold lead'              },
+  { id: 'f8', contact_name: 'Aiko Tanaka',   notes: 'ROI case study requested'        },
+];
+
+const MOCK_HANDOFFS = [
+  { id: 'h1', agent_type: 'sales', customer_name: 'Ben Park',    reason: 'Requested human pricing negotiation' },
+  { id: 'h2', agent_type: 'sales', customer_name: 'Maria Lopez', reason: 'Complex enterprise contract query'   },
+];
+
+const MOCK_RECENT_RUNS = [
+  { created_at: new Date(Date.now() - 2*60000).toISOString(),  brief: 'Scored 12 leads from LinkedIn Campaign #4821 — 7 Hot, 4 Warm, 1 Cold', output: { lead_qualification_reason: 'Scored 12 new leads from LinkedIn Campaign #4821 — 7 Hot, 4 Warm, 1 Cold' } },
+  { created_at: new Date(Date.now() - 18*60000).toISOString(), brief: 'Drafted follow-up email for 5 hot leads — awaiting approval', output: { recommended_sales_action: 'Drafted follow-up email for 5 hot leads — awaiting approval' } },
+  { created_at: new Date(Date.now() - 45*60000).toISOString(), brief: 'Pipeline updated: acme-corp.com visited pricing 4× this week — flagged intent', output: { lead_qualification_reason: 'Pipeline updated: acme-corp.com visited pricing 4× this week — flagged intent' } },
+  { created_at: new Date(Date.now() - 90*60000).toISOString(), brief: 'Win/loss analysis complete — 72% win rate on SaaS deals this quarter', output: { recommended_sales_action: 'Win/loss analysis complete — 72% win rate on SaaS deals this quarter' } },
+];
+
+const MOCK_SALES_CONFIG = {
+  min_hot_score: 75,
+  computed: {
+    pipeline_value: 1240000,
+    pipeline_value_note: 'Across 9 active deals',
+    ai_confidence: 88,
+    ai_confidence_note: 'Avg across 12 scored leads today',
+  },
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 function SalesOverview({ onOpenDealValueModal, onOpenConfidenceModal }) {
   const { data: leadsData, isLoading: leadsLoading } = useLeads();
   const { data: followUpCounts } = useFollowUpCounts();
@@ -65,8 +120,15 @@ function SalesOverview({ onOpenDealValueModal, onOpenConfidenceModal }) {
   const { data: salesConfig } = useSalesAgentConfig();
   const updateHandoff = useUpdateHandoff();
 
-  const leads = leadsData || [];
-  const minHot = salesConfig?.min_hot_score ?? 75;
+  // Use mock fallbacks when real data is absent
+  const leads         = (leadsData && leadsData.length > 0)          ? leadsData        : MOCK_LEADS;
+  const fupCounts     = followUpCounts                                 ? followUpCounts   : MOCK_FOLLOW_UP_COUNTS;
+  const overdues      = overdueFollowUps.length > 0                   ? overdueFollowUps : MOCK_OVERDUE_FOLLOWS;
+  const todayFups     = todayFollowUps.length > 0                     ? todayFollowUps   : MOCK_TODAY_FOLLOWS;
+  const activeHandoff = handoffs.length > 0                           ? handoffs         : MOCK_HANDOFFS;
+  const runs          = recentRuns.length > 0                         ? recentRuns       : MOCK_RECENT_RUNS;
+  const config        = salesConfig                                    ? salesConfig      : MOCK_SALES_CONFIG;
+  const minHot        = config?.min_hot_score ?? 75;
 
   const { hot, warm, cold, stages, wonCount, lostCount } = useMemo(() => {
     const hot = leads.filter((l) => Number(l.score) >= minHot);

@@ -1,36 +1,32 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { TrendingUp, TrendingDown, Megaphone, Users, Sparkles, BarChart3, RefreshCw,
-  Download, ArrowRight, AlertTriangle, CheckCircle, Info, Radio, Search, Pen,
-  BarChart2, Activity, Clock, Target, DollarSign } from 'lucide-react';
+  Download, AlertTriangle, CheckCircle, Info, Search, Bot } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { kpiData, performanceData, platformData, funnelData, channelPerformance,
   aiInsights, revenueData } from '../mockData';
 import { useMHToast } from '../ui/MHToast';
 import { useAudienceGrowth, useMarketingCampaigns } from '@/lib/queries/marketingHub';
-
-const QUICK_ACTIONS = [
-  { icon: Megaphone, label: 'Launch Campaign', sub: 'AI-powered', color: '#6366f1', page: 'campaigns' },
-  { icon: Radio,    label: 'Broadcast',        sub: 'WhatsApp · Email', color: '#10b981', page: 'broadcasts' },
-  { icon: Pen,      label: 'Generate Content', sub: 'AI Studio', color: '#8b5cf6', page: 'content' },
-  { icon: Search,   label: 'SEO Audit',        sub: 'Run now', color: '#f59e0b', page: 'seo' },
-  { icon: Users,    label: 'Build Audience',   sub: 'Segmentation', color: '#3b82f6', page: 'audience' },
-  { icon: BarChart2,label: 'View Analytics',   sub: 'Live data', color: '#ec4899', page: 'analytics' },
-];
-
-const ACTIVITY = [
-  { icon: Megaphone,     text: 'Campaign "AI Bootcamp Q3" launched', sub: '2 min ago', color: '#6366f1' },
-  { icon: Sparkles,      text: 'AI optimized WhatsApp Retargeting budget', sub: '18 min ago', color: '#8b5cf6' },
-  { icon: Users,         text: 'Audience "High-Intent Leads Q3" updated', sub: '1 hour ago', color: '#10b981' },
-  { icon: Radio,         text: 'Flash Sale broadcast sent to 12,000 contacts', sub: '3 hours ago', color: '#f59e0b' },
-  { icon: AlertTriangle, text: 'Competitor alert: HubSpot WhatsApp feature', sub: '5 hours ago', color: '#ef4444' },
-  { icon: CheckCircle,   text: 'SEO audit completed — 74/100 score', sub: '8 hours ago', color: '#10b981' },
-  { icon: BarChart3,     text: 'Monthly report generated and sent', sub: 'Yesterday', color: '#3b82f6' },
-];
+import { printReport } from '../export';
 
 const insightIcons   = { warning: AlertTriangle, success: CheckCircle, info: Info };
 const insightColors  = { warning: '#d97706', success: '#059669', info: '#6366f1' };
+
+const ACTIVITY = [
+  { icon: Megaphone, color: '#6366f1', text: 'Q3 Promo Campaign launched', sub: '2 hours ago' },
+  { icon: Users, color: '#10b981', text: '1,200 new leads acquired from LinkedIn', sub: '4 hours ago' },
+  { icon: AlertTriangle, color: '#f59e0b', text: 'High bounce rate detected on Email blast', sub: 'Yesterday' }
+];
+
+// TODO: placeholder until Quick Actions has a real destination/config —
+// wire these up (and the icons/pages) to whatever the actual quick-action
+// set should be.
+const QUICK_ACTIONS = [
+  { label: 'New Campaign', sub: 'Launch a campaign', page: 'campaigns', icon: Megaphone, color: '#6366f1' },
+  { label: 'View Audience', sub: 'Manage contacts', page: 'audience', icon: Users, color: '#10b981' },
+  { label: 'View Analytics', sub: 'See performance', page: 'analytics', icon: BarChart3, color: '#f59e0b' },
+];
 
 function ChartHeader({ title, subtitle }) {
   return (
@@ -60,22 +56,25 @@ export default function MHDashboard({ onNavigate }) {
   // Real report from real mh_campaigns rows — everything else on this page
   // is still the mock hero/chart data (see the plan doc); this button at
   // least reports on genuine campaigns rather than the static KPI mock.
+  // Field names follow campaigns.js's SELECT_COLS (platform, spend, leads,
+  // conversions, revenue) — not the broadcast-shaped fields (total_recipients,
+  // sent_count, etc.) those live on mh_broadcasts rows, a different table.
   const exportReport = () => {
     if (campaigns.length === 0) return show('No campaigns yet to report on', 'error');
     const totals = campaigns.reduce((acc, c) => {
-      acc.recipients += c.total_recipients || 0; acc.sent += c.sent_count || 0;
-      acc.delivered += c.delivered_count || 0; acc.failed += c.failed_count || 0;
+      acc.spend += Number(c.spend) || 0; acc.leads += Number(c.leads) || 0;
+      acc.conversions += Number(c.conversions) || 0; acc.revenue += Number(c.revenue) || 0;
       return acc;
-    }, { recipients: 0, sent: 0, delivered: 0, failed: 0 });
+    }, { spend: 0, leads: 0, conversions: 0, revenue: 0 });
     const html = `
       <h1>Marketing Hub Report</h1>
       <div class="meta">Generated ${new Date().toLocaleString()} · ${campaigns.length} campaign(s)</div>
       <div class="kpi-grid">
-        ${[['Campaigns', campaigns.length], ['Recipients', totals.recipients], ['Sent', totals.sent], ['Delivered', totals.delivered], ['Failed', totals.failed]]
+        ${[['Campaigns', campaigns.length], ['Spend', totals.spend], ['Leads', totals.leads], ['Conversions', totals.conversions], ['Revenue', totals.revenue]]
           .map(([l, v]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v.toLocaleString()}</div></div>`).join('')}
       </div>
-      <table><thead><tr><th>Name</th><th>Channel</th><th>Status</th><th>Recipients</th><th>Sent</th></tr></thead>
-      <tbody>${campaigns.map((c) => `<tr><td>${c.name}</td><td>${c.channel}</td><td>${c.status}</td><td>${c.total_recipients || 0}</td><td>${c.sent_count || 0}</td></tr>`).join('')}</tbody></table>`;
+      <table><thead><tr><th>Name</th><th>Platform</th><th>Status</th><th>Leads</th><th>Spend</th></tr></thead>
+      <tbody>${campaigns.map((c) => `<tr><td>${c.name}</td><td>${c.platform}</td><td>${c.status}</td><td>${c.leads || 0}</td><td>${c.spend || 0}</td></tr>`).join('')}</tbody></table>`;
     if (!printReport('Marketing Hub Report', html)) show('Enable pop-ups to open the report', 'error');
   };
 
@@ -110,7 +109,7 @@ export default function MHDashboard({ onNavigate }) {
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
             {[
               { label:'Revenue MTD', value:'₹52.6L', trend:'+34%', up:true },
-              { label:'Active Campaigns', value:aiSummary?.active_campaigns || campaigns.filter(c => c.status === 'processing' || c.status === 'scheduled').length.toString() || '14', trend:'+3', up:true },
+              { label:'Active Campaigns', value:campaigns.length ? campaigns.filter(c => c.status === 'Active' || c.status === 'Scheduled').length.toString() : '14', trend:'+3', up:true },
               { label:'Leads Today', value:aiSummary?.leads_today || '284', trend:'+18%', up:true },
               { label:'Avg ROAS', value:aiSummary?.avg_roas || '29.4x', trend:'+8%', up:true },
             ].map(m => (
@@ -183,6 +182,7 @@ export default function MHDashboard({ onNavigate }) {
           </div>
         ))}
       </div>
+
 
       {/* Charts row 1 */}
       <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:16 }}>
@@ -361,6 +361,78 @@ export default function MHDashboard({ onNavigate }) {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Analytics Expansion: AEO, SEO, Competitors */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:16, marginTop: 16 }}>
+
+        {/* SEO Keywords */}
+        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:18, padding:20 }}>
+          <ChartHeader title="SEO Performance" subtitle="Top ranking keywords" />
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {seoKeywords.slice(0, 5).map(kw => (
+              <div key={kw.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <Search size={14} color="#6b7280" />
+                  <div>
+                    <div style={{ fontSize:12, fontWeight:600, color:'#111827' }}>{kw.term}</div>
+                    <div style={{ fontSize:10, color:'#6b7280' }}>Vol: {kw.volume.toLocaleString()}</div>
+                  </div>
+                </div>
+                <div style={{ textAlign:'right' }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:'#111827' }}>Rank #{kw.rank}</div>
+                  <div style={{ fontSize:10, color: kw.change > 0 ? '#059669' : kw.change < 0 ? '#dc2626' : '#6b7280', display:'flex', alignItems:'center', justifyContent:'flex-end', gap:2 }}>
+                    {kw.change > 0 ? <TrendingUp size={10}/> : kw.change < 0 ? <TrendingDown size={10}/> : null}
+                    {Math.abs(kw.change) || '-'}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* AEO Scores */}
+        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:18, padding:20 }}>
+          <ChartHeader title="AEO Visibility" subtitle="Answer Engine Optimization" />
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {Object.entries(aeoScores).slice(0, 5).map(([key, value]) => {
+              const label = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+              return (
+                <div key={key}>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'#374151', marginBottom:4 }}>
+                    <span style={{ display:'flex', alignItems:'center', gap:6 }}><Bot size={12} color="#8b5cf6" /> {label}</span>
+                    <span style={{ fontWeight:600 }}>{value}/100</span>
+                  </div>
+                  <div className="progress-track">
+                    <div className="progress-fill" style={{ width:`${value}%`, background: value >= 80 ? '#10b981' : value >= 70 ? '#f59e0b' : '#dc2626' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Competitor Analytics */}
+        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:18, padding:20 }}>
+          <ChartHeader title="Competitor Analytics" subtitle="Share of Voice & Mentions" />
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {competitors.slice(0, 5).map((comp, i) => (
+              <div key={comp.id} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ width:28, height:28, borderRadius:'50%', background:['#fee2e2','#e0e7ff','#dcfce3'][i%3], color:['#dc2626','#4f46e5','#16a34a'][i%3], display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700 }}>
+                  {comp.name.charAt(0)}
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:'#111827' }}>{comp.name}</div>
+                  <div style={{ fontSize:10, color:'#6b7280' }}>SOV: {comp.shareOfVoice}%</div>
+                </div>
+                <div style={{ fontSize:12, fontWeight:700, color:'#374151' }}>
+                  {comp.mentions}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
       </div>
 
     </div>

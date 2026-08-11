@@ -27,7 +27,23 @@ const INTEGRATIONS = [
 const ROLE_OPTIONS = ['Admin', 'Marketing Manager', 'Campaign Specialist', 'Content Strategist', 'SEO Analyst', 'Designer', 'Viewer'];
 
 function GeneralTab({ toast }) {
+  const { data, isLoading } = useSettingsCategory('general');
+  const save = useSaveSettingsCategory('general');
   const [form, setForm] = useState({ workspace: 'Acme Marketing', timezone: 'Asia/Kolkata', language: 'English', currency: 'INR (₹)' });
+  const [loaded, setLoaded] = useState(false);
+
+  // Hydrate from the real DB row once it arrives — after this, the form is
+  // the source of truth until Save writes it back.
+  if (!isLoading && !loaded && data) {
+    const next = { ...form };
+    if (data.workspace?.value) next.workspace = data.workspace.value;
+    if (data.timezone?.value) next.timezone = data.timezone.value;
+    if (data.language?.value) next.language = data.language.value;
+    if (data.currency?.value) next.currency = data.currency.value;
+    setForm(next);
+    setLoaded(true);
+  }
+
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
   const fields = [
     { key: 'workspace', label: 'Workspace Name', type: 'text' },
@@ -35,6 +51,17 @@ function GeneralTab({ toast }) {
     { key: 'language', label: 'Language', type: 'select', opts: ['English', 'Hindi', 'Tamil', 'Telugu', 'Marathi'] },
     { key: 'currency', label: 'Currency', type: 'select', opts: ['INR (₹)', 'USD ($)', 'EUR (€)', 'GBP (£)'] },
   ];
+
+  const handleSave = () => {
+    save.mutate(
+      Object.fromEntries(Object.entries(form).map(([k, v]) => [k, { value: v }])),
+      {
+        onSuccess: () => toast.show('Settings saved — persisted to the database.', 'success'),
+        onError: (err) => toast.show(err.message || 'Save failed', 'error'),
+      }
+    );
+  };
+
   return (
     <div style={{ maxWidth: 520 }}>
       <div style={{ fontFamily: 'var(--mh-font-display)', fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 20 }}>General Settings</div>
@@ -49,8 +76,8 @@ function GeneralTab({ toast }) {
           }
         </div>
       ))}
-      <button className="mh-btn mh-btn-primary" onClick={() => toast.show('Settings saved successfully!', 'success')}>
-        <Save size={14} /> Save Changes
+      <button className="mh-btn mh-btn-primary" onClick={handleSave} disabled={save.isPending}>
+        <Save size={14} /> {save.isPending ? 'Saving…' : 'Save Changes'}
       </button>
     </div>
   );
@@ -264,9 +291,32 @@ function SandboxBanner() {
 }
 
 function NotificationsTab({ toast }) {
+  const { data, isLoading } = useSettingsCategory('notifications');
+  const save = useSaveSettingsCategory('notifications');
   const [prefs, setPrefs] = useState({
     campaignAlerts: true, leadNotifications: true, weeklyReport: true, aiInsights: true, billingAlerts: false,
   });
+  const [loaded, setLoaded] = useState(false);
+
+  if (!isLoading && !loaded && data) {
+    const next = { ...prefs };
+    for (const k of Object.keys(next)) {
+      if (data[k]?.value !== undefined) next[k] = !!data[k].value;
+    }
+    setPrefs(next);
+    setLoaded(true);
+  }
+
+  const handleSave = () => {
+    save.mutate(
+      Object.fromEntries(Object.entries(prefs).map(([k, v]) => [k, { value: v }])),
+      {
+        onSuccess: () => toast.show('Notification preferences saved — persisted to the database.', 'success'),
+        onError: (err) => toast.show(err.message || 'Save failed', 'error'),
+      }
+    );
+  };
+
   return (
     <div style={{ maxWidth: 520 }}>
       <div style={{ fontFamily: 'var(--mh-font-display)', fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 20 }}>Notification Preferences</div>
@@ -283,30 +333,59 @@ function NotificationsTab({ toast }) {
             <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{n.desc}</div>
           </div>
           <div
-            onClick={() => { setPrefs(p => ({ ...p, [n.key]: !p[n.key] })); toast.show(`${n.label} ${prefs[n.key] ? 'disabled' : 'enabled'}`, 'info'); }}
+            onClick={() => setPrefs(p => ({ ...p, [n.key]: !p[n.key] }))}
             style={{ width: 42, height: 24, borderRadius: 99, background: prefs[n.key] ? '#6366f1' : '#e5e7eb', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
             <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: prefs[n.key] ? 21 : 3, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
           </div>
         </div>
       ))}
-      <button className="mh-btn mh-btn-primary" style={{ marginTop: 20 }} onClick={() => toast.show('Notification preferences saved!', 'success')}>
-        <Save size={14} /> Save Preferences
+      <button className="mh-btn mh-btn-primary" style={{ marginTop: 20 }} onClick={handleSave} disabled={save.isPending}>
+        <Save size={14} /> {save.isPending ? 'Saving…' : 'Save Preferences'}
       </button>
     </div>
   );
 }
 
 function AIConfigTab({ toast }) {
+  const { data, isLoading } = useSettingsCategory('ai_config');
+  const save = useSaveSettingsCategory('ai_config');
   const [config, setConfig] = useState({ model: 'GPT-4o', creativity: 70, tone: 'Professional', language: 'English', autoOptimize: true });
+  const [loaded, setLoaded] = useState(false);
+
+  if (!isLoading && !loaded && data) {
+    const next = { ...config };
+    if (data.model?.value) next.model = data.model.value;
+    if (data.creativity?.value !== undefined) next.creativity = data.creativity.value;
+    if (data.tone?.value) next.tone = data.tone.value;
+    if (data.language?.value) next.language = data.language.value;
+    if (data.autoOptimize?.value !== undefined) next.autoOptimize = !!data.autoOptimize.value;
+    setConfig(next);
+    setLoaded(true);
+  }
+
+  const handleSave = () => {
+    save.mutate(
+      Object.fromEntries(Object.entries(config).map(([k, v]) => [k, { value: v }])),
+      {
+        onSuccess: () => toast.show('AI configuration saved — persisted to the database.', 'success'),
+        onError: (err) => toast.show(err.message || 'Save failed', 'error'),
+      }
+    );
+  };
+
   return (
     <div style={{ maxWidth: 520 }}>
       <div style={{ fontFamily: 'var(--mh-font-display)', fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 20 }}>AI Configuration</div>
-      <div style={{ marginBottom: 18 }}>
+      <div style={{ marginBottom: 8 }}>
         <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6b7280', display: 'block', marginBottom: 6 }}>AI Model</label>
         <select className="mh-input" value={config.model} onChange={e => setConfig(p => ({ ...p, model: e.target.value }))} style={{ width: '100%' }}>
           {['GPT-4o', 'GPT-4 Turbo', 'Claude 3.5 Sonnet', 'Gemini 1.5 Pro'].map(m => <option key={m}>{m}</option>)}
         </select>
       </div>
+      <p style={{ fontSize: 11, color: '#9ca3af', margin: '0 0 18px' }}>
+        This preference saves for real, but Content Studio / AI Optimize currently always call the
+        model configured server-side via GROQ_MODEL — switching this dropdown doesn't change that yet.
+      </p>
       <div style={{ marginBottom: 18 }}>
         <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#6b7280', display: 'block', marginBottom: 6 }}>Creativity Level — {config.creativity}%</label>
         <input type="range" min={0} max={100} value={config.creativity} onChange={e => setConfig(p => ({ ...p, creativity: +e.target.value }))} style={{ width: '100%', accentColor: '#6366f1' }} />
@@ -330,8 +409,8 @@ function AIConfigTab({ toast }) {
           <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: config.autoOptimize ? 21 : 3, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
         </div>
       </div>
-      <button className="mh-btn mh-btn-ai" onClick={() => toast.show('AI configuration updated!', 'success')}>
-        <Zap size={14} /> Save AI Config
+      <button className="mh-btn mh-btn-ai" onClick={handleSave} disabled={save.isPending}>
+        <Zap size={14} /> {save.isPending ? 'Saving…' : 'Save AI Config'}
       </button>
     </div>
   );

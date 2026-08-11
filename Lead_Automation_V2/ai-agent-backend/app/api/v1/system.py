@@ -64,6 +64,25 @@ async def status(
         {"org": org_str, "days": str(days)},
     )).mappings().one()
 
+    # Today's totals (calendar day, independent of the `range` window above) —
+    # backs the "Tasks Today" / "Completed Today" KPIs. Runs are only ever
+    # persisted once generation finishes, so "created today" and "completed
+    # today" are the same count in this schema (there's no separate
+    # in-progress state at the DB level).
+    today_totals = (await session.execute(
+        text("""
+            SELECT
+              (SELECT COUNT(*) FROM marketing_agent_runs
+                WHERE organization_id = :org AND created_at >= date_trunc('day', now())) AS marketing,
+              (SELECT COUNT(*) FROM sales_agent_runs
+                WHERE organization_id = :org AND created_at >= date_trunc('day', now())) AS sales,
+              (SELECT COUNT(*) FROM support_agent_runs
+                WHERE organization_id = :org AND created_at >= date_trunc('day', now())) AS support
+        """),
+        {"org": org_str},
+    )).mappings().one()
+    tasks_today = int(today_totals["marketing"]) + int(today_totals["sales"]) + int(today_totals["support"])
+
     # Escalation count
     escalations = (await session.execute(
         text("""
@@ -110,13 +129,35 @@ async def status(
         for r in audit_rows
     ]
 
+    agents = [
+        {"type": "marketing", "status": "active", "chunk_count": marketing_chunks},
+        {"type": "sales", "status": "active", "chunk_count": sales_chunks},
+        {"type": "support", "status": "active", "chunk_count": support_chunks},
+    ]
+
     return {
         "range": range,
-        "agents": [
-            {"type": "marketing", "status": "active", "chunk_count": marketing_chunks},
-            {"type": "sales", "status": "active", "chunk_count": sales_chunks},
-            {"type": "support", "status": "active", "chunk_count": support_chunks},
-        ],
+        "agents": agents,
+        # Overview-card KPI strip. Fields the AI layer genuinely has no source
+        # for (avgConfidence — not a stored column on any *_agent_runs table;
+        # creditsToday — no credits/billing concept in this service;
+        # connectedChannels, leadsProcessed, revenueInfluenced — owned by
+        # inbox/CRM/campaign services, not this one) come back null on
+        # purpose so the UI shows an em-dash instead of a fake number.
+        "summary": {
+            "agentsActive": sum(1 for a in agents if a["status"] == "active"),
+            "tasksToday": tasks_today,
+            "completedToday": tasks_today,
+            "pendingApprovals": pending_handoffs,
+            "humanEscalations": int(escalations),
+            "knowledgeSources": len(all_sources),
+            "activeTasks": None,
+            "avgConfidence": None,
+            "creditsToday": None,
+            "connectedChannels": None,
+            "leadsProcessed": None,
+            "revenueInfluenced": None,
+        },
         "knowledge_base": {
             "total_chunks": marketing_chunks + sales_chunks + support_chunks,
             "total_sources": len(all_sources),

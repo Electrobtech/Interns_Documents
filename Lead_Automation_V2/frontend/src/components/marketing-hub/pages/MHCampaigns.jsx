@@ -103,13 +103,10 @@ function CreateCampaignModal({ onClose, toast, initialChannel }) {
 
   const saveDraft = async () => {
     try {
-      setError('');
-      const result = await createCampaign.mutateAsync(payload());
-      console.log('Campaign saved successfully:', result);
+      await createCampaign.mutateAsync(payload());
       toast.show('Campaign saved as draft.', 'success');
       onClose();
     } catch (err) {
-      console.error('Failed to save campaign:', err);
       setError(err.message || 'Could not save campaign.');
     }
   };
@@ -175,11 +172,11 @@ function CreateCampaignModal({ onClose, toast, initialChannel }) {
           <Field label="Audience" hint>
             <select className="mh-input" value={form.audience_id} onChange={e => { set('audience_id', e.target.value); setError(''); }}>
               <option value="">No audience yet — required to launch, optional for a draft</option>
-              {audiences && audiences.length > 0 ? audiences.map(a => <option key={a.id} value={a.id}>{a.name}{a.size_cached != null ? ` (~${a.size_cached})` : ''}</option>) : null}
+              {audiences.map(a => <option key={a.id} value={a.id}>{a.name}{a.size_cached != null ? ` (~${a.size_cached})` : ''}</option>)}
             </select>
-            {!audiences || audiences.length === 0 ? (
+            {audiences.length === 0 && (
               <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>No audiences yet — create one on the Audience page first, or save this as a draft.</p>
-            ) : null}
+            )}
           </Field>
           <Field label="Message">
             <textarea className="mh-input" rows={5} value={form.message_body} onChange={e => { set('message_body', e.target.value); setError(''); }}

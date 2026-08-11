@@ -9,15 +9,10 @@ import {
   useDeleteMarketingAsset,
 } from '@/lib/queries/marketingHub';
 
-const TABS = ['All', 'Images', 'Videos', 'Documents', 'Audio', 'Templates'];
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
-const TYPE_ICONS = {
-  image: ImageIcon,
-  video: Video,
-  document: FileText,
-  audio: FileArchive,
-  template: FileArchive,
-};
+const TYPE_ICON = { image: ImageIcon, video: Video, audio: Music, document: FileText, template: FileText };
+const TYPE_COLOR = { image: '#10b981', video: '#6366f1', audio: '#f59e0b', document: '#3b82f6', template: '#a855f7' };
 
 function formatBytes(n) {
   if (n == null || Number.isNaN(Number(n))) return '-';
@@ -153,27 +148,23 @@ export default function MHAssetsLibrary() {
       return;
     }
 
-    setUploading(true);
-    setUploadProgress(0);
+  const { data: assets = [], isLoading } = useAssets({ search: search || undefined, type: type === 'All' ? undefined : type });
+  const { data: stats } = useAssetStats();
+  const uploadAsset = useUploadAsset();
+  const deleteAsset = useDeleteAsset();
 
+  const handleFilePicked = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('name', file.name);
     try {
-      // Upload each file
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i];
-        await uploadAsset.mutateAsync(file);
-        setUploadProgress(((i + 1) / selectedFiles.length) * 100);
-      }
-
-      setUploading(false);
-      setUploadProgress(0);
-      setSelectedFiles([]);
-      setShowUploadModal(false);
-      toast.show(`Successfully uploaded ${selectedFiles.length} file(s)`, 'success');
-    } catch (error) {
-      console.error('Upload failed:', error);
-      setUploading(false);
-      setUploadProgress(0);
-      toast.show('Failed to upload files', 'error');
+      await uploadAsset.mutateAsync(formData);
+      toast.show(`Uploaded ${file.name}`, 'success');
+    } catch (err) {
+      toast.show(err.message || 'Upload failed', 'error');
     }
   };
 
@@ -182,7 +173,15 @@ export default function MHAssetsLibrary() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontFamily: 'var(--mh-font-display)', fontSize: 22, fontWeight: 700, color: 'var(--mh-text)', margin: 0 }}>Assets Library</h1>
-          <p style={{ fontSize: 13, color: 'var(--mh-text-3)', marginTop: 4 }}>Store, organize, and access marketing assets</p>
+          <p style={{ fontSize: 13, color: 'var(--mh-text-3)', marginTop: 4 }}>
+            {stats ? `${stats.total} files · ${fmtSize(stats.total_size)} total` : 'Real files, stored on disk and tracked in Postgres'}
+          </p>
+        </div>
+        <div>
+          <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFilePicked} />
+          <button className="mh-btn mh-btn-primary" onClick={() => fileInputRef.current?.click()} disabled={uploadAsset.isPending}>
+            {uploadAsset.isPending ? <>Uploading…</> : <><UploadIcon size={15} /> Upload Asset</>}
+          </button>
         </div>
         <button
           className="mh-btn mh-btn-primary"
@@ -223,6 +222,9 @@ export default function MHAssetsLibrary() {
             </button>
           ))}
         </div>
+        <select className="mh-input" value={type} onChange={(e) => setType(e.target.value)}>
+          {['All', 'image', 'video', 'document', 'audio', 'template'].map((t) => <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>)}
+        </select>
       </div>
 
       {isLoading && (
@@ -338,114 +340,19 @@ export default function MHAssetsLibrary() {
                       <Trash2 size={12} />
                     </button>
                   </div>
+                )}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="mh-btn mh-btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: 11 }} onClick={() => openAsset(a, 'view')}><Eye size={12} /> View</button>
+                  <button className="mh-btn mh-btn-ghost" style={{ flex: 1, justifyContent: 'center', fontSize: 11 }} onClick={() => openAsset(a, 'download')}><Download size={12} /></button>
+                  <button className="mh-btn mh-btn-ghost" style={{ fontSize: 11, color: '#dc2626' }}
+                    onClick={() => deleteAsset.mutate(a.id, { onSuccess: () => toast.show('Deleted', 'success') })}>
+                    <Trash2 size={12} />
+                  </button>
                 </div>
               </div>
             );
           })}
         </div>
-      )}
-
-      {/* Upload Modal */}
-      {showUploadModal && (
-        <MHModal title="Upload Assets" onClose={() => setShowUploadModal(false)} width={600}>
-          <div
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
-            onDrop={handleDrop}
-            style={{
-              border: `2px dashed ${dragActive ? '#6366f1' : '#d1d5db'}`,
-              borderRadius: 12,
-              padding: '40px 24px',
-              textAlign: 'center',
-              background: dragActive ? '#eef2ff' : '#f9fafb',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              marginBottom: 20
-            }}
-            onClick={() => document.getElementById('file-input').click()}
-          >
-            <Upload size={48} style={{ color: dragActive ? '#6366f1' : '#9ca3af', marginBottom: 16 }} />
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#111827', marginBottom: 8 }}>
-              {dragActive ? 'Drop files here' : 'Drag & drop files here'}
-            </div>
-            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 16 }}>
-              or click to browse (Max 300MB per file)
-            </div>
-            <input
-              id="file-input"
-              type="file"
-              multiple
-              onChange={handleFileSelect}
-              style={{ display: 'none' }}
-              accept="image/*,video/*,.pdf,.doc,.docx,.zip"
-            />
-          </div>
-
-          {/* Selected Files */}
-          {selectedFiles.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 12 }}>
-                Selected Files ({selectedFiles.length})
-              </div>
-              <div style={{ maxHeight: 200, overflowY: 'auto', background: '#f9fafb', borderRadius: 8, padding: 12 }}>
-                {selectedFiles.map((file, index) => (
-                  <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: '1px solid #e5e7eb' }}>
-                    <FileIcon size={16} style={{ color: '#6b7280', flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {file.name}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>{formatFileSize(file.size)}</div>
-                    </div>
-                    <button
-                      onClick={() => removeFile(index)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 4, borderRadius: 4 }}
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Upload Progress */}
-          {uploading && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6b7280', marginBottom: 6 }}>
-                <span>Uploading...</span>
-                <span>{uploadProgress}%</span>
-              </div>
-              <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ height: '100%', background: '#6366f1', transition: 'width 0.3s', width: `${uploadProgress}%` }} />
-              </div>
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-            <button
-              className="mh-btn mh-btn-ghost"
-              onClick={() => {
-                setShowUploadModal(false);
-                setSelectedFiles([]);
-                setUploadProgress(0);
-              }}
-              disabled={uploading}
-            >
-              Cancel
-            </button>
-            <button
-              className="mh-btn mh-btn-primary"
-              onClick={handleUpload}
-              disabled={uploading || selectedFiles.length === 0}
-              style={{ opacity: uploading || selectedFiles.length === 0 ? 0.5 : 1 }}
-            >
-              {uploading ? 'Uploading...' : `Upload ${selectedFiles.length} File${selectedFiles.length !== 1 ? 's' : ''}`}
-            </button>
-          </div>
-        </MHModal>
       )}
     </div>
   );

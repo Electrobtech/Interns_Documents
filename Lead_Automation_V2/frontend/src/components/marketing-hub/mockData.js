@@ -71,6 +71,8 @@ export const channelPerformance = [
   { channel:'Instagram',  leads:2840,  cpl:11.2, roas:18.6 },
   { channel:'WhatsApp',   leads:4200,  cpl:4.1,  roas:172.3},
   { channel:'Email',      leads:2910,  cpl:1.8,  roas:94.2 },
+  { channel:'SMS',        leads:1560,  cpl:6.4,  roas:28.5 },
+  { channel:'Messenger',  leads:890,  cpl:8.2,  roas:15.8 },
 ];
 export const audienceGrowth = [
   { week:'W1', total:42000 },{ week:'W2', total:48400 },
@@ -90,6 +92,11 @@ export const competitors = [
   { id:'2', name:'Zoho CRM',      domain:'zoho.com',            da:89, traffic:'14.2M', backlinks:'8.1M',  opportunity:74, threat:71, engagement:3.8 },
   { id:'3', name:'Salesforce',    domain:'salesforce.com',      da:95, traffic:'42.6M', backlinks:'28.4M', opportunity:54, threat:91, engagement:3.1 },
   { id:'4', name:'ActiveCampaign',domain:'activecampaign.com',  da:79, traffic:'4.8M',  backlinks:'2.2M',  opportunity:88, threat:62, engagement:5.1 },
+  { id:'5', name:'Mailchimp',     domain:'mailchimp.com',       da:92, traffic:'12.1M', backlinks:'7.6M',  opportunity:72, threat:78, engagement:4.5 },
+  { id:'6', name:'GetResponse',  domain:'getresponse.com',     da:84, traffic:'6.8M',  backlinks:'4.2M',  opportunity:81, threat:69, engagement:4.8 },
+  { id:'7', name:'ClickFunnels',  domain:'clickfunnels.com',    da:87, traffic:'8.9M',  backlinks:'5.8M',  opportunity:76, threat:74, engagement:4.1 },
+  { id:'8', name:'ConvertKit',    domain:'convertkit.com',      da:78, traffic:'3.2M', backlinks:'2.1M',  opportunity:85, threat:65, engagement:5.2 },
+  { id:'9', name:'Drip',         domain:'drip.com',            da:81, traffic:'4.5M', backlinks:'3.2M',  opportunity:79, threat:71, engagement:4.3 },
 ];
 export const seoKeywords = [
   { keyword:'AI marketing automation',    volume:14400, difficulty:68, position:8,  change:3  },
@@ -107,6 +114,10 @@ export const assets = [
   { id:'4', name:'Product Brochure.pdf',        type:'PDFs',                 size:'3.4 MB', modified:'2025-05-10', url:'' },
   { id:'5', name:'WhatsApp Ad Creative.jpg',    type:'Images',               size:'840 KB', modified:'2025-07-28', url:'https://images.unsplash.com/photo-1611746872915-64382b5c76da?w=300&h=200&fit=crop' },
   { id:'6', name:'AI Generated - Headings.jpg', type:'AI Generated Images',  size:'2.1 MB', modified:'2025-07-30', url:'https://images.unsplash.com/photo-1686191128892-3b37add4c844?w=300&h=200&fit=crop' },
+  { id:'7', name:'Instagram Story Template.png', type:'Images',               size:'1.4 MB', modified:'2025-07-25', url:'https://images.unsplash.com/photo-1611162617474-5b21e879e274?w=300&h=200&fit=crop' },
+  { id:'8', name:'Email Header Banner.jpg',     type:'Images',               size:'980 KB', modified:'2025-07-18', url:'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=300&h=200&fit=crop' },
+  { id:'9', name:'LinkedIn Post Image.jpg',     type:'Images',               size:'1.1 MB', modified:'2025-07-22', url:'https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?w=300&h=200&fit=crop' },
+  { id:'10', name:'Logo Variations Pack.zip',    type:'Logos',                size:'2.8 MB', modified:'2025-06-10', url:'' },
 ];
 export const knowledgeDocs = [
   { id:'1', title:'Brand Voice Guidelines',      category:'Brand Guidelines', tags:['brand','tone','voice'],        updatedAt:'2025-07-10', size:'1.2 MB' },
@@ -115,6 +126,11 @@ export const knowledgeDocs = [
   { id:'4', title:'Buyer Persona - SMB India',   category:'Marketing Docs',   tags:['persona','SMB','India'],       updatedAt:'2025-05-14', size:'640 KB' },
   { id:'5', title:'Email Sequence Templates',    category:'Templates',        tags:['email','sequences','nurture'], updatedAt:'2025-07-22', size:'320 KB' },
   { id:'6', title:'Competitor Analysis Archive', category:'Reports',          tags:['competitors','SEO','ads'],     updatedAt:'2025-07-18', size:'2.4 MB' },
+  { id:'7', title:'Logo Usage Guidelines',       category:'Brand Guidelines', tags:['logo','brand','guidelines'],   updatedAt:'2025-06-20', size:'1.2 MB' },
+  { id:'8', title:'Q1 Campaign Analysis',        category:'Reports',          tags:['Q1','campaign','analysis'],    updatedAt:'2025-04-15', size:'2.1 MB' },
+  { id:'9', title:'B2B Lead Generation Case Study', category:'Case Studies',     tags:['B2B','lead gen','case study'],   updatedAt:'2025-06-10', size:'2.8 MB' },
+  { id:'10', title:'WhatsApp Marketing Strategy', category:'Marketing Docs',   tags:['WhatsApp','strategy','marketing'], updatedAt:'2025-07-08', size:'1.7 MB' },
+  { id:'11', title:'Social Media Templates',       category:'Templates',        tags:['social','templates','content'],  updatedAt:'2025-07-05', size:'890 KB' },
 ];
 export const revenueData = [
   { month:'Jan', revenue:258000, target:300000 },
