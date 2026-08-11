@@ -1,11 +1,14 @@
 'use client';
-import { TrendingUp, TrendingDown, Megaphone, Users, AlertTriangle, CheckCircle, Info, RefreshCw, Download, Search, Bot, Swords, Activity } from 'lucide-react';
+import { useState } from 'react';
+import { TrendingUp, TrendingDown, Megaphone, Users, Sparkles, BarChart3, RefreshCw,
+  Download, AlertTriangle, CheckCircle, Info, Search, Bot } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { kpiData, performanceData, platformData, funnelData, channelPerformance,
   aiInsights, revenueData } from '../mockData';
 import { useMHToast } from '../ui/MHToast';
-import { useAudienceGrowth } from '@/lib/queries/marketingHub';
+import { useAudienceGrowth, useMarketingCampaigns } from '@/lib/queries/marketingHub';
+import { printReport } from '../export';
 
 const insightIcons   = { warning: AlertTriangle, success: CheckCircle, info: Info };
 const insightColors  = { warning: '#d97706', success: '#059669', info: '#6366f1' };
@@ -14,6 +17,15 @@ const ACTIVITY = [
   { icon: Megaphone, color: '#6366f1', text: 'Q3 Promo Campaign launched', sub: '2 hours ago' },
   { icon: Users, color: '#10b981', text: '1,200 new leads acquired from LinkedIn', sub: '4 hours ago' },
   { icon: AlertTriangle, color: '#f59e0b', text: 'High bounce rate detected on Email blast', sub: 'Yesterday' }
+];
+
+// TODO: placeholder until Quick Actions has a real destination/config —
+// wire these up (and the icons/pages) to whatever the actual quick-action
+// set should be.
+const QUICK_ACTIONS = [
+  { label: 'New Campaign', sub: 'Launch a campaign', page: 'campaigns', icon: Megaphone, color: '#6366f1' },
+  { label: 'View Audience', sub: 'Manage contacts', page: 'audience', icon: Users, color: '#10b981' },
+  { label: 'View Analytics', sub: 'See performance', page: 'analytics', icon: BarChart3, color: '#f59e0b' },
 ];
 
 function ChartHeader({ title, subtitle }) {
@@ -29,34 +41,117 @@ export default function MHDashboard({ onNavigate }) {
   const { data: audienceGrowth = [] } = useAudienceGrowth(8);
 
   const { show } = useMHToast();
-  const { data: campaigns = [], refetch } = useCampaigns();
+  const { data: campaigns = [], refetch } = useMarketingCampaigns();
+  // No backend endpoint currently generates a live AI summary for this card,
+  // so it stays null and the static copy below is shown instead.
+  const [aiSummary] = useState(null);
+  const [loadingAI] = useState(false);
 
+  // Real report from real mh_campaigns rows — everything else on this page
+  // is still the mock hero/chart data (see the plan doc); this button at
+  // least reports on genuine campaigns rather than the static KPI mock.
+  // Field names follow campaigns.js's SELECT_COLS (platform, spend, leads,
+  // conversions, revenue) — not the broadcast-shaped fields (total_recipients,
+  // sent_count, etc.) those live on mh_broadcasts rows, a different table.
   const exportReport = () => {
     if (campaigns.length === 0) return show('No campaigns yet to report on', 'error');
     const totals = campaigns.reduce((acc, c) => {
-      acc.recipients += c.total_recipients || 0; acc.sent += c.sent_count || 0;
-      acc.delivered += c.delivered_count || 0; acc.failed += c.failed_count || 0;
+      acc.spend += Number(c.spend) || 0; acc.leads += Number(c.leads) || 0;
+      acc.conversions += Number(c.conversions) || 0; acc.revenue += Number(c.revenue) || 0;
       return acc;
-    }, { recipients: 0, sent: 0, delivered: 0, failed: 0 });
+    }, { spend: 0, leads: 0, conversions: 0, revenue: 0 });
     const html = `
       <h1>Marketing Hub Report</h1>
       <div class="meta">Generated ${new Date().toLocaleString()} · ${campaigns.length} campaign(s)</div>
       <div class="kpi-grid">
-        ${[['Campaigns', campaigns.length], ['Recipients', totals.recipients], ['Sent', totals.sent], ['Delivered', totals.delivered], ['Failed', totals.failed]]
+        ${[['Campaigns', campaigns.length], ['Spend', totals.spend], ['Leads', totals.leads], ['Conversions', totals.conversions], ['Revenue', totals.revenue]]
           .map(([l, v]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${v.toLocaleString()}</div></div>`).join('')}
       </div>
-      <table><thead><tr><th>Name</th><th>Channel</th><th>Status</th><th>Recipients</th><th>Sent</th></tr></thead>
-      <tbody>${campaigns.map((c) => `<tr><td>${c.name}</td><td>${c.channel}</td><td>${c.status}</td><td>${c.total_recipients || 0}</td><td>${c.sent_count || 0}</td></tr>`).join('')}</tbody></table>`;
+      <table><thead><tr><th>Name</th><th>Platform</th><th>Status</th><th>Leads</th><th>Spend</th></tr></thead>
+      <tbody>${campaigns.map((c) => `<tr><td>${c.name}</td><td>${c.platform}</td><td>${c.status}</td><td>${c.leads || 0}</td><td>${c.spend || 0}</td></tr>`).join('')}</tbody></table>`;
     if (!printReport('Marketing Hub Report', html)) show('Enable pop-ups to open the report', 'error');
   };
 
   return (
     <div style={{ padding:'24px 28px', background:'var(--mh-bg)', minHeight:'100vh', display:'flex', flexDirection:'column', gap:24, overflowY:'auto' }}>
 
-      {/* Header row — export/refresh only */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:8 }}>
-        <button className="mh-btn mh-btn-ghost" onClick={exportReport}><Download size={14} />Export Report</button>
-        <button className="mh-btn mh-btn-ghost" onClick={() => { refetch(); show('Refreshed','success'); }}><RefreshCw size={14} />Refresh</button>
+      {/* Header row */}
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
+        <div>
+          <h1 style={{ fontFamily:'var(--mh-font-display)', fontSize:26, fontWeight:800, color:'#111827', margin:0 }}>Good morning ✨</h1>
+          <p style={{ fontSize:13, color:'#6b7280', marginTop:4, marginBottom:0 }}>Your marketing is performing well today</p>
+        </div>
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="mh-btn mh-btn-ghost" onClick={exportReport}><Download size={14} />Export Report</button>
+          <button className="mh-btn mh-btn-ghost" onClick={() => { refetch(); show('Refreshed','success'); }}><RefreshCw size={14} />Refresh</button>
+        </div>
+      </div>
+
+      {/* Hero row */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 340px', gap:16 }}>
+        {/* AI Summary card */}
+        <div style={{ background:'linear-gradient(135deg,rgba(99,102,241,0.06),rgba(168,85,247,0.04))', border:'1px solid rgba(99,102,241,0.2)', borderRadius:18, padding:'24px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+            <div style={{ width:32, height:32, borderRadius:8, background:'var(--mh-ai-gradient)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              <Sparkles size={16} color="#fff" />
+            </div>
+            <div>
+              <div style={{ fontFamily:'var(--mh-font-display)', fontSize:15, fontWeight:700, color:'#111827' }}>Today's AI Summary</div>
+              <div style={{ fontSize:11, color:'#6b7280' }}>Updated 2 minutes ago</div>
+            </div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+            {[
+              { label:'Revenue MTD', value:'₹52.6L', trend:'+34%', up:true },
+              { label:'Active Campaigns', value:campaigns.length ? campaigns.filter(c => c.status === 'Active' || c.status === 'Scheduled').length.toString() : '14', trend:'+3', up:true },
+              { label:'Leads Today', value:aiSummary?.leads_today || '284', trend:'+18%', up:true },
+              { label:'Avg ROAS', value:aiSummary?.avg_roas || '29.4x', trend:'+8%', up:true },
+            ].map(m => (
+              <div key={m.label} style={{ background:'rgba(255,255,255,0.7)', border:'1px solid #e5e7eb', borderRadius:10, padding:'12px 14px' }}>
+                <div style={{ fontSize:10, color:'#6b7280', textTransform:'uppercase', letterSpacing:'0.06em', fontWeight:600 }}>{m.label}</div>
+                <div style={{ fontFamily:'var(--mh-font-display)', fontSize:20, fontWeight:800, color:'#111827', marginTop:2 }}>{m.value}</div>
+                <div style={{ fontSize:11, color: m.up ? '#059669' : '#dc2626', fontWeight:600, display:'flex', alignItems:'center', gap:3 }}>
+                  {m.up ? <TrendingUp size={10}/> : <TrendingDown size={10}/>}{m.trend}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background:'rgba(255,255,255,0.8)', borderRadius:10, padding:'12px 14px', fontSize:13, color:'#374151', lineHeight:1.7, marginBottom:12 }}>
+            {loadingAI ? (
+              <span>Analyzing your marketing performance...</span>
+            ) : aiSummary?.suggestions ? (
+              <span>{aiSummary.suggestions}</span>
+            ) : (
+              <span><strong>3 campaigns need attention.</strong> CTR on Brand Awareness dropped 8% — creative refresh recommended. <strong>Increasing LinkedIn budget by 20%</strong> could generate +420 qualified leads.</span>
+            )}
+          </div>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ display:'flex', justifyContent:'flex-end', fontSize:11, color:'#6b7280', marginBottom:4 }}>92% confidence</div>
+            <div className="progress-track"><div className="progress-fill" style={{ width:'92%', background:'var(--mh-primary)' }} /></div>
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button className="mh-btn mh-btn-ai" onClick={() => onNavigate?.('campaigns')}><Sparkles size={13} />Apply Suggestions</button>
+            <button className="mh-btn mh-btn-ghost" onClick={() => onNavigate?.('campaigns')}>View Details →</button>
+          </div>
+        </div>
+
+        {/* Quick Actions card */}
+        <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:18, padding:20 }}>
+          <div style={{ fontFamily:'var(--mh-font-display)', fontSize:14, fontWeight:700, color:'#111827', marginBottom:14 }}>Quick Actions</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
+            {QUICK_ACTIONS.map(a => (
+              <button key={a.label} onClick={() => onNavigate?.(a.page)} style={{ background:'#f9fafb', border:'1px solid #e5e7eb', borderRadius:10, padding:'12px 8px', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:6, transition:'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.background='#f0f2f5'; e.currentTarget.style.borderColor='#d1d5db'; }}
+                onMouseLeave={e => { e.currentTarget.style.background='#f9fafb'; e.currentTarget.style.borderColor='#e5e7eb'; }}>
+                <div style={{ width:32, height:32, borderRadius:'50%', background:a.color+'18', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <a.icon size={15} color={a.color} />
+                </div>
+                <div style={{ fontSize:12, fontWeight:700, color:'#111827', textAlign:'center', lineHeight:1.3 }}>{a.label}</div>
+                <div style={{ fontSize:10, color:'#6b7280', textAlign:'center' }}>{a.sub}</div>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* KPI strip */}
@@ -264,7 +359,7 @@ export default function MHDashboard({ onNavigate }) {
 
       {/* Analytics Expansion: AEO, SEO, Competitors */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:16, marginTop: 16 }}>
-        
+
         {/* SEO Keywords */}
         <div style={{ background:'#fff', border:'1px solid #e5e7eb', borderRadius:18, padding:20 }}>
           <ChartHeader title="SEO Performance" subtitle="Top ranking keywords" />
@@ -337,4 +432,3 @@ export default function MHDashboard({ onNavigate }) {
     </div>
   );
 }
-

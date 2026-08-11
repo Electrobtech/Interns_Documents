@@ -55,11 +55,30 @@ export function useCampaigns() {
 
 // GET /conversations — { id, channel_type, status, contact_name,
 //   last_message_preview, inbound_count, last_message_at, ... }
-export function useConversations() {
+// Capped at 100 rows server-side (most-recent-first), so a busy channel
+// (e.g. a flood of promotional email) can crowd quieter channels out of
+// the page entirely. Pass `channel` to filter server-side instead of
+// fetching the capped "all channels" page and filtering it client-side —
+// the latter can silently show zero results for a channel that has real
+// conversations, just none in the last 100.
+export function useConversations(channel) {
+  const { call } = useApi();
+  const qs = channel ? `?channel=${encodeURIComponent(channel)}` : '';
+  return useQuery({
+    queryKey: ['conversations', 'list', channel || 'all'],
+    queryFn: () => call(`/conversations${qs}`),
+    refetchInterval: 20_000,
+  });
+}
+
+// GET /conversations/channel-counts — { byChannel: { whatsapp: 12, ... },
+// total }. Uncapped true totals per channel — use this for filter-chip
+// badges, not `.length` on a possibly-capped /conversations page.
+export function useConversationChannelCounts() {
   const { call } = useApi();
   return useQuery({
-    queryKey: ['conversations', 'list'],
-    queryFn: () => call('/conversations'),
+    queryKey: ['conversations', 'channel-counts'],
+    queryFn: () => call('/conversations/channel-counts'),
     refetchInterval: 20_000,
   });
 }

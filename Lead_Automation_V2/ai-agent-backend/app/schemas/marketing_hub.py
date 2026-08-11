@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
@@ -330,6 +330,178 @@ class TemplateOut(TemplateBase):
     created_at: datetime
     updated_at: datetime
     created_by: uuid.UUID
+
+    class Config:
+        from_attributes = True
+
+
+# ── Asset Schemas ─────────────────────────────────────────────────────────
+# Mirrors the MarketingAsset ORM model (app/models/marketing_hub.py). Asset
+# rows are created directly by MarketingAssetsService.create_asset_from_upload
+# (not via AssetCreate) since file metadata is derived server-side from the
+# uploaded bytes, but the schema is kept in this family for API consistency
+# and to support programmatic/non-upload asset creation.
+
+
+class AssetBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    tags: List[str] = Field(default_factory=list)
+    is_public: bool = False
+
+
+class AssetCreate(AssetBase):
+    filename: str
+    file_path: str
+    file_size: int = Field(..., ge=0)
+    mime_type: str
+    asset_type: AssetType
+    file_hash: str
+    metadata_dict: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AssetUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    tags: Optional[List[str]] = None
+    is_public: Optional[bool] = None
+
+
+class AssetOut(AssetBase):
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    filename: str
+    file_path: str
+    file_size: int
+    mime_type: str
+    asset_type: AssetType
+    file_hash: str
+    metadata_dict: Dict[str, Any] = Field(default_factory=dict)
+    created_by: Optional[uuid.UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ── Audience Schemas ──────────────────────────────────────────────────────
+# Backs the raw MarketingAudience model (used by MarketingAudienceService),
+# distinct from the AudienceSegment* schemas above.
+
+
+class AudienceBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    source: str = "custom"
+    filter: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AudienceCreate(AudienceBase):
+    pass
+
+
+class AudienceUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    source: Optional[str] = None
+    filter: Optional[Dict[str, Any]] = None
+    status: Optional[str] = None
+
+
+class AudienceOut(AudienceBase):
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    size_cached: Optional[int] = None
+    size_computed_at: Optional[datetime] = None
+    status: str
+    created_by: Optional[uuid.UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ── Calendar Event Schemas ───────────────────────────────────────────────────
+
+
+class CalendarEventBase(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    event_type: EventType
+    status: Optional[EventStatus] = None
+    start_date: datetime
+    end_date: datetime
+    all_day: bool = False
+    campaign_id: Optional[uuid.UUID] = None
+    assignees: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
+
+
+class CalendarEventCreate(CalendarEventBase):
+    pass
+
+
+class CalendarEventUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    event_type: Optional[EventType] = None
+    status: Optional[EventStatus] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    all_day: Optional[bool] = None
+    campaign_id: Optional[uuid.UUID] = None
+    assignees: Optional[List[str]] = None
+    tags: Optional[List[str]] = None
+
+
+class CalendarEventOut(CalendarEventBase):
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    status: EventStatus
+    metadata_dict: Dict[str, Any] = Field(default_factory=dict)
+    created_by: Optional[uuid.UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ── Report Schemas ────────────────────────────────────────────────────────
+
+
+class ReportBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    report_type: ReportType
+    start_date: date
+    end_date: date
+    filters: Dict[str, Any] = Field(default_factory=dict)
+    recipients: List[str] = Field(default_factory=list)
+    schedule: Optional[Dict[str, Any]] = None
+
+
+class ReportCreate(ReportBase):
+    pass
+
+
+class ReportUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    recipients: Optional[List[str]] = None
+    schedule: Optional[Dict[str, Any]] = None
+    status: Optional[ReportStatus] = None
+
+
+class ReportOut(ReportBase):
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    configuration: Dict[str, Any] = Field(default_factory=dict)
+    content: Optional[Dict[str, Any]] = None
+    file_url: Optional[str] = None
+    status: ReportStatus
+    generated_at: Optional[datetime] = None
+    created_by: Optional[uuid.UUID] = None
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
