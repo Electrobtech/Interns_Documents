@@ -55,13 +55,6 @@ export default function SpreadsheetEditor({ id, onBack }) {
     setNameDraft(data.name);
   }, [data, dirty]);
 
-  if (isLoading || !headers) {
-    return (
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-10 flex items-center justify-center gap-2 text-sm text-slate-400">
-        <Loader2 size={14} className="animate-spin" /> Loading spreadsheet…
-      </div>
-    );
-  }
   if (isError) {
     return (
       <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6">
@@ -72,6 +65,13 @@ export default function SpreadsheetEditor({ id, onBack }) {
           <AlertTriangle size={14} className="text-red-500 shrink-0" />
           <p className="text-sm text-red-600">{error?.message || 'Could not load this spreadsheet.'}</p>
         </div>
+      </div>
+    );
+  }
+  if (isLoading || !headers) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-10 flex items-center justify-center gap-2 text-sm text-slate-400">
+        <Loader2 size={14} className="animate-spin" /> Loading spreadsheet…
       </div>
     );
   }

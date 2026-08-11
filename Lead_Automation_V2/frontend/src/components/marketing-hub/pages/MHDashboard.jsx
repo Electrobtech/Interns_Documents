@@ -8,7 +8,7 @@ import { AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
 import { kpiData, performanceData, platformData, funnelData, channelPerformance,
   aiInsights, revenueData } from '../mockData';
 import { useMHToast } from '../ui/MHToast';
-import { useAudienceGrowth } from '@/lib/queries/marketingHub';
+import { useAudienceGrowth, useMarketingCampaigns } from '@/lib/queries/marketingHub';
 
 const QUICK_ACTIONS = [
   { icon: Megaphone, label: 'Launch Campaign', sub: 'AI-powered', color: '#6366f1', page: 'campaigns' },
@@ -45,40 +45,16 @@ export default function MHDashboard({ onNavigate }) {
   const { data: audienceGrowth = [] } = useAudienceGrowth(8);
 
   const { show } = useMHToast();
-  const { data: campaigns = [], refetch } = useCampaigns();
-  const aiSuggestions = useAISuggestions();
+  const { data: campaigns = [], refetch } = useMarketingCampaigns();
   const [aiSummary, setAiSummary] = useState(null);
   const [loadingAI, setLoadingAI] = useState(false);
 
-  // Fetch AI suggestions on mount
+  // There's no live AI-summary endpoint wired up yet for this dashboard, so
+  // this intentionally just falls back to the static `aiInsights` mock data
+  // rendered below rather than crashing or spinning forever.
   useEffect(() => {
-    const fetchAISuggestions = async () => {
-      setLoadingAI(true);
-      try {
-        const context = {
-          campaigns_count: campaigns.length,
-          active_campaigns: campaigns.filter(c => c.status === 'processing' || c.status === 'scheduled').length,
-          recent_performance: campaigns.slice(0, 5).map(c => ({
-            name: c.name,
-            channel: c.channel,
-            status: c.status,
-            recipients: c.total_recipients
-          }))
-        };
-        
-        const result = await aiSuggestions.mutateAsync(context);
-        setAiSummary(result);
-      } catch (error) {
-        console.error('Failed to fetch AI suggestions:', error);
-        // Keep using mock data on error
-      } finally {
-        setLoadingAI(false);
-      }
-    };
-
-    if (campaigns.length > 0) {
-      fetchAISuggestions();
-    }
+    setLoadingAI(false);
+    setAiSummary(null);
   }, [campaigns.length]);
 
   // Real report from real mh_campaigns rows — everything else on this page

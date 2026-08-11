@@ -309,6 +309,48 @@ export function useIntegrationsList() {
   });
 }
 
+// NOTE: these four hooks target services/marketing-hub-service/src/routes/settings.js,
+// which is not currently mounted in that service's index.js (and its mh_settings /
+// mh_integrations tables — see complete_marketing_hub_schema.sql — aren't in
+// infra/db/schema.sql yet either). Calls will 404 until both are wired up; the
+// hooks exist so the Settings page can render its loading/error states instead
+// of crashing with a ReferenceError.
+export function useConnectIntegration() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => call('/marketing-hub/settings/integrations', { method: 'POST', body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing-hub', 'settings', 'integrations'] }),
+  });
+}
+
+export function useDisconnectIntegration() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => call(`/marketing-hub/settings/integrations/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing-hub', 'settings', 'integrations'] }),
+  });
+}
+
+export function useSandboxSetting() {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing-hub', 'settings', 'sandbox'],
+    queryFn: () => call('/marketing-hub/settings/sandbox'),
+  });
+}
+
+export function useSetSandboxSetting() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ key, value, description }) =>
+      call(`/marketing-hub/settings/sandbox/${key}`, { method: 'PUT', body: { value, description } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing-hub', 'settings', 'sandbox'] }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Broadcasts — GET/POST/PATCH/DELETE /marketing-hub/broadcasts
 // + POST /marketing-hub/broadcasts/:id/send
@@ -439,5 +481,66 @@ export function useGenerateContent() {
     // body: { content_type, channel, ai_prompt, context }
     mutationFn: (body) => call('/ai-agents/content/generate', { method: 'POST', body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing-hub', 'content'] }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Campaign / broadcast send pipeline — publish, AI-optimize suggestions, and
+// per-recipient status. NOT YET IMPLEMENTED on the backend (campaigns.js and
+// broadcasts.js only expose GET/POST/PATCH/DELETE today); these hooks call
+// the natural REST extension of those resources so calls fail gracefully
+// (404, caught by the calling component) instead of throwing a
+// ReferenceError during render. Implement the matching Express routes to
+// make these live.
+// ---------------------------------------------------------------------------
+
+export function useCreateCampaign() {
+  return useCreateMarketingCampaign();
+}
+
+export function usePublishCampaign() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => call(`/marketing-hub/campaigns/${id}/publish`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing-hub', 'campaigns'] }),
+  });
+}
+
+export function useOptimizeCampaign() {
+  const { call } = useApi();
+  return useMutation({
+    mutationFn: (id) => call(`/marketing-hub/campaigns/${id}/optimize`, { method: 'POST' }),
+  });
+}
+
+export function useCampaignRecipients(id) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing-hub', 'campaigns', id, 'recipients'],
+    queryFn: () => call(`/marketing-hub/campaigns/${id}/recipients`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateBroadcast() {
+  return useCreateMarketingBroadcast();
+}
+
+export function usePublishBroadcast() {
+  const { call } = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => call(`/marketing-hub/broadcasts/${id}/send`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['marketing-hub', 'broadcasts'] }),
+  });
+}
+
+export function useBroadcastRecipients(id) {
+  const { call } = useApi();
+  return useQuery({
+    queryKey: ['marketing-hub', 'broadcasts', id, 'recipients'],
+    queryFn: () => call(`/marketing-hub/broadcasts/${id}/recipients`),
+    enabled: !!id,
   });
 }

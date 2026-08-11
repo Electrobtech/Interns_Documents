@@ -501,7 +501,10 @@ services:
       INBOX_SERVICE_URL:       http://inbox-service:4002
       CONTACT_SERVICE_URL:     http://contact-service:4003
       CAMPAIGN_SERVICE_URL:    http://campaign-service:4004
-      AI_SERVICE_URL:          http://ai-agent-service:4005
+      AI_SERVICE_URL:          http://ai-overview-service:4020
+      AI_MARKETING_URL:        http://ai-marketing-service:4021
+      AI_SALES_URL:            http://ai-sales-service:4022
+      AI_SUPPORT_URL:          http://ai-support-service:4023
       ECOMMERCE_SERVICE_URL:   http://ecommerce-service:4006
       REVIEW_SERVICE_URL:      http://review-service:4007
       ANALYTICS_SERVICE_URL:   http://analytics-service:4008

@@ -1,11 +1,18 @@
 'use client';
 import { useState } from 'react';
-import { Save, Plus, Check, Link2, Zap, Users } from 'lucide-react';
+import { Save, Plus, Check, Link2, Zap, Users, ShieldCheck } from 'lucide-react';
 import MHBadge from '../ui/MHBadge';
 import MHModal from '../ui/MHModal';
 import { useMHToast } from '../ui/MHToast';
 import { EmptyState } from './_shared';
-import { useMarketingTeam } from '@/lib/queries/marketingHub';
+import {
+  useMarketingTeam,
+  useIntegrationsList,
+  useConnectIntegration,
+  useDisconnectIntegration,
+  useSandboxSetting,
+  useSetSandboxSetting,
+} from '@/lib/queries/marketingHub';
 
 const TABS = ['General', 'Team', 'Integrations', 'Notifications', 'AI Config'];
 

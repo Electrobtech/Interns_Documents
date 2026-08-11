@@ -5,42 +5,29 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const app = express();
 app.use(cors());
 
-const AUTH        = process.env.AUTH_SERVICE_URL        || 'http://localhost:4001';
-const INBOX       = process.env.INBOX_SERVICE_URL       || 'http://localhost:4002';
-const CONTACT     = process.env.CONTACT_SERVICE_URL     || 'http://localhost:4003';
-const CAMPAIGN    = process.env.CAMPAIGN_SERVICE_URL    || 'http://localhost:4004';
-const AI_OVERVIEW    = process.env.AI_OVERVIEW_SERVICE_URL    || 'http://localhost:4020';
-const AI_MARKETING   = process.env.AI_MARKETING_SERVICE_URL   || 'http://localhost:4021';
-const AI_SALES       = process.env.AI_SALES_SERVICE_URL       || 'http://localhost:4022';
-const AI_SUPPORT     = process.env.AI_SUPPORT_SERVICE_URL     || 'http://localhost:4023';
-const ECOMMERCE   = process.env.ECOMMERCE_SERVICE_URL   || 'http://localhost:4006';
-const REVIEW      = process.env.REVIEW_SERVICE_URL      || 'http://localhost:4007';
-const ANALYTICS   = process.env.ANALYTICS_SERVICE_URL   || 'http://localhost:4008';
-const INTEGRATION = process.env.INTEGRATION_SERVICE_URL || 'http://localhost:4008';
-const LINKEDIN     = process.env.LINKEDIN_SERVICE_URL    || 'http://localhost:4009';
-const TEAM        = process.env.TEAM_SERVICE_URL        || 'http://localhost:4010';
-const AUTOMATION  = process.env.AUTOMATION_SERVICE_URL  || 'http://localhost:4011';
-const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4012';
-// Gmail Pub/Sub push handler. 4013 matches email-service's own EMAIL_PORT
-// default and the EMAIL_SERVICE_URL set in docker-compose.
-const EMAIL       = process.env.EMAIL_SERVICE_URL       || 'http://localhost:4013';
-const CALENDAR    = process.env.CALENDAR_SERVICE_URL    || 'http://localhost:4014';
-const BILLING      = process.env.BILLING_SERVICE_URL     || 'http://localhost:4015';
-
-// Finances & Accounting module — the tenant's own income/expense ledger +
-// course GST invoices. Deliberately a separate service/port from BILLING
-// (4015), which is platform-subscription billing, not this.
-const FINANCE      = process.env.FINANCE_SERVICE_URL     || 'http://localhost:4016';
-
-const MARKETING_HUB = process.env.MARKETING_HUB_SERVICE_URL || 'http://localhost:4017';
-
+const AUTH         = process.env.AUTH_SERVICE_URL        || 'http://auth-service:4001';
+const INBOX        = process.env.INBOX_SERVICE_URL       || 'http://inbox-service:4002';
+const CONTACT      = process.env.CONTACT_SERVICE_URL     || 'http://contact-service:4003';
+const CAMPAIGN     = process.env.CAMPAIGN_SERVICE_URL    || 'http://campaign-service:4004';
+const AI           = process.env.AI_SERVICE_URL          || 'http://ai-overview-service:4020';
+const AI_MARKETING = process.env.AI_MARKETING_URL        || 'http://ai-marketing-service:4021';
+const AI_SALES     = process.env.AI_SALES_URL            || 'http://ai-sales-service:4022';
+const AI_SUPPORT   = process.env.AI_SUPPORT_URL          || 'http://ai-support-service:4023';
+const ECOMMERCE    = process.env.ECOMMERCE_SERVICE_URL   || 'http://ecommerce-service:4006';
+const REVIEW       = process.env.REVIEW_SERVICE_URL      || 'http://review-service:4007';
+const ANALYTICS    = process.env.ANALYTICS_SERVICE_URL   || 'http://analytics-service:4008';
+const INTEGRATION  = process.env.INTEGRATION_SERVICE_URL || 'http://integration-service:4008';
+const LINKEDIN     = process.env.LINKEDIN_SERVICE_URL    || 'http://linkedin-service:4009';
+const TEAM         = process.env.TEAM_SERVICE_URL        || 'http://team-service:4010';
+const AUTOMATION   = process.env.AUTOMATION_SERVICE_URL  || 'http://automation-service:4011';
+const NOTIFICATION = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:4012';
+const EMAIL        = process.env.EMAIL_SERVICE_URL       || 'http://email-service:4013';
+const CALENDAR     = process.env.CALENDAR_SERVICE_URL    || 'http://calendar-service:4014';
+const BILLING      = process.env.BILLING_SERVICE_URL     || 'http://billing-service:4015';
+const FINANCE      = process.env.FINANCE_SERVICE_URL     || 'http://finance-service:4016';
 
 app.get('/health', (_req, res) => res.json({ gateway: true, ok: true }));
 
-// Required by Meta before an app can go Live (App Settings -> Basic ->
-// Privacy Policy URL). Meta crawls this URL to confirm it resolves and
-// contains real content, so it must be reachable from the public internet
-// (works via the Cloudflare tunnel pointed at this gateway).
 app.get('/privacy-policy', (_req, res) => {
   res.type('html').send(`<!DOCTYPE html>
 <html lang="en">
@@ -84,80 +71,37 @@ app.get('/privacy-policy', (_req, res) => {
 </html>`);
 });
 
-// Route table — the single public entry point for the frontend.
-//
-// NOTE: integration-service mounts its own OAuth sub-routes under /auth
-// (see services/integration-service/src/routes/auth.js: /auth/connect-url,
-// /auth/facebook, /auth/facebook/callback, /auth/refresh-tokens,
-// /auth/deauthorize, /auth/data-deletion*) — distinct from auth-service's
-// /auth/login and /auth/register. Express matches app.use() middleware in
-// registration order and the first match wins, so these more specific
-// /auth/* entries MUST be listed before the generic '/auth' -> AUTH entry
-// below, or they'd be swallowed by it and 404 against auth-service instead.
 const routes = [
-  // integration-service owns these specific /auth/* paths; they MUST precede
-  // the generic '/auth' -> AUTH entry or that entry swallows them.
   { path: '/auth/connect-url',    target: INTEGRATION },
-  { path: '/auth/facebook',       target: INTEGRATION }, // covers /auth/facebook and /auth/facebook/callback
+  { path: '/auth/facebook',       target: INTEGRATION },
   { path: '/auth/refresh-tokens', target: INTEGRATION },
   { path: '/auth/deauthorize',    target: INTEGRATION },
-  { path: '/auth/data-deletion',  target: INTEGRATION }, // covers /auth/data-deletion and /auth/data-deletion-status
-  { path: '/auth/unlock',         target: INTEGRATION }, // admin-only: lifts the lock on the Instagram/Facebook connection
-  { path: '/auth/verify-publish-password', target: INTEGRATION }, // password gate for the Integrations & APIs page (Meta/WhatsApp connections)
+  { path: '/auth/data-deletion',  target: INTEGRATION },
+  { path: '/auth/unlock',         target: INTEGRATION },
   { path: '/instagram',           target: INTEGRATION },
   { path: '/facebook',            target: INTEGRATION },
   { path: '/whatsapp',            target: INTEGRATION },
-  { path: '/credentials',         target: INTEGRATION }, // manual API key / App ID / App Secret entry (routes/credentials.js)
-  // linkedin-service mounts its own routes under this prefix (see
-  // services/linkedin-service/src/index.js) — was missing entirely, so every
-  // LinkedIn call from the frontend 404'd at the gateway before this.
+  { path: '/credentials',         target: INTEGRATION },
   { path: '/api/v1/integrations/linkedin', target: LINKEDIN },
   { path: '/auth',                target: AUTH },
-  { path: '/super-admin',         target: AUTH }, // Platform Super Admin API: superAdminController.js — separate requireSuperAdmin auth, not tenant `authenticate`
-  { path: '/company',             target: AUTH }, // Company Registration wizard: companyController.js + gstController.js
+  { path: '/super-admin',         target: AUTH },
+  { path: '/company',             target: AUTH },
   { path: '/conversations',       target: INBOX },
-  { path: '/socket.io',           target: INBOX, ws: true }, // live message delivery — see services/inbox-service/src/realtime.js
+  { path: '/socket.io',           target: INBOX, ws: true },
   { path: '/contacts',            target: CONTACT },
   { path: '/leads',               target: CONTACT },
-  { path: '/follow-ups',          target: CONTACT }, // Follow-ups feature: services/contact-service/src/followUpRoutes.js
-  { path: '/sheets',              target: CONTACT }, // Google Sheets -> CRM import: services/contact-service/src/sheetsRoutes.js
-  { path: '/spreadsheets',        target: CONTACT }, // saved, editable spreadsheets: services/contact-service/src/spreadsheetsRoutes.js
+  { path: '/follow-ups',          target: CONTACT },
   { path: '/campaigns',           target: CAMPAIGN },
-  // Message Templates (Template Creation module) — owned by campaign-service
-  // (src/templates.js + src/templateMedia.js), not yet in this route table.
   { path: '/templates',           target: CAMPAIGN },
-  // Products/Offers (src/products.js) — router existed and is mounted in
-  // campaign-service/src/index.js, but had no gateway route at all, so
-  // every /products call from frontend/src/lib/queries/products.js 404'd
-  // before even reaching the service.
   { path: '/products',            target: CAMPAIGN },
-  // Static header images/videos/documents templateMedia.js writes under
-  // campaign-service's public/uploads/templates (see src/index.js there).
-// Static header images/videos/documents templateMedia.js writes under
-  // campaign service's public/uploads/templates (see src/index.js there).
-  // The upload response hands back a GATEWAY_PUBLIC_URL-rooted URL for the
-  // Live Preview's <img> tag to load directly - this route is what makes
-  // that URL actually resolve, since the browser only ever talks to this
-  // gateway, never to campaign-service's own port.
-  // marketing-hub-service owns /uploads/marketing-assets — more specific
-  // path MUST precede the generic /uploads -> CAMPAIGN entry or it is swallowed.
-  { path: '/uploads/marketing-assets', target: MARKETING_HUB },
-  { path: '/uploads', target: CAMPAIGN },
-  { path: '/ai-agents/status', target: AI_OVERVIEW },
-  { path: '/ai-agents/analytics', target: AI_OVERVIEW },
-  { path: '/ai-agents/health', target: AI_OVERVIEW },
-  { path: '/ai-agents/knowledge', target: AI_OVERVIEW },
-  { path: '/ai-agents/sessions', target: AI_OVERVIEW },
-  { path: '/ai-agents/runs', target: AI_OVERVIEW },
-  { path: '/ai-agents/orchestrate', target: AI_OVERVIEW },
+  { path: '/uploads',             target: CAMPAIGN },
   { path: '/ai-agents/marketing', target: AI_MARKETING },
-  { path: '/ai-agents/sales', target: AI_SALES },
-  { path: '/ai-agents/support', target: AI_SUPPORT },
-  { path: '/ai-agents', target: AI_OVERVIEW },
-  { path: '/agents/marketing', target: AI_MARKETING },
-  { path: '/agents/sales', target: AI_SALES },
-  { path: '/agents/support', target: AI_SUPPORT },
-  { path: '/sessions', target: AI_OVERVIEW },
+  { path: '/ai-agents/sales',     target: AI_SALES },
+  { path: '/ai-agents/support',   target: AI_SUPPORT },
+  { path: '/agents/marketing',    target: AI_MARKETING },
+  { path: '/agents/sales',        target: AI_SALES },
+  { path: '/agents/support',      target: AI_SUPPORT },
+  { path: '/ai-agents',           target: AI },
   { path: '/orders',              target: ECOMMERCE },
   { path: '/carts',               target: ECOMMERCE },
   { path: '/recovery-flows',      target: ECOMMERCE },
@@ -168,10 +112,10 @@ const routes = [
   { path: '/integrations',        target: INTEGRATION },
   { path: '/api-keys',            target: INTEGRATION },
   { path: '/webhooks',            target: INTEGRATION },
-  { path: '/webhook/gmail',       target: EMAIL },      // Gmail Pub/Sub push — must precede the generic '/webhook' entry below
-  { path: '/webhook/sms',         target: INTEGRATION }, // SMS-forwarder app webhook — must precede the generic '/webhook' entry below
-  { path: '/webhook',             target: INTEGRATION }, // Meta webhook callback (/webhook/meta)
-  { path: '/sms',                 target: INTEGRATION }, // device management (list/add/remove connected phones) — routes/smsDevices.js
+  { path: '/webhook/gmail',       target: EMAIL },
+  { path: '/webhook/sms',         target: INTEGRATION },
+  { path: '/webhook',             target: INTEGRATION },
+  { path: '/sms',                 target: INTEGRATION },
   { path: '/channels',            target: INTEGRATION },
   { path: '/users',               target: TEAM },
   { path: '/teams',               target: TEAM },
@@ -179,40 +123,16 @@ const routes = [
   { path: '/notifications',       target: NOTIFICATION },
   { path: '/email',               target: EMAIL },
   { path: '/calendar',            target: CALENDAR },
-  // billing-service mounts everything under /billing/* (wallet, walkin POS,
-  // payments, orders — see services/billing-service/src/index.js and
-  // frontend/src/components/billing/*.jsx). BILLING was declared above but
-  // never actually routed, so every Billing & Payments page call 404'd here.
   { path: '/billing',             target: BILLING },
-
-  // finance-service mounts everything under /finances/* (transactions,
-  // course invoices, summary — see services/finance-service/src/index.js
-  // and frontend/src/components/finances/*.jsx).
   { path: '/finances',            target: FINANCE },
-
-  // Marketing Hub backend (services/marketing-hub-service) — Assets Library,
-  // Audiences, Campaigns, Broadcasts, Calendar, and the realtime socket all
-  // live behind this one bare prefix.
-  // The /socket.io sub-path MUST precede the bare /marketing-hub entry below
-  // — Express matches app.use() in registration order and the first match
-  // wins, same reasoning as the /auth/* block at the top of this table.
-  // NOTE: this must be the ONLY place '/marketing-hub' is registered — an
-  // earlier duplicate bare entry used to sit up near the /uploads routes,
-  // which silently swallowed /marketing-hub/socket.io before it ever reached
-  // this ws:true entry, breaking realtime updates. Don't reintroduce it.
-  { path: '/marketing-hub/socket.io', target: MARKETING_HUB, ws: true },
-  { path: '/marketing-hub',           target: MARKETING_HUB },
-
 ];
 
 const wsProxies = [];
 for (const r of routes) {
-  const isMarketingHub = r.path.startsWith('/marketing-hub');
   const proxy = createProxyMiddleware(r.path, {
     target: r.target,
     changeOrigin: true,
     ws: r.ws || false,
-    pathRewrite: isMarketingHub ? { '^/marketing-hub': '' } : undefined,
   });
   app.use(r.path, proxy);
   if (r.ws) wsProxies.push(proxy);
@@ -221,11 +141,6 @@ for (const r of routes) {
 const PORT = process.env.GATEWAY_PORT || 8080;
 const server = app.listen(PORT, () => console.log(`api-gateway on :${PORT}`));
 
-// http-proxy-middleware only forwards WebSocket upgrades if the raw HTTP
-// server's 'upgrade' event is wired to it directly — Express routing alone
-// (app.use above) only ever sees regular HTTP requests, so without this a
-// socket.io client's initial ws:// handshake through the gateway would just
-// hang. Each ws:true proxy in the routes table gets attached here.
 for (const proxy of wsProxies) {
   server.on('upgrade', proxy.upgrade);
 }
