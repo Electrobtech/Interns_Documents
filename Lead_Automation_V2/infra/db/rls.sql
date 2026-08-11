@@ -73,6 +73,7 @@ BEGIN
     'organization_channel_subscriptions', 'whatsapp_billing_ledger',
     'meta_usage_charges', 'sms_usage_charges',
     'products',
+    'finance_transactions', 'course_invoices', 'finance_invoice_counters' ,
     'message_templates',
     'marketing_assets',
     'marketing_audiences',
@@ -80,6 +81,7 @@ BEGIN
     'marketing_broadcasts',
     'marketing_calendar_events',
     'imported_sheets'
+
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
@@ -178,6 +180,28 @@ CREATE POLICY tenant_isolation ON mh_recipients
     app_rls_bypass() OR EXISTS (
       SELECT 1 FROM mh_campaigns c
        WHERE c.id = mh_recipients.campaign_id
+         AND c.organization_id = app_current_org()
+    )
+  );
+
+-- mh_competitor_analysis (complete_marketing_hub_schema.sql) has no
+-- organization_id column of its own — it hangs off mh_competitors, which
+-- is itself organization_id-scoped in the loop above.
+ALTER TABLE mh_competitor_analysis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mh_competitor_analysis FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON mh_competitor_analysis;
+CREATE POLICY tenant_isolation ON mh_competitor_analysis
+  USING (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM mh_competitors c
+       WHERE c.id = mh_competitor_analysis.competitor_id
+         AND c.organization_id = app_current_org()
+    )
+  )
+  WITH CHECK (
+    app_rls_bypass() OR EXISTS (
+      SELECT 1 FROM mh_competitors c
+       WHERE c.id = mh_competitor_analysis.competitor_id
          AND c.organization_id = app_current_org()
     )
   );

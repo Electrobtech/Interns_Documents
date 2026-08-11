@@ -72,6 +72,28 @@ async def get_leads(organization_id: uuid.UUID, limit: int = 300) -> list[dict] 
         return None
 
 
+async def get_products(organization_id: uuid.UUID, status: str | None = None) -> list[dict] | None:
+    """Best-effort fetch of products/offers (campaign-service owns
+    /products). Used by SalesService.get_forecast/get_analytics to break
+    pipeline value, revenue targets, and gap analysis down per product.
+    Returns None on any failure — per-product breakdown degrades to
+    org-wide-only rather than hard-failing the whole forecast."""
+    settings = get_settings()
+    token = sign_service_token(organization_id)
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.CAMPAIGN_SERVICE_URL}/products",
+                headers={"Authorization": f"Bearer {token}"},
+                params={"status": status} if status else None,
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except Exception:
+        logger.warning("product_service_fetch_failed (non-fatal)", exc_info=True)
+        return None
+
+
 async def get_follow_ups(organization_id: uuid.UUID, bucket: str | None = None) -> list[dict] | None:
     """Best-effort fetch of CRM follow-up reminders (contact-service owns
     /follow-ups). Used to build the Sales Agent's real task queue
@@ -96,17 +118,41 @@ async def get_follow_ups(organization_id: uuid.UUID, bucket: str | None = None) 
 
 async def create_campaign(organization_id: uuid.UUID, *, name: str, type_: str, channel_type: str, message_body: str, status: str = "draft") -> dict:
     """Not best-effort — the caller (convert-plan-item route) needs a real
-    result or a real error to show the user."""
+    result or a real error to show the user.
+
+    Points at marketing-hub-service, not the older campaign-service. The
+    two used to run as separate, non-connected systems: a campaign created
+    here from an AI-generated plan landed in campaign-service's own table
+    and never showed up in the Marketing Hub UI (Campaigns/Broadcasts/
+    Channels all read from marketing-hub-service's mh_campaigns table).
+    marketing-hub-service is now the single source of truth for campaigns
+    everywhere in the product, so this call was redirected to it instead of
+    campaign-service. `type_` has no direct equivalent in mh_campaigns'
+    schema (which has `objective`, not `type`) so it's passed through as
+    the objective — mh_campaigns doesn't constrain objective to an enum,
+    unlike channel, so this is safe.
+    """
     settings = get_settings()
     token = sign_service_token(organization_id)
     async with httpx.AsyncClient(timeout=8.0) as client:
         resp = await client.post(
-            f"{settings.CAMPAIGN_SERVICE_URL}/campaigns",
+            f"{settings.MARKETING_HUB_SERVICE_URL}/campaigns",
             headers={"Authorization": f"Bearer {token}"},
-            json={"name": name, "type": type_, "channel_type": channel_type, "message_body": message_body, "status": status},
+            json={"name": name, "objective": type_, "channel": channel_type, "message_body": message_body},
         )
         resp.raise_for_status()
-        return resp.json()
+        campaign = resp.json()
+        if status == "draft":
+            return campaign
+        # Any non-draft status from the caller means "launch it" — publish
+        # is a separate call in marketing-hub-service's API (create, then
+        # publish), unlike campaign-service's old single-call create.
+        publish_resp = await client.post(
+            f"{settings.MARKETING_HUB_SERVICE_URL}/campaigns/{campaign['id']}/publish",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        publish_resp.raise_for_status()
+        return publish_resp.json()
 
 
 async def get_customer_context(organization_id: uuid.UUID, contact_id: str) -> dict | None:
@@ -182,3 +228,117 @@ def format_customer_context(ctx: dict | None) -> str | None:
         lines.append(f"- Notes on file: {notes[:600]}")
 
     return "\n".join(lines) if lines else None
+
+
+# ── Finances & Accounting (services/finance-service) ────────────────────────
+#
+# generate_course_invoice / record_expense are NOT best-effort — like
+# create_campaign above, these are real financial/statutory writes (a GST
+# invoice number, once issued, cannot be silently reused), so a failure
+# must surface as a real error to whoever is confirming the action, not be
+# swallowed.
+#
+# By design (see api/v1/finance_agent.py), the Sales Agent itself never
+# calls these two directly from a chat turn — it only *proposes* a
+# structured action for a human to review, exactly the same one-step-removed
+# pattern this file already uses for create_campaign (agent drafts a plan
+# item, POST .../convert commits it). That mirrors this repo's existing
+# rule for the Sales Agent: "You NEVER take direct action on the CRM... you
+# only produce... for a human to review and apply" (see
+# app/agents/sales_agent.py's SYSTEM_PROMPT). Route a natural-language
+# finance command ("record ₹45,000 developer salary payment") through
+# POST /ai-agents/sales/finance/propose first, and only call the functions
+# below from POST /ai-agents/sales/finance/confirm once a human has
+# approved the parsed amount/category.
+
+async def generate_course_invoice(
+    organization_id: uuid.UUID,
+    *,
+    student_name: str,
+    student_state: str,
+    total_amount: float,
+    course_name: str | None = None,
+    student_gstin: str | None = None,
+    student_address: str | None = None,
+) -> dict:
+    """Calls finance-service's POST /finances/invoices — computes the
+    CGST/SGST-vs-IGST split, assigns the next gapless invoice number for
+    this org+FY, and returns { invoice, transaction }. Raises on failure
+    (bad seller GST profile, invalid amount, etc.) so the caller can show
+    the real error rather than silently no-op'ing."""
+    settings = get_settings()
+    token = sign_service_token(organization_id)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(
+            f"{settings.FINANCE_SERVICE_URL}/finances/invoices",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "studentName": student_name,
+                "studentState": student_state,
+                "totalAmount": total_amount,
+                "courseName": course_name,
+                "studentGstin": student_gstin,
+                "studentAddress": student_address,
+                "source": "ai_agent",
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def record_expense(
+    organization_id: uuid.UUID,
+    *,
+    category: str,
+    amount: float,
+    description: str | None = None,
+    payment_method: str | None = None,
+    reference_id: str | None = None,
+) -> dict:
+    """Calls finance-service's POST /finances/transactions with
+    type=EXPENSE, source=ai_agent (tagged distinctly from manual entries —
+    see the "AI Agent" badge in frontend/src/components/finances/
+    ExpensesOutgoings.jsx). Raises on failure."""
+    settings = get_settings()
+    token = sign_service_token(organization_id)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(
+            f"{settings.FINANCE_SERVICE_URL}/finances/transactions",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "type": "EXPENSE",
+                "category": category,
+                "amount": amount,
+                "description": description,
+                "paymentMethod": payment_method,
+                "referenceId": reference_id,
+                "source": "ai_agent",
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def get_financial_summary(organization_id: uuid.UUID, *, from_date: str | None = None, to_date: str | None = None) -> dict | None:
+    """Best-effort read (like get_contacts/get_leads above) — powers
+    'what's our net revenue this month?'-style questions. Returns None on
+    any failure rather than raising, since this only enriches a prompt."""
+    settings = get_settings()
+    token = sign_service_token(organization_id)
+    params = {}
+    if from_date:
+        params["from"] = from_date
+    if to_date:
+        params["to"] = to_date
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"{settings.FINANCE_SERVICE_URL}/finances/summary",
+                headers={"Authorization": f"Bearer {token}"},
+                params=params or None,
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except Exception:
+        logger.warning("finance_summary_fetch_failed (non-fatal)", exc_info=True)
+        return None

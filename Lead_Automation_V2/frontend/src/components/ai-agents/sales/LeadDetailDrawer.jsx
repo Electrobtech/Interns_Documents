@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { X, Target, Building2, Wallet, Radio, Send, CheckCircle2, AlertTriangle, Zap } from 'lucide-react';
+import { X, Target, Building2, Wallet, Radio, Send, CheckCircle2, AlertTriangle, Zap, Package } from 'lucide-react';
 import { useScoreLeadFit, useApplyRecommendation } from '@/lib/queries/aiAgents';
+import { useUpdateLead } from '@/lib/queries/crm';
+import { useProducts } from '@/lib/queries/products';
 import { StallRiskChip } from './FitScorerPanel';
 
 const ORG_SIZES = [
@@ -46,6 +48,8 @@ function Pill({ label, active, onClick }) {
 export default function LeadDetailDrawer({ lead, onClose, onApplied }) {
   const score = useScoreLeadFit();
   const apply = useApplyRecommendation();
+  const updateLead = useUpdateLead();
+  const { data: activeProducts } = useProducts('active');
 
   const [orgSize, setOrgSize] = useState('medium');
   const [budget, setBudget] = useState('high');
@@ -53,6 +57,19 @@ export default function LeadDetailDrawer({ lead, onClose, onApplied }) {
   const [followUp, setFollowUp] = useState('');
   const [sendFollowUp, setSendFollowUp] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [productId, setProductId] = useState(lead?.product_id || '');
+
+  useEffect(() => { setProductId(lead?.product_id || ''); }, [lead?.id, lead?.product_id]);
+
+  // Assigning a product here — rather than only via a raw PUT /leads/:id
+  // call — is what lets the Sales Agent's Pipeline-by-Product forecast
+  // (SalesWorkspace.jsx Forecasting tab) and per-product revenue targets
+  // actually attribute this lead. Saves immediately on change, same as a
+  // Pipeline stage drag — no separate "Save" step for a single field.
+  const changeProduct = (value) => {
+    setProductId(value);
+    updateLead.mutate({ id: lead.id, product_id: value || null });
+  };
 
   useEffect(() => {
     if (!lead) return;
@@ -108,6 +125,29 @@ export default function LeadDetailDrawer({ lead, onClose, onApplied }) {
         </div>
 
         <div className="p-5 space-y-5">
+          {/* Product / offer assignment */}
+          <div>
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+              <Package size={12} /> Product / Offer
+            </p>
+            <select
+              value={productId}
+              onChange={(e) => changeProduct(e.target.value)}
+              className="input-premium text-sm"
+            >
+              <option value="">Unassigned</option>
+              {(activeProducts || []).map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            {updateLead.isPending && updateLead.variables?.id === lead.id && (
+              <p className="text-[10px] text-slate-400 mt-1">Saving…</p>
+            )}
+            {updateLead.isError && updateLead.variables?.id === lead.id && (
+              <p className="text-[10px] text-red-500 mt-1">Couldn&apos;t save — try again.</p>
+            )}
+          </div>
+
           {/* Live AI score */}
           <div className="rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/70 to-fuchsia-50/30 p-5">
             <div className="flex items-center gap-2 mb-3">

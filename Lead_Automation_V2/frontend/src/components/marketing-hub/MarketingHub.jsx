@@ -23,6 +23,7 @@ import MHReports from './pages/MHReports';
 import MHAssetsLibrary from './pages/MHAssetsLibrary';
 import MHKnowledgeBase from './pages/MHKnowledgeBase';
 import MHSettings from './pages/MHSettings';
+import MHTemplates from './pages/MHTemplates';
 
 const NAV_GROUPS = [
   { label: 'Core', items: [
@@ -85,14 +86,7 @@ function renderPage(page, setPage, setPageKey, pageKey) {
     case 'broadcasts': return <MHBroadcasts key={pageKey} onNavigate={nav} />;
     case 'audience':   return <MHAudience key={pageKey} />;
     case 'content':    return <MHContentStudio key={pageKey} />;
-    case 'templates':  return (
-      <div key={pageKey} style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'60vh', gap:16, color:'#6b7280' }}>
-        <Layers size={40} color="#d1d5db" />
-        <div style={{ fontFamily:'var(--mh-font-display)', fontSize:18, fontWeight:700, color:'#374151' }}>Templates coming soon</div>
-        <p style={{ fontSize:13, textAlign:'center', maxWidth:300, lineHeight:1.6 }}>Pre-built campaign templates for every use case will be available here.</p>
-        <button className="mh-btn mh-btn-primary" onClick={() => nav('content')}><Pen size={13}/>Go to Content Studio</button>
-      </div>
-    );
+    case 'templates':  return <MHTemplates key={pageKey} />;
     case 'assets':     return <MHAssetsLibrary key={pageKey} />;
     case 'seo':        return <MHSEO key={pageKey} />;
     case 'aeo':        return <MHAEO key={pageKey} />;
@@ -106,7 +100,7 @@ function renderPage(page, setPage, setPageKey, pageKey) {
   }
 }
 
-function MarketingHubShell() {
+function MarketingHubShell({ onBack }) {
   const { show } = useMHToast();
   const [page, setPage] = useState('dashboard');
   const [collapsed, setCollapsed] = useState(false);
@@ -151,8 +145,15 @@ function MarketingHubShell() {
 
       {/* TOP HEADER */}
       <div style={{ height:52, background:'#fff', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:8, padding:'0 16px', flexShrink:0 }}>
+        {onBack && (
+          <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#6b7280', display:'flex', alignItems:'center', justifyContent:'center', padding:4, borderRadius:6, marginRight:4 }} title="Back to AI Agents">
+            <ChevronLeft size={16} />
+          </button>
+        )}
         <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12 }}>
-          <span style={{ color:'#9ca3af' }}>AI Agents</span>
+          <button onClick={onBack} style={{ background:'none', border:'none', padding:0, cursor: onBack ? 'pointer' : 'default', color:'#9ca3af', fontFamily:'inherit', fontSize:'inherit' }}>
+            AI Agents
+          </button>
           <ChevronRight size={12} color="#d1d5db" />
           <span style={{ color:'#6366f1', fontWeight:700 }}>Marketing Agent</span>
           <ChevronRight size={12} color="#d1d5db" />
@@ -185,14 +186,14 @@ function MarketingHubShell() {
             </button>
           </div>
 
-          {/* Marketing Hub badge */}
+          {/* Marketing Agent badge */}
           {!collapsed && (
             <div style={{ padding:'8px 14px 12px', borderBottom:'1px solid #f3f4f6' }}>
               <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                 <span style={{ fontSize:18 }}>📣</span>
                 <div>
-                  <div style={{ fontFamily:'var(--mh-font-display)', fontSize:13, fontWeight:700, color:'#111827' }}>Marketing Hub</div>
-                  <div style={{ fontSize:10, color:'#9ca3af' }}>12 AI capabilities</div>
+                  <div style={{ fontFamily:'var(--mh-font-display)', fontSize:13, fontWeight:700, color:'#111827' }}>Marketing Agent</div>
+                  <div style={{ fontSize:10, color:'#9ca3af' }}>12 AI-powered tools</div>
                 </div>
               </div>
             </div>
@@ -379,6 +380,6 @@ function MarketingHubShell() {
   );
 }
 
-export default function MarketingHub() {
-  return <MHToastProvider><MarketingHubShell /></MHToastProvider>;
+export default function MarketingHub({ onBack }) {
+  return <MHToastProvider><MarketingHubShell onBack={onBack} /></MHToastProvider>;
 }

@@ -15,7 +15,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    DATABASE_URL: str = "postgresql+asyncpg://lead:leadpass@postgres:5432/lead_automation"
+    # Runtime connection — app_user (non-owner, NOBYPASSRLS), same role every
+    # Node service uses, so RLS policies (0007_enable_rls) are actually
+    # enforced. See docs/MULTI_TENANT_RLS.md §3.1/§2.4. Migrations run as the
+    # owner role separately (MIGRATION_DATABASE_URL, see alembic/env.py).
+    DATABASE_URL: str = "postgresql+asyncpg://app_user:apppass@postgres:5432/lead_automation"
     JWT_SECRET: str = "dev-secret"
 
     # LLM_PROVIDER: "groq" | "ollama"
@@ -35,6 +39,11 @@ class Settings(BaseSettings):
 
     CONTACT_SERVICE_URL: str = "http://contact-service:4003"
     CAMPAIGN_SERVICE_URL: str = "http://campaign-service:4004"
+    # Finances & Accounting module (services/finance-service) — used by the
+    # Sales Agent's finance tools (see services/service_client.py:
+    # generate_course_invoice/record_expense/get_financial_summary and
+    # api/v1/finance_agent.py's propose/confirm routes).
+    FINANCE_SERVICE_URL: str = "http://finance-service:4016"
 
     # ── RAG retrieval ──────────────────────────────────────────────────────────
     # Cross-encoder rerank costs one extra LLM call per retrieval, so it is

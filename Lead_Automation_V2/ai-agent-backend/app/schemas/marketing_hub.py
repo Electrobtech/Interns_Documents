@@ -12,6 +12,41 @@ from app.models.marketing_hub import (
 )
 
 
+# ── Asset Schemas ────────────────────────────────────────────────────────────
+
+
+class AssetBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    tags: List[str] = Field(default_factory=list)
+    is_public: bool = False
+
+
+class AssetCreate(AssetBase):
+    pass
+
+
+class AssetUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    tags: Optional[List[str]] = None
+    is_public: Optional[bool] = None
+
+
+class AssetOut(AssetBase):
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    asset_type: AssetType
+    filename: str
+    file_size: int
+    mime_type: str
+    url: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    created_by: uuid.UUID
+
+    class Config:
+        from_attributes = True
+
+
 # ── Campaign Schemas ─────────────────────────────────────────────────────────
 
 
@@ -507,3 +542,95 @@ class PaginatedResponse(BaseModel):
     page: int
     limit: int
     total_pages: int
+
+# ── Calendar Event Schemas ───────────────────────────────────────────────────
+
+
+class CalendarEventBase(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    event_type: EventType
+    start_date: datetime
+    end_date: datetime
+    campaign_id: Optional[uuid.UUID] = None
+    content_id: Optional[uuid.UUID] = None
+    url: Optional[str] = None
+    color: Optional[str] = None
+    settings: Dict[str, Any] = Field(default_factory=dict)
+
+
+class CalendarEventCreate(CalendarEventBase):
+    pass
+
+
+class CalendarEventUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    event_type: Optional[EventType] = None
+    status: Optional[EventStatus] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    campaign_id: Optional[uuid.UUID] = None
+    content_id: Optional[uuid.UUID] = None
+    url: Optional[str] = None
+    color: Optional[str] = None
+    settings: Optional[Dict[str, Any]] = None
+
+
+class CalendarEventOut(CalendarEventBase):
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    status: EventStatus
+    created_at: datetime
+    updated_at: datetime
+    created_by: uuid.UUID
+
+    class Config:
+        from_attributes = True
+
+
+# ── Report Schemas ───────────────────────────────────────────────────────────
+
+
+class ReportBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    report_type: ReportType
+    start_date: datetime
+    end_date: datetime
+    filters: Dict[str, Any] = Field(default_factory=dict)
+    configuration: Dict[str, Any] = Field(default_factory=dict)
+    recipients: List[str] = Field(default_factory=list)
+    schedule: Optional[Dict[str, Any]] = None
+
+
+class ReportCreate(ReportBase):
+    pass
+
+
+class ReportUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    report_type: Optional[ReportType] = None
+    status: Optional[ReportStatus] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    filters: Optional[Dict[str, Any]] = None
+    configuration: Optional[Dict[str, Any]] = None
+    recipients: Optional[List[str]] = None
+    schedule: Optional[Dict[str, Any]] = None
+
+
+class ReportOut(ReportBase):
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    status: ReportStatus
+    content: Optional[Dict[str, Any]] = None
+    file_url: Optional[str] = None
+    generated_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    created_by: uuid.UUID
+
+    class Config:
+        from_attributes = True

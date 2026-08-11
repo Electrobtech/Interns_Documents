@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import AuthUser, get_current_user
-from app.database.session import get_session
+from app.database.tenant_scope import get_scoped_session
 from app.llm.factory import get_llm_provider
 from app.repositories.provider_log_repo import ProviderLogRepository
 
@@ -21,7 +21,7 @@ _RANGE_TO_DAYS = {"24h": 1, "7d": 7, "30d": 30, "90d": 90}
 async def provider_stats(
     range: str = Query(default="7d"),
     user: AuthUser = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_scoped_session),
 ) -> dict:
     """Return aggregated LLM provider usage statistics.
 

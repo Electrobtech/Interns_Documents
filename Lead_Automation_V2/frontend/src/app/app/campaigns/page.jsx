@@ -9,7 +9,8 @@ import {
   BarChart3, AlertTriangle, ChevronDown, ShieldCheck, Check,
   Eye, Users,
 } from 'lucide-react';
-import { useCampaigns, useUpdateCampaign, useCampaignDecision, useCampaignRecipients } from '@/lib/queries/crm';
+import { useCampaigns, useUpdateCampaign, useCampaignDecision } from '@/lib/queries/crm';
+import { useCampaignRecipients } from '@/lib/queries/campaigns';
 import { useTemplatesForCampaign } from '@/lib/queries/templates';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '@/lib/useApi';

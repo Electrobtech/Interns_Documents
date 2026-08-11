@@ -60,12 +60,24 @@ class SalesAgentConfig(Base):
     require_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # Day-offsets a follow-up should fire on relative to the lead entering
     # the sequence, e.g. [1, 3, 7, 14] == "Day 1, 3, 7, 14".
-    followup_cadence_days: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False, default=lambda: [1, 3, 7, 14])
+    followup_cadence_days: Mapped[List[int]] = mapped_column(ARRAY(Integer), nullable=False, default=lambda: [1, 3, 7, 14])
 
     # Forecasting tab gap analysis: target vs. actual closed revenue this
     # month. NULL means "not set" — kept distinct from 0, same reasoning as
     # deal_value_field above.
     monthly_revenue_target: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+
+    # Per-product monthly revenue targets: {"<product_id>": <float>}. A
+    # sibling to monthly_revenue_target (org-wide), not a replacement — kept
+    # as two separate numbers rather than deriving org-wide by summing the
+    # per-product ones, because a rep can undershoot on one product and
+    # overshoot on another and still hit (or miss) the org-wide number; the
+    # two are independently meaningful. JSONB rather than a child table for
+    # the same reason as confidence_signal_config above: small, always
+    # fetched as a whole with the rest of the config row, no independent
+    # query pattern (never "find all orgs with a target on product X").
+    # See migration 0008_sales_product_targets.
+    product_targets: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

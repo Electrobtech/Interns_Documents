@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { useAnalyticsOverview, useAnalyticsChannels, useAnalyticsAutomation } from '@/lib/queries/superAdmin';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import Badge from '@/components/ui/Badge';
+import Badge from '@/components/ui/Badge.jsx';
 import { money } from './shared';
 
 const CHANNEL_LABELS = {

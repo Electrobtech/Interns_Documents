@@ -27,6 +27,7 @@ from app.schemas.sales import (
     DraftFollowupOut,
     FollowupDraft,
     MonthlyRevenuePoint,
+    ProductForecast,
     RevenueGap,
     SalesAgentConfigOut,
     SalesAnalyticsOut,
@@ -163,6 +164,7 @@ class SalesService:
             require_approval=row.require_approval if row else True,
             followup_cadence_days=list(row.followup_cadence_days) if row and row.followup_cadence_days else [1, 3, 7, 14],
             monthly_revenue_target=float(row.monthly_revenue_target) if row and row.monthly_revenue_target is not None else None,
+            product_targets={k: float(v) for k, v in (row.product_targets or {}).items()} if row else {},
             computed=computed,
             updated_at=row.updated_at if row else None,
         )
@@ -178,6 +180,7 @@ class SalesService:
         require_approval: bool | object = ...,
         followup_cadence_days: list[int] | None | object = ...,
         monthly_revenue_target: float | None | object = ...,
+        product_targets: dict[str, float] | None | object = ...,
     ) -> SalesAgentConfigOut:
         signal_dicts = ...
         if confidence_signals is not ...:
@@ -195,6 +198,7 @@ class SalesService:
             require_approval=require_approval,
             followup_cadence_days=followup_cadence_days,
             monthly_revenue_target=monthly_revenue_target,
+            product_targets=product_targets,
         )
         await self._session.commit()
         return await self.get_config(organization_id)
@@ -397,10 +401,31 @@ class SalesService:
         except (ValueError, TypeError):
             return None
 
+    @staticmethod
+    def _compute_revenue_gap(
+        target: float | None, actual_mtd: float | None, deal_value_field: str | None,
+        *, no_target_note: str, no_field_note: str,
+    ) -> RevenueGap:
+        """Shared by the org-wide and per-product gap calculations in
+        get_forecast — same three-way branch (no target set / target set but
+        no deal-value field mapped / both known), just parameterized on the
+        note text since the per-product case needs a product-scoped wording."""
+        if target is None:
+            return RevenueGap(target=None, actual_mtd=actual_mtd, gap=None, pct_of_target=None, note=no_target_note)
+        if actual_mtd is None:
+            return RevenueGap(target=target, actual_mtd=None, gap=None, pct_of_target=None, note=no_field_note)
+        return RevenueGap(
+            target=target, actual_mtd=round(actual_mtd, 2), gap=round(target - actual_mtd, 2),
+            pct_of_target=round((actual_mtd / target) * 100, 1) if target > 0 else None,
+            note=(f"{'ahead of' if actual_mtd >= target else 'behind'} target by "
+                  f"${abs(round(target - actual_mtd, 2)):,.2f} this month"),
+        )
+
     async def get_forecast(self, organization_id: uuid.UUID) -> SalesForecastOut:
         config = await self._config_repo.get(organization_id)
         deal_value_field = config.deal_value_field if config else None
         target = float(config.monthly_revenue_target) if config and config.monthly_revenue_target is not None else None
+        product_targets = {k: float(v) for k, v in (config.product_targets or {}).items()} if config else {}
 
         leads = await service_client.get_leads(organization_id) or []
 
@@ -459,19 +484,67 @@ class SalesService:
         # ── Gap analysis: this month's target vs. actual closed revenue ──
         current_month_key = f"{now.year:04d}-{now.month:02d}"
         actual_mtd = month_totals.get(current_month_key, 0.0) if deal_value_field else None
-        if target is None:
-            gap = RevenueGap(target=None, actual_mtd=actual_mtd, gap=None, pct_of_target=None,
-                              note="no monthly revenue target set yet")
-        elif actual_mtd is None:
-            gap = RevenueGap(target=target, actual_mtd=None, gap=None, pct_of_target=None,
-                              note="target is set, but no deal-value field is mapped so actual revenue can't be computed")
-        else:
-            gap = RevenueGap(
-                target=target, actual_mtd=round(actual_mtd, 2), gap=round(target - actual_mtd, 2),
-                pct_of_target=round((actual_mtd / target) * 100, 1) if target > 0 else None,
-                note=(f"{'ahead of' if actual_mtd >= target else 'behind'} target by "
-                      f"${abs(round(target - actual_mtd, 2)):,.2f} this month"),
+        gap = self._compute_revenue_gap(
+            target, actual_mtd, deal_value_field,
+            no_target_note="no monthly revenue target set yet",
+            no_field_note="target is set, but no deal-value field is mapped so actual revenue can't be computed",
+        )
+
+        # ── Requirement 4: pipeline_by_product ────────────────────────────
+        # Grouped from the same `leads` fetch above — no extra CRM round
+        # trip. Products themselves come from campaign-service so a product
+        # with zero leads still gets a row (target visible even with no
+        # pipeline yet), and a trailing "unassigned" bucket surfaces leads
+        # with no product_id rather than silently omitting them.
+        products = await service_client.get_products(organization_id) or []
+        by_product: dict[str | None, list[dict]] = defaultdict(list)
+        for lead in leads:
+            by_product[lead.get("product_id")].append(lead)
+
+        pipeline_by_product: list[ProductForecast] = []
+        for product in products:
+            pid = product.get("id")
+            p_leads = by_product.get(pid, [])
+            p_open = [l for l in p_leads if (l.get("stage") or "new") in _OPEN_STAGES]
+            p_won = [l for l in p_leads if l.get("stage") == "won"]
+            if deal_value_field:
+                p_values = [v for v in (self._lead_value(l, deal_value_field) for l in p_open) if v is not None]
+                p_pipeline_value = round(sum(p_values), 2) if p_values else 0.0
+                p_actual_mtd = sum(
+                    self._lead_value(l, deal_value_field) or 0.0
+                    for l in p_won if self._lead_closed_month(l) == current_month_key
+                )
+            else:
+                p_pipeline_value = None
+                p_actual_mtd = None
+            p_target = product_targets.get(str(pid))
+            p_gap = self._compute_revenue_gap(
+                p_target, p_actual_mtd, deal_value_field,
+                no_target_note="no target set for this product yet",
+                no_field_note="target is set, but no deal-value field is mapped so actual revenue can't be computed",
             )
+            pipeline_by_product.append(ProductForecast(
+                product_id=pid, product_name=product.get("name") or "Unnamed product",
+                product_category=product.get("category"), open_deal_count=len(p_open),
+                pipeline_value=p_pipeline_value, revenue_gap=p_gap,
+            ))
+
+        # Trailing "unassigned" bucket — only shown if there's actually at
+        # least one lead with no product_id, so orgs that always assign a
+        # product don't see a permanent empty row.
+        unassigned_leads = by_product.get(None, [])
+        if unassigned_leads:
+            u_open = [l for l in unassigned_leads if (l.get("stage") or "new") in _OPEN_STAGES]
+            if deal_value_field:
+                u_values = [v for v in (self._lead_value(l, deal_value_field) for l in u_open) if v is not None]
+                u_pipeline_value = round(sum(u_values), 2) if u_values else 0.0
+            else:
+                u_pipeline_value = None
+            pipeline_by_product.append(ProductForecast(
+                product_id=None, product_name="Unassigned", product_category=None,
+                open_deal_count=len(u_open), pipeline_value=u_pipeline_value,
+                revenue_gap=RevenueGap(note="leads with no product assigned have no product-level target"),
+            ))
 
         if weighted_pipeline_value is not None:
             open_count = sum(len(by_stage.get(s, [])) for s in _OPEN_STAGES)
@@ -496,6 +569,7 @@ class SalesService:
             monthly_revenue=months,
             quarterly_prediction=weighted_pipeline_value,
             revenue_gap=gap,
+            pipeline_by_product=pipeline_by_product,
             explanation=explanation,
         )
 

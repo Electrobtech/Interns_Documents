@@ -21,8 +21,8 @@ import {
 } from '@/lib/queries/superAdmin';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import Badge from '@/components/ui/Badge';
-import Switch from '@/components/ui/Switch';
+import Badge from '@/components/ui/Badge.jsx';
+import { Switch } from '@/components/ui/switch';
 
 const STATUS_TONE = { active: 'emerald', pending: 'amber', suspended: 'red' };
 const PLAN_OPTIONS = ['Free', 'Pro', 'Enterprise', 'Custom'];
@@ -253,7 +253,7 @@ function ChannelRow({ channelQuota, onToggle, onQuotaChange, onThresholdChange, 
     <tr className="border-b last:border-0 align-middle">
       <td className="py-2.5 pr-4 font-medium">{CHANNEL_LABELS[channel] || channel}</td>
       <td className="py-2.5 pr-4">
-        <Switch checked={enabled} onChange={onToggle} label={`Enable ${channel}`} />
+        <Switch checked={enabled} onCheckedChange={onToggle} />
       </td>
       <td className="py-2.5 pr-4">
         <div className="flex items-center gap-1.5">
@@ -407,8 +407,7 @@ function SubscriptionPanel({ companyId }) {
             <p className="text-slate-500 mb-1">Auto-billing</p>
             <Switch
               checked={sub.auto_billing}
-              onChange={(v) => updateSub.mutate({ autoBilling: v })}
-              label="Auto-billing"
+              onCheckedChange={(v) => updateSub.mutate({ autoBilling: v })}
             />
           </div>
         </div>

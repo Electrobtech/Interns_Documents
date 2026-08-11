@@ -182,13 +182,6 @@ CREATE TABLE IF NOT EXISTS leads (
   -- Nullable with no default: unset must stay unset, not silently 0, so
   -- Pipeline Value aggregation can tell "unknown" apart from "zero".
   deal_value      NUMERIC(14, 2),
-  -- Leads/CRM page fields (see migrations/032_lead_crm_fields.sql).
-  -- `temperature`/`category` are intentionally separate from `stage` so
-  -- existing stage-based Pipeline/Dashboard/Analytics queries are untouched.
-  course          TEXT,
-  temperature     TEXT NOT NULL DEFAULT 'warm' CHECK (temperature IN ('hot', 'warm', 'cold')),
-  contact_status  TEXT NOT NULL DEFAULT 'no response',
-  category        TEXT NOT NULL DEFAULT 'active' CHECK (category IN ('active', 'onboarded', 'inactive')),
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   -- Last time score/stage/deal_value was written (see
   -- migrations/031_lead_updated_at.sql). Bumped at the application layer
@@ -1719,8 +1712,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_products_one_primary
 
 ALTER TABLE campaigns       ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
 ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
+-- See infra/db/migrations/032_lead_product_id.sql — which product/section a
+-- lead is associated with, so the Sales Agent's Forecasting tab can break
+-- pipeline value, targets, and gap analysis down per product instead of
+-- only org-wide.
+ALTER TABLE leads           ADD COLUMN IF NOT EXISTS product_id UUID REFERENCES products(id) ON DELETE SET NULL;
 
 CREATE INDEX IF NOT EXISTS ix_campaigns_product ON campaigns (product_id) WHERE product_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ix_leads_product     ON leads     (product_id) WHERE product_id IS NOT NULL;
 
 -- ---------- Message Templates ----------
 CREATE TABLE IF NOT EXISTS message_templates (
@@ -1763,26 +1762,103 @@ CREATE TRIGGER trg_create_wallet_for_new_org
   AFTER INSERT ON organizations
   FOR EACH ROW EXECUTE FUNCTION create_wallet_for_new_org();
 
+-- =====================================================================
+-- Finances & Accounting
+-- Tenant's own business ledger and course invoices.
+-- Added from infra/db/migrations/034_finance_accounting.sql so the
+-- Docker database initialization creates these tables before 03-rls.sql.
+-- RLS policies are intentionally NOT defined here; 03-rls.sql handles
+-- RLS for these tables after this schema file has been executed.
+-- =====================================================================
+
+-- ---------- finance_transactions ----------
+created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_finance_transactions_org_date
+  ON finance_transactions (organization_id, transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_finance_transactions_org_type
+  ON finance_transactions (organization_id, type);
+
 -- ---------- Marketing Hub Assets Library ----------
 -- Owned by marketing-hub-service. File blobs on local disk under
 -- public/uploads/marketing-assets; this table holds metadata + tenant scope.
 CREATE TABLE IF NOT EXISTS marketing_assets (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-
-  name              TEXT NOT NULL,
-  type              TEXT NOT NULL CHECK (type IN (
-                      'Logos', 'Images', 'Videos', 'PDFs', 'AI Generated Images'
-                    )),
-  size_bytes        BIGINT NOT NULL DEFAULT 0,
-  storage_url       TEXT NOT NULL,
-  mime_type         TEXT,
-
-  uploaded_by       UUID REFERENCES users(id) ON DELETE SET NULL,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  type            TEXT NOT NULL CHECK (type IN (
+                    'Logos', 'Images', 'Videos', 'PDFs', 'AI Generated Images'
+                  )),
+  size_bytes      BIGINT NOT NULL DEFAULT 0,
+  storage_url     TEXT NOT NULL,
+  mime_type       TEXT,
+  uploaded_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+
+CREATE INDEX IF NOT EXISTS idx_finance_transactions_org_date
+  ON finance_transactions (organization_id, transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_finance_transactions_org_type
+  ON finance_transactions (organization_id, type);
+
+-- ---------- course_invoices ----------
+CREATE TABLE IF NOT EXISTS course_invoices (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id       UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  invoice_number        TEXT NOT NULL,
+  financial_year        TEXT NOT NULL,
+
+  seller_legal_name     TEXT NOT NULL,
+  seller_gstin          TEXT,
+  seller_address        TEXT,
+  seller_state          TEXT,
+  seller_state_code     TEXT,
+
+  student_name          TEXT NOT NULL,
+  student_gstin         TEXT,
+  student_address       TEXT,
+  student_state         TEXT NOT NULL,
+  student_state_code    TEXT NOT NULL,
+  place_of_supply       TEXT NOT NULL,
+
+  sac_code              TEXT NOT NULL DEFAULT '9992',
+  course_name           TEXT,
+
+  base_amount           NUMERIC(12,2) NOT NULL,
+  gst_rate              NUMERIC(5,2) NOT NULL DEFAULT 18,
+  cgst_rate             NUMERIC(5,2) NOT NULL DEFAULT 0,
+  cgst_amount           NUMERIC(12,2) NOT NULL DEFAULT 0,
+  sgst_rate             NUMERIC(5,2) NOT NULL DEFAULT 0,
+  sgst_amount           NUMERIC(12,2) NOT NULL DEFAULT 0,
+  igst_rate             NUMERIC(5,2) NOT NULL DEFAULT 0,
+  igst_amount           NUMERIC(12,2) NOT NULL DEFAULT 0,
+  intra_state           BOOLEAN NOT NULL,
+  total_amount          NUMERIC(12,2) NOT NULL,
+
+  status                TEXT NOT NULL DEFAULT 'issued' CHECK (status IN ('issued', 'void')),
+  pdf_generated_at      TIMESTAMPTZ,
+  source                TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'ai_agent')),
+  created_by_user       UUID REFERENCES users(id),
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  UNIQUE (organization_id, invoice_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_course_invoices_org_created
+  ON course_invoices (organization_id, created_at DESC);
+
+-- ---------- finance_invoice_counters ----------
+CREATE TABLE IF NOT EXISTS finance_invoice_counters (
+  organization_id   UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  financial_year    TEXT NOT NULL,
+  last_number       INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (organization_id, financial_year)
+);
+=======
 CREATE INDEX IF NOT EXISTS ix_marketing_assets_org
   ON marketing_assets (organization_id);
 CREATE INDEX IF NOT EXISTS ix_marketing_assets_org_type
@@ -1970,3 +2046,4 @@ CREATE INDEX IF NOT EXISTS ix_imported_sheets_org
   ON imported_sheets (organization_id);
 CREATE INDEX IF NOT EXISTS ix_imported_sheets_org_updated
   ON imported_sheets (organization_id, updated_at DESC);
+

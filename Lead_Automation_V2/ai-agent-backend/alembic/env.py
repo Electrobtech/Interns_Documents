@@ -1,6 +1,16 @@
-"""Alembic async env — reads DATABASE_URL from environment (same as the app),
-imports all ORM models so autogenerate detects them, and runs migrations
-against the live database."""
+"""Alembic async env — reads MIGRATION_DATABASE_URL from environment (falling
+back to DATABASE_URL if unset), imports all ORM models so autogenerate
+detects them, and runs migrations against the live database.
+
+MIGRATION_DATABASE_URL exists as of 0007_enable_rls because DATABASE_URL now
+points at app_user (a non-owner, NOBYPASSRLS role — see
+docs/MULTI_TENANT_RLS.md §3.1/§2.4) at runtime, but DDL like `ALTER TABLE ...
+ENABLE ROW LEVEL SECURITY` and `CREATE POLICY` requires the table owner or a
+superuser. Migrations still need to run as the owner/migration role (`lead`)
+regardless of what the running service connects as. The fallback to
+DATABASE_URL keeps this working for any environment that hasn't set the new
+var yet (e.g. a bare `alembic upgrade head` with only DATABASE_URL
+exported, same as every prior session's repro steps)."""
 from __future__ import annotations
 
 import asyncio
@@ -35,11 +45,16 @@ from app.models.support import (  # noqa: F401
 # ---------------------------------------------------------------------------
 config = context.config
 
-# Override sqlalchemy.url from the environment at runtime.
-database_url = os.environ.get("DATABASE_URL", "")
+# Override sqlalchemy.url from the environment at runtime. Prefer the
+# owner/migration role (MIGRATION_DATABASE_URL) so DDL like ENABLE ROW LEVEL
+# SECURITY / CREATE POLICY works even once DATABASE_URL itself points at the
+# non-owner app_user role — see module docstring.
+database_url = os.environ.get("MIGRATION_DATABASE_URL") or os.environ.get("DATABASE_URL", "")
 if database_url.startswith("postgres://"):
-    # asyncpg requires postgresql+asyncpg:// scheme.
     database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+# If DATABASE_URL is not set, fall through to the alembic.ini value (already asyncpg).
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
